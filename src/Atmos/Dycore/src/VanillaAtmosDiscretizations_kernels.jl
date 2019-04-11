@@ -671,7 +671,6 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
           s = _nstate + m 
           q_m[m] = Q[i, j, k, s, e] / ρ
       end
-      
       # Calculate temperpature after saturation adjustment
       # Required for phase partitioning to get q_liq, q_ice
       T = saturation_adjustment(E_int/ρ, ρ, q_m[1])

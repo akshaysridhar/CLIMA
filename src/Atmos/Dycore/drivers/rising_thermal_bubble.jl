@@ -2,28 +2,15 @@ using MPI
 
 using CLIMA.Topologies
 using CLIMA.Grids
-using CLIMA.CLIMAAtmosDycore.VanillaAtmosDiscretizations
+using CLIMA.AtmosDycore.VanillaAtmosDiscretizations
 using CLIMA.MPIStateArrays
 using CLIMA.ODESolvers
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.GenericCallbacks
-using CLIMA.CLIMAAtmosDycore
+using CLIMA.AtmosDycore
 using CLIMA.MoistThermodynamics
 using LinearAlgebra
 using Printf
-
-const HAVE_CUDA = try
-  using CuArrays
-  using CUDAdrv
-  using CUDAnative
-  true
-catch
-  false
-end
-
-macro hascuda(ex)
-  return HAVE_CUDA ? :($(esc(ex))) : :(nothing)
-end
 
 using CLIMA.ParametersType
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP
@@ -49,7 +36,6 @@ function rising_thermal_bubble(x...; ntrace=0, nmoist=0, dim=3)
   end
   θ = θ_ref + Δθ
   π_k = 1 - gravity / (c_p * θ) * x[dim]
-  
   ρ = p0 / (R_gas * θ) * (π_k)^ (c_v / R_gas)
   u = zero(DFloat)
   v = zero(DFloat)
@@ -176,15 +162,13 @@ let
   Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
   mpicomm = MPI.COMM_WORLD
 
-  @hascuda device!(MPI.Comm_rank(mpicomm) % length(devices()))
-  
   nmoist = 1
   ntrace = 0
   Ne = (10, 10, 10)
   N = 3
   timeend = 0.1
   for DFloat in (Float64, Float32)
-    for ArrayType in (HAVE_CUDA ? (CuArray, Array) : (Array,))
+    for ArrayType in (Array,)
       for dim in 2:3
         brickrange = ntuple(j->range(DFloat(0); length=Ne[j]+1, stop=1000), dim)
         main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, timeend)

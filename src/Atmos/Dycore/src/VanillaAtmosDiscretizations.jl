@@ -1,8 +1,8 @@
 module VanillaAtmosDiscretizations
 using MPI
 
-using ..CLIMAAtmosDycore
-AD = CLIMAAtmosDycore
+using ..AtmosDycore
+AD = AtmosDycore
 using ...Grids
 using ...MPIStateArrays
 
@@ -13,7 +13,6 @@ using ...ParametersType
 using ...PlanetParameters: cp_d, cv_d, grav, MSLP
 using CLIMA.MoistThermodynamics
 
-# ASR Correction to Prandtl number from 7.1 to 0.71
 @parameter prandtl 71//100 "Prandtl number: ratio of momentum diffusivity to thermal diffusivity"
 @parameter λ_stokes  -2//3  "scaling for viscous effect associated with volume change"
 @parameter k_μ cp_d/prandtl "thermal conductivity / dynamic viscosity"
@@ -307,7 +306,6 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   DFloat = eltype(Q)
   @assert DFloat == eltype(Q)
   @assert DFloat == eltype(vgeo)
-  @assert DFloat == eltype(sgeo)
   @assert DFloat == eltype(Dmat)
   @assert DFloat == eltype(grad)
   @assert DFloat == eltype(dQ)
@@ -315,12 +313,12 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   ########################
   # Gradient Computation #
   ########################
-  MPIStateArrays.startexchange!(Q)
+  MPIStateArrays.start_ghost_exchange!(Q)
 
   volumegrad!(Val(dim), Val(N), Val(nmoist), Val(ntrace), grad.Q, Q.Q, vgeo,
               gravity, Dmat, topology.realelems)
 
-  MPIStateArrays.finishexchange!(Q)
+  MPIStateArrays.finish_ghost_exchange!(Q)
 
   facegrad!(Val(dim), Val(N), Val(nmoist), Val(ntrace), grad.Q, Q.Q, vgeo,
             sgeo, gravity, topology.realelems, vmapM, vmapP, elemtobndy)
@@ -332,12 +330,12 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
 
   viscosity::DFloat = disc.viscosity
  
-  MPIStateArrays.startexchange!(grad)
+  MPIStateArrays.start_ghost_exchange!(grad)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
              vgeo, gravity, viscosity, Dmat, topology.realelems)
 
-  MPIStateArrays.finishexchange!(grad)
+  MPIStateArrays.finish_ghost_exchange!(grad)
 
   facerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
            vgeo, sgeo, gravity, viscosity, topology.realelems, vmapM, vmapP,
@@ -356,17 +354,9 @@ const _nx, _ny, _nz, _sMJ, _vMJI = 1:_nsgeo
 
 using Requires
 
-@init @require CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae" begin
-  using .CuArrays
-  using .CuArrays.CUDAnative
-  using .CuArrays.CUDAnative.CUDAdrv
-
-  include("VanillaAtmosDiscretizations_cuda.jl")
-end
-
 include("VanillaAtmosDiscretizations_kernels.jl")
 
-include("vtk.jl")
+include("../../../Mesh/vtk.jl")
 function writevtk(prefix, Q::MPIStateArray, disc::VanillaAtmosDiscretization)
   vgeo = disc.grid.vgeo
   host_array = Array ∈ typeof(Q).parameters
