@@ -1,6 +1,5 @@
 using MPI
 
-
 using CLIMA.Topologies
 using CLIMA.Grids
 using CLIMA.AtmosDycore.VanillaAtmosDiscretizations
@@ -241,8 +240,8 @@ let
     dim = 2
     timeend = 20000.0
 
-    xmin =  -12000.0
-    xmax =   12000.0
+    xmin = -120000.0
+    xmax =  120000.0
     zmin =       0.0
     zmax =   24000.0
     
