@@ -658,20 +658,22 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # Define Sponge Boundaries
       # FIXME: sponge function needs cleanup
       # FIXME: currently assumes positive domain (i,e domain minimum is (0,0))
-      xsponge = 0.85 * xmax
-      ysponge = 0.85 * ymax 
-      xspongel = 0.15 * xmax
+      xc = (xmax - xmin)/2
+      ysponge  = 0.85 * ymax
+      xsponger = xmax - 0.15*abs(xmax - xc)
+      xspongel = xmin + 0.15*abs(xmin - xc)
+        
       # Damping coefficient
       α = 1.00 
       if (y > ysponge)
-        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (y-ysponge)/(ymax-ysponge))^4 * U 
-        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (y-ysponge)/(ymax-ysponge))^4 * V
-      elseif (x > xsponge)
-        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (x-xsponge)/(xmax-xsponge))^4 * U 
-        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (x-xsponge)/(xmax-xsponge))^4 * V
+        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * U 
+        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * V
+      elseif (x > xsponger)
+        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (x - xsponger)/(xmax - xsponge))^4 * U 
+        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (x - xsponger)/(xmax - xsponge))^4 * V
       elseif (x < xspongel)
-        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (xspongel-x)/(xspongel))^4 * U 
-        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (xspongel-x)/(xspongel))^4 * V
+        rhs[i, j, _U, e] -= ρ * α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * U 
+        rhs[i, j, _V, e] -= ρ * α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * V
       end
       # ---------------------------
       # End implementation of sponge layer
@@ -1118,7 +1120,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         #ρM             = air_density(TM, PM, q_mM[1], q_liqM, q_iceM)
         #E_intM         = internal_energy(TM, q_mM[1], q_liqM, q_iceM)
         #EM             = E_intM + (UM^2 + VM^2 + WM^2)/(2*ρM) + ρM * gravity * yorzM
-        
+          
         if bc == 0
           
           ρP = Q[vidP, _ρ, eP]
@@ -1138,7 +1140,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
           TP             = saturation_adjustment(E_intP/ρP, ρP, q_mP[1])
           q_liqP, q_iceP = phase_partitioning_eq(TP, ρP, q_mP[1])
           PP             = air_pressure(TP, ρP, q_mP[1], q_liqP, q_iceP) 
-          #θvP            = virtual_pottemp(TP, PP, q_mP[1], q_liqP, q_iceP)
+          θvP            = virtual_pottemp(TP, PP, q_mP[1], q_liqP, q_iceP)
           #ρP             = air_density(TP, PP, q_mP[1], q_liqP, q_iceP)
           #E_intP         = internal_energy(TP, q_mP[1], q_liqP, q_iceP)
           #EP             = E_intP + (UP^2 + VP^2 + WP^2)/(2*ρP) + ρP * gravity * yorzP

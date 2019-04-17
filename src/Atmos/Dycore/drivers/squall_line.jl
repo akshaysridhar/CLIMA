@@ -36,11 +36,6 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     dim = 2
     DFloat 	    = eltype(x)
     p0::DFloat 	    = MSLP
-    R_gas::DFloat   = gas_constant_air(0.0, 0.0, 0.0)
-    c_p::DFloat     = cp_d
-    c_v::DFloat     = cv_d
-    cvoverR         = c_v/R_gas
-    gravity::DFloat = grav
     
     # ----------------------------------------------------
     # GET DATA FROM INTERPOLATED ARRAY ONTO VECTORS
@@ -74,22 +69,26 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     datau          = spl_uinit(x[dim])
     datav          = spl_vinit(x[dim])
     datap          = spl_pinit(x[dim])
+    dataq          = dataq * 1.0e-3
+    
+    R_gas::DFloat   = gas_constant_air(dataq, 0.0, 0.0)
+    c_p::DFloat     = cp_m(dataq,0.0,0.0)
+    c_v::DFloat     = cv_m(dataq,0.0,0.0)
+    cvoverR         = c_v/R_gas
+    gravity::DFloat = grav
     
     #TODO Driver constant parameters need references
     rvapor        = 461.0
-    levap         =   2.5e6
+    levap         = 2.5e6
     es0           = 611.0
-    pi0           =   1.0
+    pi0           = 1.0
     p0            = MSLP
     theta0        = 300.4675
-    c2            = R_d / cp_d
+    c2            = R_gas / c_p
     c1            = 1.0 / c2
     
     # Convert dataq to kg/kg
-    dataq         = dataq * 1.0e-3
     datapi        = (datap / MSLP) ^ (c2)                         # Exner pressure from sounding data
-    
-    
     thetav        = datat * (1.0 + 0.61 * dataq)                  # Liquid potential temperature
 
     # theta perturbation
@@ -205,9 +204,9 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
     end
 
     step = [0]
-    mkpath("vtk")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(25000) do (init=false)
-        outprefix = @sprintf("vtk/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
+    mkpath("vtk_squall")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
+        outprefix = @sprintf("vtk_squall/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
         @printf(io,
                 "-------------------------------------------------------------\n")
         @printf(io, "doing VTK output =  %s\n", outprefix)
