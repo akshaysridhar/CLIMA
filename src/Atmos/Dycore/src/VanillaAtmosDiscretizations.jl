@@ -60,13 +60,13 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
   VanillaAtmosDiscretization{nmoist, ntrace}(grid; kw...)
 
   function VanillaAtmosDiscretization{nmoist, ntrace
-                                     }(grid::AbstractGrid{T, dim, N, Np, DA};
-                                       # Use gravity?
-                                       gravity = true,
-                                       # viscosity constant
-                                       viscosity = 0
-                                      ) where {T, dim, N, Np, DA,
-                                               nmoist, ntrace}
+                                      }(grid::AbstractGrid{T, dim, N, Np, DA};
+                                        # Use gravity?
+                                        gravity = true,
+                                        # viscosity constant
+                                        viscosity = 0
+                                        ) where {T, dim, N, Np, DA,
+                                                 nmoist, ntrace}
     topology = grid.topology
     
     ngrad = _nstategrad + 3*nmoist
@@ -336,7 +336,7 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   MPIStateArrays.start_ghost_exchange!(grad)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
-             vgeo, gravity, viscosity, Dmat, topology.realelems)
+             vgeo, gravity, viscosity, Dmat, topology.realelems, mpicomm)
 
   MPIStateArrays.finish_ghost_exchange!(grad)
 

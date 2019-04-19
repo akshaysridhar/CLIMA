@@ -506,7 +506,7 @@ end
 # {{{ Volume RHS for 2-D
 function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                     rhs::Array, Q, grad, vgeo, gravity, viscosity, D,
-                    elems) where {N, nmoist, ntrace}
+                    elems, mpicomm) where {N, nmoist, ntrace}
   DFloat = eltype(Q)
   nvar   = _nstate + nmoist + ntrace
   ngrad  = _nstategrad + 3nmoist
@@ -527,10 +527,15 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_v = Array{DFloat}(undef, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
-  ymax = maximum(vgeo[:,:,_y,:])
-  xmax = maximum(vgeo[:,:,_x,:])
-  xmin = minimum(vgeo[:,:,_x,:])
+    
+    # SM TEMPORARY SOLUTIOIN: GET MPICOMM DIFFERENTLY 
+    xmin = MPI.Allreduce(vgeo[:,:,_x,:], MPI.MIN, mpicomm)
+    xmax = MPI.Allreduce(vgeo[:,:,_x,:], MPI.MAX, mpicomm)
+    zmin = MPI.Allreduce(vgeo[:,:,_y,:], MPI.MIN, mpicomm)
+    zmax = MPI.Allreduce(vgeo[:,:,_y,:], MPI.MAX, mpicomm)
+    @error("XDOMAIN GLOBAL", xm)
 
+    
   @inbounds for e in elems
 
     delta  = Grids.compute_anisotropic_grid_factor(dim, Nq, vgeo, e)
@@ -662,7 +667,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       ysponge  = 0.85 * ymax
       xsponger = xmax - 0.15*abs(xmax - xc)
       xspongel = xmin + 0.15*abs(xmin - xc)
-      =#
+        =#
       
       # Damping coefficient
       α = 1.00 

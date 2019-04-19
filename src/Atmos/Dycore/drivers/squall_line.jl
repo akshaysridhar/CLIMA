@@ -97,7 +97,7 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     thetac        = 5.0
     rx            = 10000.0
     ry            =  1500.0
-    r		  = sqrt( ((x[1]-12000)/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
+    r		  = sqrt( (x[1]/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
     if (r <= 1.0)
         dtheta	  = thetac * (cos(0.5*π*r))^2
     end
@@ -206,7 +206,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
 
     step = [0]
     mkpath("vtk_squall")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(25000) do (init=false)
         outprefix = @sprintf("vtk_squall/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
         @printf(io,
                 "-------------------------------------------------------------\n")
@@ -230,27 +230,36 @@ let
     MPI.Initialized() || MPI.Init()
 
     Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
-    mpicomm = MPI.COMM_WORLD
-    
+    mpicomm    = MPI.COMM_WORLD
+        
     viscosity = 75
-    nmoist = 3
-    ntrace = 0
-    Ne = (10, 10)
-    N = 5
-    dim = 2
-    timeend = 20000.0
+    nmoist    = 3
+    ntrace    = 0
+    Ne        = (13, 24)
+    N         = 4
+    dim       = 2
+    timeend   = 20000.0
 
-    xmin = 0
-    xmax = 24000.0
-    zmin = 0.0
-    zmax = 24000.0
+    xmin_domain =  -12000.0
+    xmax_domain =   12000.0
+    zmin_domain =       0.0
+    zmax_domain =   24000.0
+
+    domain_size = Array{Int64}(undef, 2*dim)
+    domain_size[1], domain_size[2], domain_size[3], domain_size[4] = xmin_domain, xmax_domain, zmin_domain, zmax_domain 
     
+    println(" Running on $(MPI.Comm_size(mpicomm)) processes")
+#    MPI.Bcast!(xmin_domain, size(xmin_domain), 0, mpicomm)
+#    MPI.Bcast!(xmax_domain, size(xmax_domain), 0, mpicomm)
+#    MPI.Bcast!(zmin_domain, size(zmin_domain), 0, mpicomm)
+#    MPI.Bcast!(zmax_domain, size(zmax_domain), 0, mpicomm)
+        
     DFloat = Float64
     for ArrayType in (Array,)
-        brickrange = (range(DFloat(xmin); length=Ne[1]+1, stop=xmax),
-                      range(DFloat(zmin); length=Ne[2]+1, stop=zmax))
+        brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
 
-        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend) 
+        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
     end
 end
 
