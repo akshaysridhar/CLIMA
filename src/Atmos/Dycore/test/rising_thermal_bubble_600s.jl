@@ -36,6 +36,7 @@ function rising_thermal_bubble(x...; ntrace=0, nmoist=0, dim=3)
   end
   θ = θ_ref + Δθ
   π_k = 1 - gravity / (c_p * θ) * x[dim]
+  
   ρ = p0 / (R_gas * θ) * (π_k)^ (c_v / R_gas)
   u = zero(DFloat)
   v = zero(DFloat)
@@ -136,7 +137,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
   =#
    step = [0]
   mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
     outprefix = @sprintf("vtk/RTB_%dD_step%04d", dim, step[1])
     @printf(io,
             "-------------------------------------------------------------\n")
@@ -164,17 +165,16 @@ let
 
   nmoist = 1
   ntrace = 0
-  Ne = (10, 10, 10)
-  N = 3
-  timeend = 0.1
-  for DFloat in (Float64, Float32)
-    for ArrayType in (Array,)
-      for dim in 2:3
-        brickrange = ntuple(j->range(DFloat(0); length=Ne[j]+1, stop=1000), dim)
-        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, timeend)
-      end
-    end
+  Ne = (10, 10)
+  N = 4
+  timeend = 600.0
+  dim = 2
+  DFloat = Float64
+  for ArrayType in (Array,)
+      brickrange = ntuple(j->range(DFloat(0); length=Ne[j]+1, stop=1000), dim)
+      main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, timeend)     
   end
+    
 end
 
 isinteractive() || MPI.Finalize()
