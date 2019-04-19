@@ -36,8 +36,10 @@ using CLIMA.DGBalanceLawDiscretizations
 using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
+using CLIMA.GenericCallbacks
 using LinearAlgebra
 using Logging
+using Dates
 using Printf
 using StaticArrays
 # Start up MPI if this has not already been done
@@ -295,7 +297,7 @@ let
   dim = 2
 
   # Mesh size along each dimension
-  Ne = 10
+  Ne = 20
 
   # order of polynomials to use
   polynomialorder = 4
@@ -364,6 +366,129 @@ let
   end
 end
 #md nothing # hide
+
+#------------------------------------------------------------------------------
+
+# ### Using ODE solver callback functions
+# The above simulation run with `solve!` runs from the initial time to the final
+# time. The ODE solver framework in CLIMA gives functionality that allows the
+# user to *inject* code into the solver during execution. Here we show how to
+# use some of the generic callback functions provided to
+#
+#  - Save diagnostic information
+#  - display runtime simulation information
+#  - save VTK files during the simulation
+#
+# Note: This whole code chunk is in a `let` block
+let
+  # code is the same as above until the `solve!` call
+  mpicomm = MPI.COMM_WORLD
+  mpi_logger = ConsoleLogger(MPI.Comm_rank(mpicomm) == 0 ? stderr : devnull)
+  dim = 2
+  Ne = 20
+  polynomialorder = 4
+  spatialdiscretization = setupDG(mpicomm, dim, Ne, polynomialorder)
+  Q = MPIStateArray(spatialdiscretization, initialcondition!)
+  filename = @sprintf("initialcondition_mpirank%04d", MPI.Comm_rank(mpicomm))
+  DGBalanceLawDiscretizations.writevtk(filename, Q, spatialdiscretization,
+                                       ("q",))
+  h = 1 / Ne
+  CFL = h / maximum(abs.(uvec[1:dim]))
+  dt = CFL / polynomialorder^2
+  lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
+  finaltime = 1.0
+
+  # The ODE solver callback functions are called both before the ODE solver
+  # begins and then after each time step.
+  #
+  # For instance if a user wanted to store the norm of the solution every time
+  # step the following callback could be used
+  store_norm_index = 0
+  normQ = Array{Float64}(undef, ceil(Int, finaltime / dt))
+  function cb_store_norm()
+    store_norm_index += 1
+    normQ[store_norm_index] = norm(Q)
+    nothing
+  end
+  # Note: that callbacks must return either `nothing` or `0` if the ODE solver
+  # should continue, `1` is the ODE solver should stop after all the callbacks
+  # have executed, or `2` is the time stepping should immediately stop with no
+  # further callbacks executed.
+
+  # Several generic callbacks are provided in the `CLIMA.GenericCallbacks`
+  # submodule. For instance, the `EveryXSimulationSteps` callbacks will execute
+  # every `X` time steps. This could be used to say write VTK output every `20`
+  # time steps
+  vtk_step = 0
+  mkpath("vtk")
+  cb_vtk = GenericCallbacks.EveryXSimulationSteps(20) do
+    vtk_step += 1
+    filename = @sprintf("vtk/advection_mpirank%04d_step%04d",
+                         MPI.Comm_rank(mpicomm), vtk_step)
+    DGBalanceLawDiscretizations.writevtk(filename, Q, spatialdiscretization,
+                                         ("q",))
+    nothing
+  end
+
+  # Another provided generic callback is `EveryXWallTimeSeconds` which will be
+  # called every `X` seconds of wall clock time (as opposed to simulation time).
+  # This could be used to dump diagnostic information about the simulation. In
+  # this case we display the norm of the simulation time, the run time, and the
+  # norm of the solution.
+  #
+  # One unique feature of this call back is that it takes in a single optional
+  # argument `init` which allows the ODE solver to call the callback for
+  # initialization; all callbacks get called for initialization with a single
+  # boolean argument set to `true`, but this occurs in a `try/catch` statement
+  # in case the callback does not require initialization (such as the two
+  # above).
+  starttime = Ref(now())
+  cb_info = GenericCallbacks.EveryXWallTimeSeconds(1, mpicomm) do (init=false)
+    if init
+      starttime[] = now()
+    else
+      with_logger(mpi_logger) do
+        @info @sprintf("""Update
+                       simtime = %.16e
+                       runtime = %s
+                       norm(Q) = %.16e""", ODESolvers.gettime(lsrk),
+                       Dates.format(convert(Dates.DateTime,
+                                            Dates.now()-starttime[]),
+                                    Dates.dateformat"HH:MM:SS"),
+                       norm(Q))
+      end
+    end
+  end
+  # Note that this callback also takes in the MPI communicator. This is
+  # necessary because the callback needs to execute an `MPI.Allreduce` to ensure
+  # that all the MPI ranks are using the same global run time.
+
+  # the defined callbacks are based to the ODE `solve!` function through the
+  # keyword argument `callbacks` as a tuple:
+  solve!(Q, lsrk; timeend = finaltime,
+         callbacks = (cb_store_norm, cb_vtk, cb_info))
+
+  # The remainder of the function is the same as above
+  filename = @sprintf("finalsolution_mpirank%04d", MPI.Comm_rank(mpicomm))
+  DGBalanceLawDiscretizations.writevtk(filename, Q, spatialdiscretization,
+                                       ("q",))
+
+  Qe = MPIStateArray(spatialdiscretization) do Qin, x, y, z
+    exactsolution!(dim, Qin, finaltime, x, y, z)
+  end
+  error = euclidean_distance(Q, Qe)
+  with_logger(mpi_logger) do
+    @info @sprintf("""Run with
+                   dim              = %d
+                   Ne               = %d
+                   polynomial order = %d
+                   error            = %e
+                   """, dim, Ne, polynomialorder, error)
+  end
+end
+#md nothing # hide
+
+#------------------------------------------------------------------------------
 
 # ### Computing rates and errors
 # If the above code is put in a loop over increasing `Ne` then a rate of
