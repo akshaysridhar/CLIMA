@@ -16,6 +16,7 @@ using CLIMA.ParametersType
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP
 
 # FIXME: Will these keywords args be OK?
+#  I want this included
 function rising_thermal_bubble(x...; ntrace=0, nmoist=0, dim=3)
   DFloat = eltype(x)
 
