@@ -1,8 +1,15 @@
-# # Periodic Advection
+# # Example 001: Periodic Advection
 #
 #md # !!! jupyter
 #md #     This example is also available as a Jupyter notebook:
 #md #     [`ex_001_periodic_advection.ipynb`](@__NBVIEWER_ROOT_URL__examples/DGmethods/generated/ex_001_periodic_advection.html)
+#
+# Key ideas of this tutorial:
+#   - Setting up PDE
+#   - Defining a numerical flux
+#   - Defining finite element mesh
+#   - Using the ODE solving framework
+#   - Using VTK visualization
 #
 # ## Introduction
 #
@@ -21,7 +28,8 @@
 # denoted in the tutorial below as $\boldsymbol{F}(q) = \vec{u} q$.
 #
 # Below is a program interspersed with comments.
-#md # The full program, without comments, can be found in the next [section](@ref ex_001_periodic_advection-plain-program).
+#md # The full program, without comments, can be found in the next
+#md # [section](@ref ex_001_periodic_advection-plain-program).
 #
 # ## Commented Program
 
