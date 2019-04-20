@@ -125,7 +125,7 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
 end
 
 
-function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, domain_size, 
+function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
               timeend; gravity=true, viscosity=2.5, dt=nothing,
               exact_timeend=true) 
     dim = length(brickrange)
@@ -152,16 +152,13 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, dom
 
 
     function sponge(x, y)
-        
-        xmin = -120000.0
-        xmax =  120000.0
-        ymin =       0.0
-        ymax =   18000.0
-        #        xmin = domain_size[1]
-        #        xmax = domain_size[2]
-        #        zmin = domain_size[3]
-        #        zmax = domain_size[4]
-        
+
+
+        xmin = brickrange[1][1]
+        xmax = brickrange[1][end]
+        ymin = brickrange[2][1]
+        ymax = brickrange[2][end]
+                
         # Define Sponge Boundaries      
         xc       = (xmax + xmin)/2
         ysponge  = 0.85 * ymax
@@ -294,7 +291,7 @@ let
         brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
                       range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
 
-        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, domain_size, timeend)
+        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
     end
 end
 
