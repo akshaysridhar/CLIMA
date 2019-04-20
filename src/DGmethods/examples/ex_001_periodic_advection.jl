@@ -1,4 +1,4 @@
-# # Periodic Advection
+# # Example 001: Periodic Advection
 #
 #md # !!! jupyter
 #md #     This example is also available as a Jupyter notebook:
@@ -21,7 +21,8 @@
 # denoted in the tutorial below as $\boldsymbol{F}(q) = \vec{u} q$.
 #
 # Below is a program interspersed with comments.
-#md # The full program, without comments, can be found in the next [section](@ref ex_001_periodic_advection-plain-program).
+#md # The full program, without comments, can be found in the next
+#md # [section](@ref ex_001_periodic_advection-plain-program).
 #
 # ## Commented Program
 
