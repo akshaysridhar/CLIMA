@@ -150,41 +150,38 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
-
-    function sponge(x, y)
-
+     function sponge(x, y)
 
         xmin = brickrange[1][1]
         xmax = brickrange[1][end]
         ymin = brickrange[2][1]
         ymax = brickrange[2][end]
-                
+         
         # Define Sponge Boundaries      
         xc       = (xmax + xmin)/2
         ysponge  = 0.85 * ymax
         xsponger = xmax - 0.15*abs(xmax - xc)
         xspongel = xmin + 0.15*abs(xmin - xc)
-        
-        
+            
         alpha_coe = 0.0
         beta_coe  = 0.0
-        
-        alpha = 1.0
-        beta  = 2.0
-        if (x >= xsponger)
+        alpha     = 0.5
+        beta      = 0.5
+        if (y >= ysponge)
+            beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+            
+        elseif (x >= xsponger)
             alpha_coe = alpha * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
             
         elseif (x <= xspongel)
             alpha_coe = alpha * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
             
         end
-        if (y >= ysponge)
-            beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
-        end    
+          
         
-
         return (alpha_coe, beta_coe)
     end
+    #---END SPONGE
     
     # spacedisc = data needed for evaluating the right-hand side function    
     spacedisc = VanillaAtmosDiscretization(grid,
@@ -281,10 +278,6 @@ let
     xmax_domain =   120000.0
     zmin_domain =        0.0
     zmax_domain =    18000.0
-
-    domain_size = Array{Int64}(undef, 2*dim)
-    domain_size[1], domain_size[2], domain_size[3], domain_size[4] = xmin_domain, xmax_domain, zmin_domain, zmax_domain 
-    
         
     DFloat = Float64
     for ArrayType in (Array,)

@@ -527,11 +527,6 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_v = Array{DFloat}(undef, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
-
-  #xmin =  -12000.0
-  #xmax =   12000.0
-  #ymin =       0.0
-  #ymax =   24000.0
     
   @inbounds for e in elems
 
@@ -559,9 +554,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
       q_m[2]       = q_liq
       q_m[3]       = q_ice
-#        if(q_liq > 0)
-#            @show(" YES IT IS CLOUDY!!!!!")
-#        end
+
       P            =    air_pressure(T, ρ, q_m[1], q_m[2], q_m[3])
       θv           = virtual_pottemp(T, P, q_m[1], q_m[2], q_m[3])
       #Update rho, E after saturation adjustment
@@ -657,53 +650,12 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # to a sin^4 function instead of the cosines 
       # proposed by D & K 
       # ------------------------------------
-   
       #Calculate the sponge parameters
       (alpha_coe, beta_coe) = sponge(x, y)
         
-        # Damping coefficient
-        #=
-        α = 1.00
-       
-      r_actual = sqrt((x-1900)^2 + (y-800)^2)
-      r_sponge = 1500
-
-      if r_sponge <= r_actual
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * V
-      elseif 2 * r_sponge <= r_actual
-        rhs[i, j, _U, e] -= α * U 
-        rhs[i, j, _V, e] -= α * V
-      end
-        
-
-       =# 
-      # ---------------------------
-      # End implementation of sponge layer
-      # ---------------------------
-      #=
-      # OBSOLETE
-      xc       = (xmax + xmin)/2
-      ysponge  = 0.85 * ymax
-      xsponger = xmax - 0.15*abs(xmax - xc)
-      xspongel = xmin + 0.15*abs(xmin - xc)
-
-      α = 1.00
-      if (y > ysponge)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * V
-      elseif (x > xsponger)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4 * V
-      elseif (x < xspongel)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * V
-      end
-=#
-     
       rhs[i, j, _U, e] -= alpha_coe * U 
       rhs[i, j, _V, e] -=  beta_coe * V
-
+        
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
     

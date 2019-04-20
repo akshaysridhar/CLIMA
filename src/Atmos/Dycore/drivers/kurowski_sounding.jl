@@ -154,12 +154,46 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
+     function sponge(x, y)
+
+        xmin = brickrange[1][1]
+        xmax = brickrange[1][end]
+        ymin = brickrange[2][1]
+        ymax = brickrange[2][end]
+         
+        # Define Sponge Boundaries      
+        xc       = (xmax + xmin)/2
+        ysponge  = 0.85 * ymax
+        xsponger = xmax - 0.15*abs(xmax - xc)
+        xspongel = xmin + 0.15*abs(xmin - xc)
+            
+        alpha_coe = 0.0
+        beta_coe  = 0.0
+        alpha     = 0.5
+        beta      = 0.5
+        if (y >= ysponge)
+            beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+            
+        elseif (x >= xsponger)
+            alpha_coe = alpha * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+            
+        elseif (x <= xspongel)
+            alpha_coe = alpha * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+            
+        end         
+        
+        return (alpha_coe, beta_coe)
+    end
+    #---END SPONGE
+    
+    
     # spacedisc = data needed for evaluating the right-hand side function
     spacedisc = VanillaAtmosDiscretization(grid,
                                            gravity=gravity,
                                            viscosity=viscosity,
                                            ntrace=ntrace,
-                                           nmoist=nmoist)
+                                           nmoist=nmoist,
+                                           sponge=sponge)
 
     # This is a actual state/function that lives on the grid    
     #vgeo = grid.vgeo
@@ -203,7 +237,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                     "-------------------------------------------------------------\n")
             @printf(io, "simtime =  %.16e\n", ODESolvers.gettime(lsrk))
             @printf(io, "runtime =  %03d:%02d:%05.2f (hour:min:sec)\n", hrs, min, sec)
-            @printf(io, "||Q||₂  =  %.16e\n", norm(Q))
+            @printf(io, "||Q_t||infty, ||Q_l||infty  =  %.16e; %.16e\n", maximum(Q[:, 6, :]), maximum(Q[:, 7, :]))
         end
         nothing
     end
@@ -239,7 +273,7 @@ let
     viscosity = 2.5
     nmoist = 3
     ntrace = 0
-    Ne = (10, 10)
+    Ne = (12, 12)
     N = 4
     dim = 2
     timeend = 10000.0
