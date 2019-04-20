@@ -51,6 +51,10 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
   "storage for the grad"
   grad::DASAT3
 
+  "sponge"
+  sponge::Function  
+
+  
   VanillaAtmosDiscretization(grid;
                              # How many tracer variables
                              ntrace=0,
@@ -64,7 +68,8 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
                                         # Use gravity?
                                         gravity = true,
                                         # viscosity constant
-                                        viscosity = 0
+                                        viscosity = 0,
+                                        sponge = (x...) ->0
                                         ) where {T, dim, N, Np, DA,
                                                  nmoist, ntrace}
     topology = grid.topology
@@ -87,7 +92,7 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
 
     new{T, dim, N, Np, DA, nmoist, ntrace, DASAT3, GT}(grid,
                                                        gravity ? grav : 0,
-                                                       viscosity, grad)
+                                                       viscosity, grad, sponge)
   end
 end
 
@@ -336,7 +341,7 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   MPIStateArrays.start_ghost_exchange!(grad)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
-             vgeo, gravity, viscosity, Dmat, topology.realelems, mpicomm)
+             vgeo, gravity, viscosity, Dmat, topology.realelems, disc.sponge)
 
   MPIStateArrays.finish_ghost_exchange!(grad)
 
@@ -390,20 +395,15 @@ function writevtk(prefix, vgeo::Array, Q::Array,
   Qt= reshape((@view Q[:, _nstate+1, :]), ntuple(j->Nq, dim)..., nelem)
   Ql= reshape((@view Q[:, _nstate+2, :]), ntuple(j->Nq, dim)..., nelem)
 
-  #[_, nstates, _] = size(Q)    
-  #nmoist = nstates - (ndim + 2)
-        
- # var_string = ["DENSI" , "U" , "U" , "W", "E"]
- #    error("NSTATES ", size(Q))
- # fields = ntuple(i->(var_string[i], reshape((@view Q[:,i,:]), ntuple(j->Nq,dim)...,nelem)), size(Q,2))
- # 
- # writemesh(prefix, X...; fields=fields, realelems=G.topology.realelems)
-
-  fields = ntuple(i->("Q$i", reshape((@view Q[:,i,:]), ntuple(j->Nq,dim)...,nelem)), size(Q,2)) 
-  
   writemesh(prefix, X...;
-            fields=fields,
-            realelems=G.topology.realelems)
+               fields=(("RHO", ρ), ("U", U), ("V", V), ("E", E), ("Qtot", Qt), ("Qliq", Ql)),
+              realelems=G.topology.realelems)
+    
+  #fields = ntuple(i->("Q$i", reshape((@view Q[:,i,:]), ntuple(j->Nq,dim)...,nelem)), size(Q,2)) 
+  #
+  #writemesh(prefix, X...;
+  #          fields=fields,
+  #          realelems=G.topology.realelems)
   
 end
 end

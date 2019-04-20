@@ -506,7 +506,7 @@ end
 # {{{ Volume RHS for 2-D
 function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                     rhs::Array, Q, grad, vgeo, gravity, viscosity, D,
-                    elems, mpicomm) where {N, nmoist, ntrace}
+                    elems, sponge) where {N, nmoist, ntrace}
   DFloat = eltype(Q)
   nvar   = _nstate + nmoist + ntrace
   ngrad  = _nstategrad + 3nmoist
@@ -527,14 +527,11 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_v = Array{DFloat}(undef, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
-    
-    # SM TEMPORARY SOLUTIOIN: GET MPICOMM DIFFERENTLY 
-    xmin = MPI.Allreduce(vgeo[:,:,_x,:], MPI.MIN, mpicomm)
-    xmax = MPI.Allreduce(vgeo[:,:,_x,:], MPI.MAX, mpicomm)
-    zmin = MPI.Allreduce(vgeo[:,:,_y,:], MPI.MIN, mpicomm)
-    zmax = MPI.Allreduce(vgeo[:,:,_y,:], MPI.MAX, mpicomm)
-    @error("XDOMAIN GLOBAL", xm)
 
+  #xmin =  -12000.0
+  #xmax =   12000.0
+  #ymin =       0.0
+  #ymax =   24000.0
     
   @inbounds for e in elems
 
@@ -660,17 +657,14 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # to a sin^4 function instead of the cosines 
       # proposed by D & K 
       # ------------------------------------
-      
-      # Define Sponge Boundaries
-      #=
-      xc = (xmax - xmin)/2
-      ysponge  = 0.85 * ymax
-      xsponger = xmax - 0.15*abs(xmax - xc)
-      xspongel = xmin + 0.15*abs(xmin - xc)
-        =#
-      
-      # Damping coefficient
-      α = 1.00 
+   
+      #Calculate the sponge parameters
+      (alpha_coe, beta_coe) = sponge(x, y)
+        
+        # Damping coefficient
+        #=
+        α = 1.00
+       
       r_actual = sqrt((x-1900)^2 + (y-800)^2)
       r_sponge = 1500
 
@@ -681,12 +675,20 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         rhs[i, j, _U, e] -= α * U 
         rhs[i, j, _V, e] -= α * V
       end
-      
+        
+
+       =# 
       # ---------------------------
       # End implementation of sponge layer
       # ---------------------------
-      
-      #= OBSOLETE
+      #=
+      # OBSOLETE
+      xc       = (xmax + xmin)/2
+      ysponge  = 0.85 * ymax
+      xsponger = xmax - 0.15*abs(xmax - xc)
+      xspongel = xmin + 0.15*abs(xmin - xc)
+
+      α = 1.00
       if (y > ysponge)
         rhs[i, j, _U, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * U 
         rhs[i, j, _V, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * V
@@ -697,8 +699,11 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         rhs[i, j, _U, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * U 
         rhs[i, j, _V, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * V
       end
-      =#
-      
+=#
+     
+      rhs[i, j, _U, e] -= alpha_coe * U 
+      rhs[i, j, _V, e] -=  beta_coe * V
+
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
     
@@ -791,7 +796,7 @@ end
 # {{{ Volume RHS for 3-D
 function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                     rhs::Array, Q, grad, vgeo, gravity, viscosity, D,
-                    elems) where {N, nmoist, ntrace}
+                    elems, sponge) where {N, nmoist, ntrace}
   DFloat = eltype(Q)
 
   dim = 3

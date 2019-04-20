@@ -125,7 +125,7 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
 end
 
 
-function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, 
+function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, domain_size, 
               timeend; gravity=true, viscosity=2.5, dt=nothing,
               exact_timeend=true) 
     dim = length(brickrange)
@@ -150,12 +150,52 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
-    # spacedisc = data needed for evaluating the right-hand side function
+
+    function sponge(x, y)
+        
+        xmin = -120000.0
+        xmax =  120000.0
+        ymin =       0.0
+        ymax =   18000.0
+        #        xmin = domain_size[1]
+        #        xmax = domain_size[2]
+        #        zmin = domain_size[3]
+        #        zmax = domain_size[4]
+        
+        # Define Sponge Boundaries      
+        xc       = (xmax + xmin)/2
+        ysponge  = 0.85 * ymax
+        xsponger = xmax - 0.15*abs(xmax - xc)
+        xspongel = xmin + 0.15*abs(xmin - xc)
+        
+        
+        alpha_coe = 0.0
+        beta_coe  = 0.0
+        
+        alpha = 1.0
+        beta  = 2.0
+        if (x >= xsponger)
+            alpha_coe = alpha * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+            
+        elseif (x <= xspongel)
+            alpha_coe = alpha * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+            
+        end
+        if (y >= ysponge)
+            beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+        end    
+        
+
+        return (alpha_coe, beta_coe)
+    end
+    
+    # spacedisc = data needed for evaluating the right-hand side function    
     spacedisc = VanillaAtmosDiscretization(grid,
                                            gravity=gravity,
                                            viscosity=viscosity,
                                            ntrace=ntrace,
-                                           nmoist=nmoist)
+                                           nmoist=nmoist,
+                                           sponge=sponge)
 
     # This is a actual state/function that lives on the grid    
     #vgeo = grid.vgeo
@@ -206,7 +246,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
 
     step = [0]
     mkpath("vtk_squall")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(25000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
         outprefix = @sprintf("vtk_squall/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
         @printf(io,
                 "-------------------------------------------------------------\n")
@@ -235,31 +275,26 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (13, 24)
+    Ne        = (30, 24)
     N         = 4
     dim       = 2
     timeend   = 20000.0
 
-    xmin_domain =  -12000.0
-    xmax_domain =   12000.0
-    zmin_domain =       0.0
-    zmax_domain =   24000.0
+    xmin_domain =  -120000.0
+    xmax_domain =   120000.0
+    zmin_domain =        0.0
+    zmax_domain =    18000.0
 
     domain_size = Array{Int64}(undef, 2*dim)
     domain_size[1], domain_size[2], domain_size[3], domain_size[4] = xmin_domain, xmax_domain, zmin_domain, zmax_domain 
     
-    println(" Running on $(MPI.Comm_size(mpicomm)) processes")
-#    MPI.Bcast!(xmin_domain, size(xmin_domain), 0, mpicomm)
-#    MPI.Bcast!(xmax_domain, size(xmax_domain), 0, mpicomm)
-#    MPI.Bcast!(zmin_domain, size(zmin_domain), 0, mpicomm)
-#    MPI.Bcast!(zmax_domain, size(zmax_domain), 0, mpicomm)
         
     DFloat = Float64
     for ArrayType in (Array,)
         brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
                       range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
 
-        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
+        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, domain_size, timeend)
     end
 end
 
