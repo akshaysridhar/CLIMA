@@ -651,10 +651,28 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # proposed by D & K 
       # ------------------------------------
       #Calculate the sponge parameters
-      (alpha, beta) = sponge(x, y)
+       # (alpha, beta) = sponge(x, y)
+
+ # Damping coefficient
+      α = 1.00 
+      r_actual = sqrt((x-1900)^2 + (y-800)^2)
+      r_sponge = 1500
+
+      if r_sponge <= r_actual
+        rhs[i, j, _U, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * U 
+        rhs[i, j, _V, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * V
+      elseif 2 * r_sponge <= r_actual
+        rhs[i, j, _U, e] -= α * U 
+        rhs[i, j, _V, e] -= α * V
+      end
+      
+
         
-      rhs[i, j, _U, e] -= alpha * U
-      rhs[i, j, _V, e] -= alpha * V
+      #  if(beta ~= 0.0)
+      #      @show("X,Y", beta, x, y)
+      #  end
+      #rhs[i, j, _U, e] -= beta * U
+      #rhs[i, j, _V, e] -= beta * V
 
      # U -= alpha_coe * U
      # V -=  beta_coe * V

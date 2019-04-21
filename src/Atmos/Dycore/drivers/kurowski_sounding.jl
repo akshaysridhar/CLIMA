@@ -91,7 +91,7 @@ function kurowski_bubble(x...; ntrace=0, nmoist=0, dim=3)
   dataq         = dataq * 1e-3
   datapi        = (datap ./ MSLP) .^ (c2)                       # Exner pressure from sounding data
 
-  thetav        = datat * (1.0 + 0.608 * dataq)                 # Liquid potential temperature
+  thetav        = datat * (1.0 + 0.61 * dataq)                 # Liquid potential temperature
   thetac        = 2.0
   sigma         = 6.0
   
@@ -109,7 +109,7 @@ function kurowski_bubble(x...; ntrace=0, nmoist=0, dim=3)
 
   rc		= 300.0
   # Circle centered at x = 0 and y = 900 m 
-  r		= sqrt((x[1] - 0.0)^2+(x[dim] - 800)^2)
+  r		= sqrt((x[1] - 1900)^2+(x[dim] - 800)^2)
   dtheta	= thetac * exp(-(r/rc)^sigma)
   dRH		= 80.0 * exp(-(r/rc)^sigma)
   dqv		= dRH * qvs / 100.0
@@ -294,8 +294,8 @@ let
     dim = 2
     timeend = 10000.0
 
-    xmin = -1900.0
-    xmax =  1900.0
+    xmin =     0.0
+    xmax =  3800.0
     zmin =     0.0
     zmax =  4000.0
     
