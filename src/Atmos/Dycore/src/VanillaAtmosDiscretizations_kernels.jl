@@ -651,11 +651,37 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # proposed by D & K 
       # ------------------------------------
       #Calculate the sponge parameters
-      (alpha_coe, beta_coe) = sponge(x, y)
+      (alpha, beta) = sponge(x, y)
         
-      rhs[i, j, _U, e] -= alpha_coe * U 
-      rhs[i, j, _V, e] -=  beta_coe * V
+      rhs[i, j, _U, e] -= alpha * U
+      rhs[i, j, _V, e] -= alpha * V
+
+     # U -= alpha_coe * U
+     # V -=  beta_coe * V
+
+        # OBSOLETE
+        #=
+        #xc = (xmax + xmin)/2
+        ymax = 4000
+        xmin = -1900
+        xmax =  1900
+        ysponge  = 0.5 * 4000
+        xsponger =  1200 #xmax - 0.15*abs(xmax - xc)
+        xspongel = -1200 #xmin + 0.15*abs(xmin - xc)
         
+         α = 1.0
+        if (y > ysponge)
+            rhs[i, j, _U, e] -= α * ((1/2 * (y - ysponge)/(ymax - ysponge))^4) * U 
+            rhs[i, j, _V, e] -= α * ((1/2 * (y - ysponge)/(ymax - ysponge))^4) * V
+        elseif (x > xsponger)
+            rhs[i, j, _U, e] -= α * ((1/2 * (x - xsponger)/(xmax - xsponger))^4) * U 
+            rhs[i, j, _V, e] -= α * ((1/2 * (x - xsponger)/(xmax - xsponger))^4) * V
+        elseif (x < xspongel)
+            rhs[i, j, _U, e] -= α * ((1/2 * (x - xspongel)/(xmin - xspongel))^4) * U 
+            rhs[i, j, _V, e] -= α * ((1/2 * (x - xspongel)/(xmin - xspongel))^4) * V
+        end
+        =#
+
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
     
