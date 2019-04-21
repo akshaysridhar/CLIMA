@@ -154,52 +154,65 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
-     function sponge(x, y)
 
-         xmin = brickrange[1][1]
-         xmax = brickrange[1][end]
-         ymin = brickrange[2][1]
-         ymax = brickrange[2][end]
-         
-         # Define Sponge Boundaries      
-         xc       = (xmax + xmin)/2
-         ysponge  = 0.80 * ymax
-         xsponger = xmax - 0.20*abs(xmax - xc)
-         xspongel = xmin + 0.20*abs(xmin - xc)
-         
-         ysponge = 1500
-         xspongel = -750
-         xsponger =  750
-         
-         csxl  = 0.0
-         csxr  = 0.0
-         ctop  = 0.0
-         csx   = 1.0
-         ct    = 1.0
-         
-         #x left and right
-         #xsl
-         if (x <= xspongel)
-             csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
-         end
-         #xsr
-         if (x >= xsponger)
-             csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
-         end
-         
-         #Vertical sponge:         
-         if (y >= ysponge)
-             ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
-         end
+      function sponge(x, y)
 
-         beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
-         beta  = min(beta, 1.0)
-         alpha = 1.0 - beta
-         
-         return (alpha, beta)
-     end
+        xmin = brickrange[1][1]
+        xmax = brickrange[1][end]
+        ymin = brickrange[2][1]
+        ymax = brickrange[2][end]
+        
+        # Define Sponge Boundaries      
+        xc       = (xmax + xmin)/2
+        ysponge  = 0.85 * ymax
+        xsponger = xmax - 0.15*abs(xmax - xc)
+        xspongel = xmin + 0.15*abs(xmin - xc)
+        
+        csxl  = 0.0
+        csxr  = 0.0
+        ctop  = 0.0
+        csx   = 0.2
+        ct    = 0.2
+        
+        #= alpha_coe = 0.0
+        beta_coe  = 0.0
+        alpha     = 0.5
+        beta      = 0.5
+        if (y >= ysponge)
+        beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+        
+        elseif (x >= xsponger)
+        alpha_coe = alpha * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+        
+        elseif (x <= xspongel)
+        alpha_coe = alpha * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+        
+        end
+        =#
+        
+        #x left and right
+        #xsl
+        if (x <= xspongel)
+            csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+        end
+        #xsr
+        if (x >= xsponger)
+            csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+        end
+        
+        #Vertical sponge:         
+        if (y >= ysponge)
+            ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+        end
+
+        beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
+        beta  = min(beta, 1.0)
+        alpha = 1.0 - beta
+        
+        
+        return (alpha, beta)
+    end
     #---END SPONGE
-    
     
     # spacedisc = data needed for evaluating the right-hand side function
     spacedisc = VanillaAtmosDiscretization(grid,
@@ -258,7 +271,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
 
     step = [0]
     mkpath("vtk_kurowski_n4_newsponge")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
        #outprefix = @sprintf("vtk_kurowski_n4_newsponge/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
         outprefix = @sprintf("vtk_kurowski_n4_newsponge/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
         

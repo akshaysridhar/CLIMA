@@ -95,11 +95,11 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     # theta perturbation
     dtheta        = 0.0
     thetac        = 5.0
-    rx            = 10000.0
+    rx            = 500.0
     ry            =  1500.0
-    r		  = sqrt( (x[1]/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
+    r		  = sqrt( ((x[1]-9000)/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
     if (r <= 1.0)
-        dtheta	  = thetac * (cos(0.5*π*r))^2
+        dtheta	  = thetac # *(cos(0.5*π*r))^2
     end
     θ             = thetav + dtheta
     datarho       = datap / (R_gas * datapi *  θ)
@@ -150,36 +150,47 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
-     function sponge(x, y)
+    function sponge(x, y)
 
         xmin = brickrange[1][1]
         xmax = brickrange[1][end]
         ymin = brickrange[2][1]
         ymax = brickrange[2][end]
-         
+        
         # Define Sponge Boundaries      
         xc       = (xmax + xmin)/2
         ysponge  = 0.85 * ymax
         xsponger = xmax - 0.15*abs(xmax - xc)
         xspongel = xmin + 0.15*abs(xmin - xc)
-            
-        alpha_coe = 0.0
-        beta_coe  = 0.0
-        alpha     = 0.5
-        beta      = 0.5
-        if (y >= ysponge)
-            beta_coe = beta * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
-            
-        elseif (x >= xsponger)
-            alpha_coe = alpha * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
-            
-        elseif (x <= xspongel)
-            alpha_coe = alpha * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
-            
-        end
-          
         
-        return (alpha_coe, beta_coe)
+        csxl  = 0.0
+        csxr  = 0.0
+        ctop  = 0.0
+        csx   = 1.0
+        ct    = 1.0
+        
+        
+        #x left and right
+        #xsl
+        if (x <= xspongel)
+            csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+        end
+        #xsr
+        if (x >= xsponger)
+            csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+        end
+        
+        #Vertical sponge:         
+        if (y >= ysponge)
+            ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+        end
+
+        beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
+        beta  = min(beta, 1.0)
+        alpha = 1.0 - beta
+        
+        
+        return (alpha, beta)
     end
     #---END SPONGE
     
@@ -240,7 +251,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
 
     step = [0]
     mkpath("vtk_squall")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
         #outprefix = @sprintf("vtk_squall/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
         outprefix = @sprintf("vtk_squall/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
         @printf(io,
@@ -270,15 +281,15 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (30, 24)
+    Ne        = (10, 10)
     N         = 4
     dim       = 2
     timeend   = 20000.0
 
-    xmin_domain =  -120000.0
-    xmax_domain =   120000.0
-    zmin_domain =        0.0
-    zmax_domain =    18000.0
+    xmin_domain =      0.0
+    xmax_domain =  18000.0
+    zmin_domain =      0.0
+    zmax_domain =  18000.0
         
     DFloat = Float64
     for ArrayType in (Array,)
