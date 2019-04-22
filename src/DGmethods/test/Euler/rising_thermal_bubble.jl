@@ -3,7 +3,10 @@
 # This version runs the rising thermal bubble as a stand alone test (no dependence
 # on CLIMA moist thermodynamics)
 
+# currently the code requires the MPI package
 using MPI
+
+# CLIMA specific packages
 using CLIMA.Topologies
 using CLIMA.Grids
 using CLIMA.DGBalanceLawDiscretizations
@@ -12,13 +15,16 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
-using LinearAlgebra
-using StaticArrays
-using Logging, Printf, Dates
-
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
+# other general packages
+using LinearAlgebra
+using StaticArrays
+using Logging, Printf, Dates
+using StaticArrays
+
+# define constant paramters for project file
 const _nstate = 5
 const _ρ, _U, _V, _W, _E = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
@@ -31,11 +37,17 @@ if !@isdefined integration_testing
 end
 
 # preflux computation
-@inline function preflux(Q, _...)
-  γ::eltype(Q) = γ_exact
+@inline function preflux(Q, aux, _...)
+  γ::eltype(Q)            = γ_exact
+  gravity::eltype(Q)      = grav
+  T0::eltype(Q)          = T_0
   @inbounds ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
+  @inbounds y = aux[_a_y]
   ρinv = 1 / ρ
   u, v, w = ρinv * U, ρinv * V, ρinv * W
+  e_int = (E * ρinv - (U^2 + V^2 + W^2) / 2 * ρinv - ρ * gravity * y) * ρinv
+  T     = air_temperature(e_int)
+  P     = air_pressure(T, ρ)
   ((γ-1)*(E - ρinv * (U^2 + V^2 + W^2) / 2), u, v, w, ρinv)
 end
 
@@ -45,7 +57,7 @@ end
   @inbounds abs(n[1] * u + n[2] * v + n[3] * w) + sqrt(ρinv * γ * P)
 end
 
-const _nauxstate = 9
+const _nauxstate = 7
 const _a_ϕ, _a_ϕx, _a_ϕy, _a_ϕz, _a_x, _a_y, _a_z = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z) 
   @inbounds begin
@@ -53,39 +65,61 @@ const _a_ϕ, _a_ϕx, _a_ϕy, _a_ϕz, _a_x, _a_y, _a_z = 1:_nauxstate
     aux[_a_x] = x
     aux[_a_y] = y
     aux[_a_z] = z
-    #FIXME 3D compatibility
   end
 end
 
-@inline function rayleigh_sponge!(S, Q, aux, t)
+# Domain Extent: set domain parameters as constants which can be passed through brickrange
+const xmin = -1000
+const xmax = 1000
+const ymin = 0
+const ymax = 2000
+@inline function source_rayleigh_sponge!(S, Q, aux, t)
+  gravity::eltype(Q)    = grav
   @inbounds begin
-    x,y,z= aux[_a_x], aux[_a_y], aux[_a_z]
+    x, y, z = aux[_a_x], aux[_a_y], aux[_a_z]
     # damping parameters 
     # Rayleigh damping (linear relaxation to reference state)
     # details of the technique are provided in 
     # Durran and Klemp (1983): https://doi.org/10.1175/1520-0493(1983)111<2341:ACMFTS>2.0.CO;2    
     # user defined extents of sponge region. currently sponge is inactive on bottom wall
-    # Sponge function in this instance is given by the `squircle` shape
+    # sponge function in this instance is given by the `squircle` shape
+    ρ           = Q[_ρ]
     U           = Q[_U]
     V           = Q[_V]
-    α           = 1.0
-    xmin        = -500
-    xmax        = 500
-    ymax        = 1000
+    W           = Q[_W]
+    E           = Q[_E]
+    # α acts as an effective relaxation timescales. More complex forms are possible which account
+    # for specific wavenumbers, but have not been implemented in this example.
+    α           = 0.0
     xc          = (xmax + xmin) / 2
-    yc          = 0
-    r_actual    = ((x-xc)^4+ (y-yc)^4)^ (1/4)
+    yc          = ymin
+    r_actual    = ((x-xc)^4+ (y-yc)^4) ^ (1/4) # Square with rounded corners 
     r_sponge    = 0.60 * ymax
     # assign absorptive condition on velocity components
-    S[_U] = - α * sinpi((r_actual-r_sponge)/(r_sponge))^4 * U
-    S[_V] = - α * sinpi((r_actual-r_sponge)/(r_sponge))^4 * V
-  
+    S[_ρ] = 0
+    S[_U] = - α * U * sinpi((r_actual-r_sponge)/(r_sponge))^4
+    S[_V] = - α * V * sinpi((r_actual-r_sponge)/(r_sponge))^4
+    S[_W] = 0
+    S[_E] = 0
   end
 end
 
+# source term for gravity contribution to vertical momentum equation (geopotential)
+# not directly incorporated in the kernels
+# gravity can therefore be consistent with the w component representing vertical velocity 
+# in the z direction
+@inline function source_geopot!(S, Q, aux, t)
+  gravity::eltype(Q)    = grav
+  @inbounds begin
+    y     = aux[_a_y]
+    ρ     = Q[_ρ]
+    S[_V] = -ρ * gravity 
+  end
+end
+
+
 # physical flux function
-eulerflux!(F, Q, aux, t) =
-eulerflux!(F, Q, aux, t, preflux(Q)...)
+eulerflux!(F, Q, aux, t) = eulerflux!(F, Q, aux, t, preflux(Q ,aux)...)
 
 @inline function eulerflux!(F, Q, aux, t, P, u, v, w, ρinv)
   @inbounds begin
@@ -98,11 +132,19 @@ eulerflux!(F, Q, aux, t, preflux(Q)...)
   end
 end
 
+# Boundary condition state function
+@inline function bcstate!(QP, _, _, auxM, bctype, t, _...)
+  @inbounds begin
+    x,y,z = auxM[1], auxM[2], auxM[3]
+    rising_thermal_bubble!(QP,t,x,y,z)
+    nothing
+  end
+end
+
 function rising_thermal_bubble!(Q,
                                t,
                                x,y,z, 
                                _...)
-
   DFloat                = eltype(Q)
   γ::DFloat             = γ_exact
   # can override default gas constants 
@@ -117,7 +159,7 @@ function rising_thermal_bubble!(Q,
   q_liq::DFloat         = 0
   q_ice::DFloat         = 0 
   # perturbation parameters for rising bubble
-  r                     = sqrt((x)^2 + (y-350)^2)
+  r                     = sqrt((x)^2 + (y-500)^2)
   rc::DFloat            = 250
   θ_ref::DFloat         = 300
   θ_c::DFloat           = 5.0
@@ -137,7 +179,6 @@ function rising_thermal_bubble!(Q,
   e_int                 = internal_energy(T, q_tot, q_liq, q_ice)
   E                     = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
   @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
-
 end
 
 function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
@@ -149,18 +190,30 @@ function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
                                           polynomialorder = N,
                                          )
 
+  # Define numerical fluxes
+  numflux!(x...)  = NumericalFluxes.rusanov!(x...,
+                                             eulerflux!, 
+                                             wavespeed,
+                                             preflux)
+  numbcflux!(x...)= NumericalFluxes.rusanov_boundary_flux!(x..., 
+                                                           eulerflux!,
+                                                           bcstate!, wavespeed, 
+                                                           preflux) 
+
+
   # spacedisc = data needed for evaluating the right-hand side function
-  spacedisc = DGBalanceLaw(grid = grid,
+  spacedisc = DGBalanceLaw(
+                           grid = grid,
                            length_state_vector = _nstate,
                            inviscid_flux! = eulerflux!,
-                           inviscid_numericalflux! = (x...) ->
-                           NumericalFluxes.rusanov!(x..., eulerflux!,
-                                                    wavespeed,
-                                                    preflux),
+                           inviscid_numerical_flux! = numflux!,
                            auxiliary_state_length = _nauxstate,
                            auxiliary_state_initialization! = auxiliary_state_initialization!,
-                           source! = rayleigh_sponge!)
-
+                           inviscid_numerical_boundary_flux! = numbcflux!,
+                           source! = source_rayleigh_sponge!,
+                           )
+  
+  # discretisation for auxiliary states
   DGBalanceLawDiscretizations.grad_auxiliary_state!(spacedisc, _a_ϕ,
                                                     (_a_ϕx, _a_ϕy, _a_ϕz))
 
@@ -227,13 +280,9 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   ArrayType = Array
- 
-  xmin,xmax = -500,500
-  ymin,ymax = -600,600
   brickrange = (range(DFloat(xmin); length=Ne[1]+1, stop=xmax),
                 range(DFloat(ymin); length=Ne[2]+1, stop=ymax))
-
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,true))
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,false))
   main(mpicomm, DFloat, topl, N, timeend, ArrayType, dt)
 
 end
@@ -244,7 +293,7 @@ let
   timeend       = 700
   dt            = 1e-2
   Ne            = (10,10)
-  N             = 4
+  N             = 5
   dim           = 2
   DFloat        = Float64
   run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
