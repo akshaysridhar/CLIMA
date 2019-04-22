@@ -218,5 +218,6 @@ let
         main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, timeend)
     end
 end
+end
 
 isinteractive() || MPI.Finalize()
