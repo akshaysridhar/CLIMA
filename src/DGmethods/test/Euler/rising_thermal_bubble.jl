@@ -136,8 +136,6 @@ function rising_thermal_bubble!(Q,
   e_pot                 = gravity * y
   e_int                 = internal_energy(T, q_tot, q_liq, q_ice)
   E                     = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-  @show(E)
-  
   @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
 
 end
@@ -253,3 +251,5 @@ let
   isinteractive() || MPI.Finalize()
 end
 nothing
+
+#FIXME Testing system for moist-thermodynamics components

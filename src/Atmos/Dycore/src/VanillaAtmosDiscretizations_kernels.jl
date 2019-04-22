@@ -681,19 +681,6 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # End implementation of sponge layer
       # ---------------------------
       
-      #= OBSOLETE
-      if (y > ysponge)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4 * V
-      elseif (x > xsponger)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4 * V
-      elseif (x < xspongel)
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4 * V
-      end
-      =#
-      
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
     
