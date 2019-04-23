@@ -4,6 +4,13 @@
 #md #     This example is also available as a Jupyter notebook:
 #md #     [`ex_001_periodic_advection.ipynb`](@__NBVIEWER_ROOT_URL__examples/DGmethods/generated/ex_001_periodic_advection.html)
 #
+# Key ideas of this tutorial:
+#   - Setting up PDE
+#   - Defining a numerical flux
+#   - Defining finite element mesh
+#   - Using the ODE solving framework
+#   - Using VTK visualization
+#
 # ## Introduction
 #
 # In this example we will solve the constant coefficient advection equation on a
