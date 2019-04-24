@@ -204,6 +204,168 @@ function facerhs!(::Val{dim}, ::Val{N},
   end
 end
 
+function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                          ::Val{gradstates}, ::Val{nviscstate},
+                          ::Val{nviscfluxstate}, viscous_flux!, visc_transform!,
+                          Q::Array, QV, vgeo, t, D,
+                          elems) where {dim, N, gradstates, nviscstate,
+                                        nviscfluxstate, nstate}
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+
+  Nqk = dim == 2 ? 1 : Nq
+
+  nelem = size(Q)[end]
+  ngradstate = length(gradstates)
+
+  Q = reshape(Q, Nq, Nq, Nqk, nstate, nelem)
+  QV = reshape(QV, Nq, Nq, Nqk, nviscfluxstate, nelem)
+  vgeo = reshape(vgeo, Nq, Nq, Nqk, _nvgeo, nelem)
+
+  s_H = MArray{Tuple{3, Nq, Nq, Nqk, nviscstate}, DFloat}(undef)
+
+  l_Q = MArray{Tuple{ngradstate}, DFloat}(undef)
+  l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_H = MArray{Tuple{nviscstate}, DFloat}(undef)
+  l_QV = MArray{Tuple{nviscfluxstate}, DFloat}(undef)
+  l_gradH = MArray{3, Tuple{nviscstate}, DFloat}(undef)
+
+  @inbounds for e in elems
+    for k = 1:Nqk, j = 1:Nq, i = 1:Nq
+      for s = 1:ngradstate
+        l_Q[s] = Q[i, j, k, gradstates[s], e]
+      end
+
+      for s = 1:nauxstate
+        l_aux[s] = auxstate[i, j, k, s, e]
+      end
+
+      visc_transform!(l_H, l_Q, l_aux, t)
+      for s = 1:nviscstate
+        s_H[i, j, k, s] = l_H[s]
+      end
+    end
+
+    # Compute gradient of each state
+    for k = 1:Nqk, j = 1:Nq, i = 1:Nq
+      ξx, ξy, ξz = vgeo[i,j,k,_ξx,e], vgeo[i,j,k,_ξy,e], vgeo[i,j,k,_ξz,e]
+      ηx, ηy, ηz = vgeo[i,j,k,_ηx,e], vgeo[i,j,k,_ηy,e], vgeo[i,j,k,_ηz,e]
+      ζx, ζy, ζz = vgeo[i,j,k,_ζx,e], vgeo[i,j,k,_ζy,e], vgeo[i,j,k,_ζz,e]
+
+      for s = 1:ngradstate
+        l_Q[s] = Q[i, j, k, gradstates[s], e]
+      end
+
+      for s = 1:nviscstate
+        Hξ = Hη = Hζ = zero(DFloat)
+        for n = 1:Nq
+          Hξ += D[i, n] * s_H[n, j, k, s]
+          Hη += D[j, n] * s_H[i, n, k, s]
+          dim == 3 && (Hζ += D[k, n] * s_H[i, j, n, s])
+        end
+        l_gradH[1, s] = ξx * Hξ + ηx * Hη + ζx * Hζ
+        l_gradH[2, s] = ξy * Hξ + ηy * Hη + ζy * Hζ
+        l_gradH[3, s] = ξz * Hξ + ηz * Hη + ζz * Hζ
+      end
+
+      viscous_flux!(l_QV, l_gradH, l_Q, l_aux, t)
+
+      for s = 1:nviscstate
+        QV[i, j, k, s] = l_QV[s]
+      end
+    end
+  end
+end
+
+function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
+                        ::Val{nviscstate}, ::Val{nviscfluxstate},
+                        viscous_numerical_flux!,
+                        viscous_numerical_boundary_flux!, visc_transform!,
+                        Q::Array, QV, vgeo, sgeo, t, vmapM, vmapP, elemtobndy,
+                        elems) where {dim, N, gradstates, nviscstate,
+                                      nviscfluxstate, nstate}
+  DFloat = eltype(Q)
+
+  if dim == 1
+    Np = (N+1)
+    Nfp = 1
+    nface = 2
+  elseif dim == 2
+    Np = (N+1) * (N+1)
+    Nfp = (N+1)
+    nface = 4
+  elseif dim == 3
+    Np = (N+1) * (N+1) * (N+1)
+    Nfp = (N+1) * (N+1)
+    nface = 6
+  end
+
+  ngradstate = length(gradstates)
+
+  l_QM = MArray{Tuple{ngradstate}, DFloat}(undef)
+  l_auxM = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_HM = MArray{Tuple{nviscstate}, DFloat}(undef)
+
+  l_QP = MArray{Tuple{ngradstate}, DFloat}(undef)
+  l_auxP = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_HP = MArray{Tuple{nviscstate}, DFloat}(undef)
+
+  l_QV = MArray{Tuple{nviscfluxstate}, DFloat}(undef)
+
+  @inbounds for e in elems
+    for f = 1:nface
+      for n = 1:Nfp
+        nM = (sgeo[_nx, n, f, e], sgeo[_ny, n, f, e], sgeo[_nz, n, f, e])
+        sMJ, vMJI = sgeo[_sMJ, n, f, e], sgeo[_vMJI, n, f, e]
+        idM, idP = vmapM[n, f, e], vmapP[n, f, e]
+
+        eM, eP = e, ((idP - 1) ÷ Np) + 1
+        vidM, vidP = ((idM - 1) % Np) + 1,  ((idP - 1) % Np) + 1
+
+        # Load minus side data
+        for s = 1:ngradstate
+          l_QM[s] = Q[vidM, gradstates[s], eM]
+        end
+
+        for s = 1:nauxstate
+          l_auxM[s] = auxstate[vidM, s, eM]
+        end
+
+        visc_transform!(l_HM, l_QM, l_auxM, t)
+
+        # Load plus side data
+        for s = 1:ngradstate
+          l_QP[s] = Q[vidP, gradstates[s], eP]
+        end
+
+        for s = 1:nauxstate
+          l_auxP[s] = auxstate[vidP, s, eP]
+        end
+
+        visc_transform!(l_HP, l_QP, l_auxP, t)
+
+        bctype =
+            viscous_numerical_boundary_flux! === nothing ? 0 : elemtobndy[f, e]
+        if bctype == 0
+          viscous_numerical_flux!(l_QV, nM, l_HM, l_QM, l_auxM, l_HP,
+                                  l_QP, l_auxP, t)
+        else
+          viscous_numerical_boundary_flux!(l_QV, nM, l_HM, l_QM, l_auxM,
+                                           l_HP, l_QP, l_auxP, bctype, t)
+        end
+
+        for s = 1:nviscstate
+          QV[i, j, k, s] += vMJI * sMJ * l_QV[s]
+        end
+
+      end
+    end
+  end
+
+end
+
+
 """
     initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
                   auxstate, vgeo, elems) where {dim, N, nauxstate}
