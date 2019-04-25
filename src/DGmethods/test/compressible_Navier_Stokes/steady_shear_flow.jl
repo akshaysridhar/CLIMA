@@ -41,9 +41,9 @@ end
 end
 
 # flux function
-flux!(F, Q, VF, aux, t) = flux!(F, Q, VF, aux, t, preflux(Q)...)
+cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q)...)
 
-@inline function flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
+@inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
     ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
 
@@ -83,7 +83,6 @@ end
 # Visous flux
 @inline function compute_stresses!(VF, grad_vel, _...)
   μ::eltype(VF) = μ_exact
-  DFloat = eltype(VF)
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
     dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
@@ -98,9 +97,9 @@ end
     ϵ23 = (dvdz + dwdy) / 2
 
     # deviatoric stresses
-    VF[_τ11] = μ * (2ϵ11 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    VF[_τ22] = μ * (2ϵ22 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    VF[_τ33] = μ * (2ϵ33 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
+    VF[_τ11] = 2μ * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ22] = 2μ * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ33] = 2μ * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ12] = 2μ * ϵ12
     VF[_τ13] = 2μ * ϵ13
     VF[_τ23] = 2μ * ϵ23
@@ -150,9 +149,9 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
                            length_state_vector = _nstate,
-                           flux! = flux!,
+                           flux! = cns_flux!,
                            numerical_flux! = (x...) ->
-                           NumericalFluxes.rusanov!(x..., flux!, wavespeed,
+                           NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed,
                                                     preflux),
                            nviscstate = _nviscstate,
                            gradstates = _gradstates,
