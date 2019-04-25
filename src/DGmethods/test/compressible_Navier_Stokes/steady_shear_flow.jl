@@ -16,14 +16,14 @@ const _ρ, _U, _V, _W, _E = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
 const statenames = ("ρ", "U", "V", "W", "E")
 
+const _nviscfluxstate = 6
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23 = 1:_nviscfluxstate
+
+const _nviscstate = 3
+const _gradstates = (_ρ, _U, _V, _W)
+
 const γ_exact = 7 // 5
 const μ_exact = 1 // 100
-
-if !@isdefined integration_testing
-  const integration_testing =
-    parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
-  using Random
-end
 
 # preflux computation
 @inline function preflux(Q, _...)
@@ -71,7 +71,7 @@ flux!(F, Q, VF, aux, t) = flux!(F, Q, VF, aux, t, preflux(Q)...)
 end
 
 # Compute the velocity from the state
-@inline function velocities!(u, GQ, _...)
+@inline function velocities!(vel, Q, _...)
   @inbounds begin
     # ordering should match gradstates
     ρ, U, V, W = Q[1], Q[2], Q[2], Q[3]
@@ -83,6 +83,7 @@ end
 # Visous flux
 @inline function compute_stresses!(VF, grad_vel, _...)
   μ::eltype(VF) = μ_exact
+  DFloat = eltype(VF)
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
     dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
@@ -97,21 +98,20 @@ end
     ϵ23 = (dvdz + dwdy) / 2
 
     # deviatoric stresses
-    τ11 = μ * (2ϵ11 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    τ22 = μ * (2ϵ22 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    τ33 = μ * (2ϵ33 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    τ12 = μ * ϵ12
-    τ13 = μ * ϵ13
-    τ23 = μ * ϵ23
+    VF[_τ11] = μ * (2ϵ11 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
+    VF[_τ22] = μ * (2ϵ22 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
+    VF[_τ33] = μ * (2ϵ33 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
+    VF[_τ12] = 2μ * ϵ12
+    VF[_τ13] = 2μ * ϵ13
+    VF[_τ23] = 2μ * ϵ23
   end
 end
 
-@inline function viscous_numerical_flux!(VF, nM, velM, QM, aM, velP, QP, aP, t)
-  μ::eltype(VF) = μ_exact
+@inline function stresses_numerical_flux!(VF, nM, velM, QM, aM, velP, QP, aP, t)
   @inbounds begin
     n_Δvel = similar(VF, Size(3, 3))
     for j = 1:3, i = 1:3
-      n_Δvel[i, j] = nM[i] * (velP[j] - velU[j]) / 2
+      n_Δvel[i, j] = nM[i] * (velP[j] - velM[j]) / 2
     end
     compute_stresses!(VF, n_Δvel)
   end
@@ -126,20 +126,20 @@ function initialcondition!(Q, t, x, y, z)
   U::DFloat = 0
   V::DFloat = 0
   W::DFloat = 0
-  E::DFloat = 12 / (γ - 1) + (ρ/2) * exp(-4 * (sin(π*x)^2 + sin(π*y)^2 +
+  E::DFloat = 12 / (γ - 1) + (ρ/2) * exp(-4 * (cos(π*x)^2 + cos(π*y)^2 +
                                                sin(π*z)^2))
 
-  if integration_testing
-    @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
-  else
-    @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] =
-    10+rand(), rand(), rand(), rand(), 10+rand()
-  end
+  @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
 
 end
 
-function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
-              ArrayType, dt) where {dim}
+function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
+
+  ArrayType = Array
+
+  brickrange = ntuple(j->range(DFloat(0); length=Ne[j]+1, stop=1), dim)
+
+  topl = BrickTopology(mpicomm, brickrange, periodicity=ntuple(j->true, dim))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -150,14 +150,19 @@ function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
                            length_state_vector = _nstate,
-                           inviscid_flux! = flux!,
-                           inviscid_numerical_flux! = (x...) ->
-                           NumericalFluxes.rusanov!(x..., flux!,
-                                                    wavespeed,
-                                                    preflux))
+                           flux! = flux!,
+                           numerical_flux! = (x...) ->
+                           NumericalFluxes.rusanov!(x..., flux!, wavespeed,
+                                                    preflux),
+                           nviscstate = _nviscstate,
+                           gradstates = _gradstates,
+                           nviscfluxstate = _nviscfluxstate,
+                           viscous_transform! = velocities!,
+                           viscous_flux! = compute_stresses!,
+                           viscous_numerical_flux! = stresses_numerical_flux!)
 
   # This is a actual state/function that lives on the grid
-  initialcondition(Q, x...) = isentropicvortex!(Q, DFloat(0), x...)
+  initialcondition(Q, x...) = initialcondition!(Q, DFloat(0), x...)
   Q = MPIStateArray(spacedisc, initialcondition)
 
   lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
@@ -168,22 +173,22 @@ function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
 
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(60, mpicomm) do (s=false)
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(5, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else
       energy = norm(Q)
-      @info @sprintf """Update
-  simtime = %.16e
-  runtime = %s
-  norm(Q) = %.16e""" ODESolvers.gettime(lsrk) Dates.format(convert(Dates.DateTime, Dates.now()-starttime[]), Dates.dateformat"HH:MM:SS") energy
+      @info @sprintf("""Update
+                     simtime = %.16e
+                     runtime = %s
+                     norm(Q) = %.16e""", ODESolvers.gettime(lsrk),
+                     Dates.format(convert(Dates.DateTime,
+                                          Dates.now()-starttime[]),
+                                  Dates.dateformat"HH:MM:SS"),
+                     energy)
     end
   end
 
-  #= Paraview calculators:
-  P = (0.4) * (E  - (U^2 + V^2 + W^2) / (2*ρ) - 9.81 * ρ * coordsZ)
-  theta = (100000/287.0024093890231) * (P / 100000)^(1/1.4) / ρ
-  =#
   step = [0]
   mkpath("vtk")
   cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
@@ -199,36 +204,22 @@ function main(mpicomm, DFloat, topl::AbstractTopology{dim}, N, timeend,
   solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 
+  #=
   # Print some end of the simulation information
   engf = norm(Q)
-  if integration_testing
-    Qe = MPIStateArray(spacedisc,
-                       (Q, x...) -> isentropicvortex!(Q, DFloat(timeend), x...))
-    engfe = norm(Qe)
-    errf = euclidean_distance(Q, Qe)
-    @info @sprintf """Finished
-    norm(Q)                 = %.16e
-    norm(Q) / norm(Q₀)      = %.16e
-    norm(Q) - norm(Q₀)      = %.16e
-    norm(Q - Qe)            = %.16e
-    norm(Q - Qe) / norm(Qe) = %.16e
-    """ engf engf/eng0 engf-eng0 errf errf / engfe
-  else
-    @info @sprintf """Finished
-    norm(Q)            = %.16e
-    norm(Q) / norm(Q₀) = %.16e
-    norm(Q) - norm(Q₀) = %.16e""" engf engf/eng0 engf-eng0
-  end
-  integration_testing ? errf : (engf / eng0)
-end
-
-function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
-  ArrayType = Array
-
-  brickrange = ntuple(j->range(DFloat(-halfperiod); length=Ne[j]+1,
-                               stop=halfperiod), dim)
-  topl = BrickTopology(mpicomm, brickrange, periodicity=ntuple(j->true, dim))
-  main(mpicomm, DFloat, topl, N, timeend, ArrayType, dt)
+  Qe = MPIStateArray(spacedisc,
+                     (Q, x...) -> initialcondition!(Q, DFloat(timeend), x...))
+  engfe = norm(Qe)
+  errf = euclidean_distance(Q, Qe)
+  @info @sprintf """Finished
+  norm(Q)                 = %.16e
+  norm(Q) / norm(Q₀)      = %.16e
+  norm(Q) - norm(Q₀)      = %.16e
+  norm(Q - Qe)            = %.16e
+  norm(Q - Qe) / norm(Qe) = %.16e
+  """ engf engf/eng0 engf-eng0 errf errf / engfe
+  errf
+  =#
 end
 
 using Test
@@ -246,63 +237,21 @@ let
     global_logger(NullLogger())
   end
 
-  if integration_testing
-    timeend = 1
-    numelem = (5, 5, 1)
+  timeend = 0.1
+  numelem = (10, 10, 1)
 
-    polynomialorder = 4
+  polynomialorder = 4
 
-    expected_error = Array{Float64}(undef, 2, 3) # dim-1, lvl
-    expected_error[1,1] = 5.7115689019456495e-01
-    expected_error[1,2] = 6.9418982796523573e-02
-    expected_error[1,3] = 3.2927550219067014e-03
-    expected_error[2,1] = 1.8061566743070110e+00
-    expected_error[2,2] = 2.1952209848920567e-01
-    expected_error[2,3] = 1.0412605646145325e-02
-    lvls = size(expected_error, 2)
+  lvls = 1
 
-    for DFloat in (Float64,) #Float32)
-      for dim = 2:3
-        err = zeros(DFloat, lvls)
-        for l = 1:lvls
-          Ne = ntuple(j->2^(l-1) * numelem[j], dim)
-          dt = 1e-2 / Ne[1]
-          nsteps = ceil(Int64, timeend / dt)
-          dt = timeend / nsteps
-          err[l] = run(mpicomm, dim, Ne, polynomialorder, timeend, DFloat, dt)
-          @test err[l] ≈ DFloat(expected_error[dim-1, l])
-        end
-        @info begin
-          msg = ""
-          for l = 1:lvls-1
-            rate = log2(err[l]) - log2(err[l+1])
-            msg *= @sprintf("\n  rate for level %d = %e\n", l, rate)
-          end
-          msg
-        end
-      end
-    end
-  else
-    numelem = (3, 4, 5)
-    dt = 1e-3
-    timeend = 2dt
-
-    polynomialorder = 4
-
-    mpicomm = MPI.COMM_WORLD
-
-    check_engf_eng0 = Dict{Tuple{Int64, Int64, DataType}, AbstractFloat}()
-    check_engf_eng0[2, 1, Float64] = 9.9999795068862996e-01
-    check_engf_eng0[3, 1, Float64] = 9.9999641494886327e-01
-    check_engf_eng0[2, 3, Float64] = 9.9999876109562658e-01
-    check_engf_eng0[3, 3, Float64] = 9.9999654059181553e-01
-
-    for DFloat in (Float64,) #Float32)
-      for dim = 2:3
-        Random.seed!(0)
-        engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
-                        DFloat, dt)
-        @test check_engf_eng0[dim, MPI.Comm_size(mpicomm), DFloat] ≈ engf_eng0
+  for DFloat in (Float64,) #Float32)
+    for dim = 2:2
+      for l = 1:lvls
+        Ne = ntuple(j->2^(l-1) * numelem[j], dim)
+        dt = 1e-3 / Ne[1]
+        nsteps = ceil(Int64, timeend / dt)
+        dt = timeend / nsteps
+        run(mpicomm, dim, Ne, polynomialorder, timeend, DFloat, dt)
       end
     end
   end

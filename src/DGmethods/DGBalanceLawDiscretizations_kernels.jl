@@ -206,10 +206,10 @@ end
 
 function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
                           ::Val{gradstates}, ::Val{nviscstate},
-                          ::Val{nviscfluxstate}, viscous_flux!, visc_transform!,
-                          Q::Array, QV, vgeo, t, D,
-                          elems) where {dim, N, gradstates, nviscstate,
-                                        nviscfluxstate, nstate}
+                          ::Val{nviscfluxstate}, ::Val{nauxstate},
+                          viscous_flux!, viscous_transform!, Q::Array, QV, vgeo,
+                          t, D, elems) where {dim, N, gradstates, nviscstate,
+                                              nviscfluxstate, nstate, nauxstate}
   DFloat = eltype(Q)
 
   Nq = N + 1
@@ -229,7 +229,7 @@ function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
   l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
   l_H = MArray{Tuple{nviscstate}, DFloat}(undef)
   l_QV = MArray{Tuple{nviscfluxstate}, DFloat}(undef)
-  l_gradH = MArray{3, Tuple{nviscstate}, DFloat}(undef)
+  l_gradH = MArray{Tuple{3, nviscstate}, DFloat}(undef)
 
   @inbounds for e in elems
     for k = 1:Nqk, j = 1:Nq, i = 1:Nq
@@ -241,7 +241,7 @@ function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
         l_aux[s] = auxstate[i, j, k, s, e]
       end
 
-      visc_transform!(l_H, l_Q, l_aux, t)
+      viscous_transform!(l_H, l_Q, l_aux, t)
       for s = 1:nviscstate
         s_H[i, j, k, s] = l_H[s]
       end
@@ -271,8 +271,8 @@ function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
 
       viscous_flux!(l_QV, l_gradH, l_Q, l_aux, t)
 
-      for s = 1:nviscstate
-        QV[i, j, k, s] = l_QV[s]
+      for s = 1:nviscfluxstate
+        QV[i, j, k, s, e] = l_QV[s]
       end
     end
   end
@@ -280,11 +280,11 @@ end
 
 function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
                         ::Val{nviscstate}, ::Val{nviscfluxstate},
-                        viscous_numerical_flux!,
-                        viscous_numerical_boundary_flux!, visc_transform!,
+                        ::Val{nauxstate}, viscous_numerical_flux!,
+                        viscous_numerical_boundary_flux!, viscous_transform!,
                         Q::Array, QV, vgeo, sgeo, t, vmapM, vmapP, elemtobndy,
                         elems) where {dim, N, gradstates, nviscstate,
-                                      nviscfluxstate, nstate}
+                                      nviscfluxstate, nstate, nauxstate}
   DFloat = eltype(Q)
 
   if dim == 1
@@ -332,7 +332,7 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
           l_auxM[s] = auxstate[vidM, s, eM]
         end
 
-        visc_transform!(l_HM, l_QM, l_auxM, t)
+        viscous_transform!(l_HM, l_QM, l_auxM, t)
 
         # Load plus side data
         for s = 1:ngradstate
@@ -343,7 +343,7 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
           l_auxP[s] = auxstate[vidP, s, eP]
         end
 
-        visc_transform!(l_HP, l_QP, l_auxP, t)
+        viscous_transform!(l_HP, l_QP, l_auxP, t)
 
         bctype =
             viscous_numerical_boundary_flux! === nothing ? 0 : elemtobndy[f, e]
@@ -355,8 +355,8 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
                                            l_HP, l_QP, l_auxP, bctype, t)
         end
 
-        for s = 1:nviscstate
-          QV[i, j, k, s] += vMJI * sMJ * l_QV[s]
+        for s = 1:nviscfluxstate
+          QV[vidM, s, eM] += vMJI * sMJ * l_QV[s]
         end
 
       end
