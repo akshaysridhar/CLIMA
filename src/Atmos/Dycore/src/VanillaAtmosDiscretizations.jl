@@ -234,8 +234,7 @@ function estimatedt(::Val{dim}, ::Val{N}, ::Val{nmoist}, G, gravity, Q, vgeo,
       
       E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
       # get adjusted temperature and liquid and ice specific humidities
-      T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-     
+      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
       ξx, ξy, ηx, ηy = vgeo[n, G.ξxid, e], vgeo[n, G.ξyid, e],
                        vgeo[n, G.ηxid, e], vgeo[n, G.ηyid, e]
       
@@ -262,8 +261,8 @@ function estimatedt(::Val{dim}, ::Val{N}, ::Val{nmoist}, G, gravity, Q, vgeo,
       end
 
       # get adjusted temperature and liquid and ice specific humidities
-      T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-     
+      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+      
       ξx, ξy, ξz = vgeo[n, G.ξxid, e], vgeo[n, G.ξyid, e], vgeo[n, G.ξzid, e]
       ηx, ηy, ηz = vgeo[n, G.ηxid, e], vgeo[n, G.ηyid, e], vgeo[n, G.ηzid, e]
       ζx, ζy, ζz = vgeo[n, G.ζxid, e], vgeo[n, G.ζyid, e], vgeo[n, G.ζzid, e]
