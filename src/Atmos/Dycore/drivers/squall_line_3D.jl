@@ -121,7 +121,7 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     e_int = internal_energy(T, q_tot, 0.0, 0.0)
     # Total energy 
     E = ρ * total_energy(e_kin, e_pot, T, q_tot, 0.0, 0.0)
-    (ρ=ρ, U=U, V=V, W=V, E=E, Qmoist=(ρ * q_tot, 0.0, 0.0)) 
+    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, 0.0, 0.0)) 
 
 end
 

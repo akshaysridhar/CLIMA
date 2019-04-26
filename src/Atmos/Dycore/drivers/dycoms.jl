@@ -84,9 +84,10 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
     T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, q_tot, 0.0, 0.0)
     ρ     = air_density(T, P, q_tot, 0.0, 0.0)
 
+    #Get q_liq from q_tot and T
     q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
     
-    u, v, w       = 7.0, -5.5, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
+    u, v, w       = datau, datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
@@ -97,7 +98,7 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
     e_int = internal_energy(T, q_tot, q_liq, q_ice)
     # Total energy 
     E = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-    (ρ=ρ, U=U, V=V, W=V, E=E, Qmoist=(ρ * q_tot, q_liq, q_ice)) 
+    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, q_liq, q_ice)) 
 
 end
 
@@ -111,7 +112,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
                          brickrange,
-                         periodicity=(true, ntuple(j->false, dim-1)...))
+                         periodicity=(true, true, false))
+#                         periodicity=(true, ntuple(j->false, dim-1)...))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             # Compute floating point type
@@ -255,24 +257,24 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (20, 20)
+    Ne        = (10, 10, 10)
     N         = 4
     timeend   = 20000.0
     
-    xmin_domain =     0.0
-    xmax_domain =  1500.0
-    #ymin_domain =     0.0
-    #ymax_domain =   150.0
+    xmin_domain = -1600.0
+    xmax_domain =  1600.0
+    ymin_domain = -1600.0
+    ymax_domain =  1600.0
     zmin_domain =     0.0
     zmax_domain =  1500.0
     
     DFloat = Float64
     for ArrayType in (Array,)
-        brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
         #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-        #              range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
-        #              range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
+        #              range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+                      range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
+                      range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
 
         main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
     end
