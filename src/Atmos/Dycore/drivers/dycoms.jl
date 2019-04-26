@@ -23,7 +23,7 @@ using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
 function read_sounding()
     #read in the original squal sounding
-    fsounding  = open(joinpath(@__DIR__, "./soundings/sounding_JCP2013_with_pressure.dat"))
+    fsounding  = open(joinpath(@__DIR__, "./soundings/sounding_DYCOMS_TEST1.dat"))
     sounding = readdlm(fsounding)
     close(fsounding)
     (nzmax, ncols) = size(sounding)
@@ -33,8 +33,8 @@ function read_sounding()
     return (sounding, nzmax, ncols)
 end
 
-function squall_line(x...; ntrace=0, nmoist=0, dim=3)
-    
+function dycoms(x...; ntrace=0, nmoist=0, dim=3)
+
     DFloat 	    = eltype(x)
     p0::DFloat 	    = MSLP
     
@@ -53,7 +53,7 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     sounding[:, 4],
     sounding[:, 5],
     sounding[:, 6]
-
+    
     #------------------------------------------------------
     # GET SPLINE FUNCTION
     #------------------------------------------------------
@@ -77,14 +77,21 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     c_v::DFloat     = cv_m(dataq,0.0,0.0)
     cvoverR         = c_v/R_gas
     gravity::DFloat = grav
+
+    θ_liq = datat
+    q_tot = dataq
+    P     = datap
+    T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, q_tot, 0.0, 0.0)
+    ρ     = air_density(T, P, q_tot, 0.0, 0.0)
     
+    #=
     #TODO Driver constant parameters need references
     rvapor        = 461.0
     levap         = 2.5e6
     es0           = 611.0
     pi0           = 1.0
     p0            = MSLP
-    theta0        = 300.4675
+    theta0        = 292.5
     c2            = R_gas / c_p
     c1            = 1.0 / c2
     
@@ -93,24 +100,20 @@ function squall_line(x...; ntrace=0, nmoist=0, dim=3)
     thetav        = datat * (1.0 + 0.61 * dataq)                  # Liquid potential temperature
 
     # theta perturbation
-    dtheta        =     0.0
-    thetac        =     5.0
-    rx            =   500.0
-    ry            =   500.0
-    rz            =  1500.0
-    r		  = sqrt( ((x[1] - 9000)/rx )^2 + ((x[2] - 9000.0)/ry)^2 + ((x[dim] - 2000.0)/rz)^2)
-    if (r <= 1.0)
-        dtheta	  = thetac *(cos(0.5*π*r))^2
-    end
+    dtheta        =    0.0
+    thetac        =    5.0
+    rx            =  500.0
+    ry            = 1500.0
+    r		  = sqrt( ((x[1]-9000)/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
+    #if (r <= 1.0)
+    #    dtheta	  = thetac # *(cos(0.5*π*r))^2
+    #end
     θ             = thetav + dtheta
     datarho       = datap / (R_gas * datapi *  θ)
     e             = dataq * datap * rvapor/(dataq * rvapor + R_gas)
+    =#
     
-    q_tot         = dataq
-    P             = datap                                         # Assumed known from sounding
-    ρ             = datarho
-    T             = P / (ρ * R_gas)
-    u, v, w       = datau, datav, 0.0
+    u, v, w       = 0.0, 0.0, 0.0
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
@@ -130,15 +133,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
               timeend; gravity=true, viscosity=2.5, dt=nothing,
               exact_timeend=true) 
     dim = length(brickrange)
-  
     topl = BrickTopology(# MPI communicator to connect elements/partition
                          mpicomm,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
                          brickrange,
-                         periodicity=(true, true, false))
-#                         periodicity=(true, ntuple(j->false, dim-1)...))
-
+                         periodicity=(true, ntuple(j->false, dim-1)...))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             # Compute floating point type
@@ -154,34 +154,25 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             # warp = warpgridfun
                                             )
 
-    function sponge(x, y, z)
+    function sponge(x, y)
 
         xmin = brickrange[1][1]
         xmax = brickrange[1][end]
         ymin = brickrange[2][1]
         ymax = brickrange[2][end]
-        zmin = brickrange[1][1]
-        zmax = brickrange[2][end]
         
         # Define Sponge Boundaries      
         xc       = (xmax + xmin)/2
-        yc       = (ymax + ymin)/2
-        
-        zsponge  = 0.85 * zmax
+        ysponge  = 0.85 * ymax
         xsponger = xmax - 0.15*abs(xmax - xc)
         xspongel = xmin + 0.15*abs(xmin - xc)
-        ysponger = ymax - 0.15*abs(ymax - yc)
-        yspongel = ymin + 0.15*abs(ymin - yc)
         
-        csxl, csxr  = 0.0, 0.0
-        csyl, csyr  = 0.0, 0.0
-        ctop        = 0.0
-        
-        csx         = 0.0
-        csy         = 0.0
-        ct          = 1.0
-        
-        
+        csxl  = 0.0
+        csxr  = 0.0
+        ctop  = 0.0
+        csx   = 0.0 #1.0
+        ct    = 0.0 #1.0
+                
         #x left and right
         #xsl
         if (x <= xspongel)
@@ -190,26 +181,16 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
         #xsr
         if (x >= xsponger)
             csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
-        end        
-        #y left and right
-        #ysl
-        if (y <= yspongel)
-            csyl = csy * sinpi(1/2 * (y - yspongel)/(ymin - yspongel))^4
-        end
-        #ysr
-        if (y >= ysponger)
-            csyr = csy * sinpi(1/2 * (y - ysponger)/(ymay - ysponger))^4
         end
         
         #Vertical sponge:         
-        if (z >= zsponge)
-            ctop = ct * sinpi(1/2 * (z - zsponge)/(zmax - zsponge))^4
+        if (y >= ysponge)
+            ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
         end
 
-        beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)*(1.0 - csyl)*(1.0 - csyr)
+        beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
         beta  = min(beta, 1.0)
-        alpha = 1.0 - beta
-        
+        alpha = 1.0 - beta        
         
         return (alpha, beta)
     end
@@ -226,10 +207,10 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
     # This is a actual state/function that lives on the grid    
     #vgeo = grid.vgeo
     #initial_sounding       = interpolate_sounding(dim, N, Ne, vgeo, nmoist, ntrace)
-    initialcondition(x...) = squall_line(x...;
-                                         ntrace=ntrace,
-                                         nmoist=nmoist,
-                                         dim=dim)
+    initialcondition(x...) = dycoms(x...;
+                                    ntrace=ntrace,
+                                    nmoist=nmoist,
+                                    dim=dim)
     
     Q = MPIStateArray(spacedisc, initialcondition)
 
@@ -271,10 +252,9 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
     end
 
     step = [0]
-    mkpath("vtk_squall")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
-        #outprefix = @sprintf("vtk_squall/RTB_%dD_step%04d_mpirank%04d", dim, step[1],MPI.Comm_rank(mpicomm))
-        outprefix = @sprintf("vtk_squall/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
+    mkpath("vtk_dycoms")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
+        outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
         @printf(io,
                 "-------------------------------------------------------------\n")
         @printf(io, "doing VTK output =  %s\n", outprefix)
@@ -302,23 +282,24 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (15, 15, 20)
+    Ne        = (20, 20)
     N         = 4
-    dim       = 3
     timeend   = 20000.0
-
-    xmin_domain =      0.0
-    xmax_domain =  18000.0
-    ymin_domain =      0.0
-    ymax_domain =  18000.0
-    zmin_domain =      0.0
-    zmax_domain =  18000.0
-        
+    
+    xmin_domain =     0.0
+    xmax_domain =  1500.0
+    #ymin_domain =     0.0
+    #ymax_domain =   150.0
+    zmin_domain =     0.0
+    zmax_domain =  1500.0
+    
     DFloat = Float64
     for ArrayType in (Array,)
         brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-                      range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
-                      range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
+                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+        #              range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
+        #              range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
 
         main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
     end
