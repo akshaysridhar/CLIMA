@@ -16,11 +16,11 @@ const _ρ, _U, _V, _W, _E = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
 const statenames = ("ρ", "U", "V", "W", "E")
 
-const _nviscfluxstate = 6
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23 = 1:_nviscfluxstate
+const _nviscstates = 6
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23 = 1:_nviscstates
 
-const _nviscstate = 3
-const _gradstates = (_ρ, _U, _V, _W)
+const _ngradstates = 3
+const _states_for_gradient_transform = (_ρ, _U, _V, _W)
 
 const γ_exact = 7 // 5
 const μ_exact = 1 // 100
@@ -41,9 +41,9 @@ end
 end
 
 # flux function
-flux!(F, Q, VF, aux, t) = flux!(F, Q, VF, aux, t, preflux(Q)...)
+cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q)...)
 
-@inline function flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
+@inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
     ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
 
@@ -73,8 +73,8 @@ end
 # Compute the velocity from the state
 @inline function velocities!(vel, Q, _...)
   @inbounds begin
-    # ordering should match gradstates
-    ρ, U, V, W = Q[1], Q[2], Q[2], Q[3]
+    # ordering should match states_for_gradient_transform
+    ρ, U, V, W = Q[1], Q[2], Q[3], Q[4]
     ρinv = 1 / ρ
     vel[1], vel[2], vel[3] = ρinv * U, ρinv * V, ρinv * W
   end
@@ -83,7 +83,6 @@ end
 # Visous flux
 @inline function compute_stresses!(VF, grad_vel, _...)
   μ::eltype(VF) = μ_exact
-  DFloat = eltype(VF)
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
     dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
@@ -98,16 +97,16 @@ end
     ϵ23 = (dvdz + dwdy) / 2
 
     # deviatoric stresses
-    VF[_τ11] = μ * (2ϵ11 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    VF[_τ22] = μ * (2ϵ22 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
-    VF[_τ33] = μ * (2ϵ33 - DFloat(2//3) * (ϵ11 + ϵ22 + ϵ33))
+    VF[_τ11] = 2μ * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ22] = 2μ * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ33] = 2μ * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ12] = 2μ * ϵ12
     VF[_τ13] = 2μ * ϵ13
     VF[_τ23] = 2μ * ϵ23
   end
 end
 
-@inline function stresses_numerical_flux!(VF, nM, velM, QM, aM, velP, QP, aP, t)
+@inline function stresses_penalty!(VF, nM, velM, QM, aM, velP, QP, aP, t)
   @inbounds begin
     n_Δvel = similar(VF, Size(3, 3))
     for j = 1:3, i = 1:3
@@ -150,16 +149,17 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
                            length_state_vector = _nstate,
-                           flux! = flux!,
+                           flux! = cns_flux!,
                            numerical_flux! = (x...) ->
-                           NumericalFluxes.rusanov!(x..., flux!, wavespeed,
+                           NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed,
                                                     preflux),
-                           nviscstate = _nviscstate,
-                           gradstates = _gradstates,
-                           nviscfluxstate = _nviscfluxstate,
-                           viscous_transform! = velocities!,
-                           viscous_flux! = compute_stresses!,
-                           viscous_numerical_flux! = stresses_numerical_flux!)
+                           number_gradient_states = _ngradstates,
+                           states_for_gradient_transform =
+                             _states_for_gradient_transform,
+                           number_viscous_states = _nviscstates,
+                           gradient_transform! = velocities!,
+                           viscous_transform! = compute_stresses!,
+                           viscous_penalty! = stresses_penalty!)
 
   # This is a actual state/function that lives on the grid
   initialcondition(Q, x...) = initialcondition!(Q, DFloat(0), x...)
