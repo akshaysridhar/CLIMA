@@ -83,37 +83,10 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
     P     = datap
     T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, q_tot, 0.0, 0.0)
     ρ     = air_density(T, P, q_tot, 0.0, 0.0)
-    
-    #=
-    #TODO Driver constant parameters need references
-    rvapor        = 461.0
-    levap         = 2.5e6
-    es0           = 611.0
-    pi0           = 1.0
-    p0            = MSLP
-    theta0        = 292.5
-    c2            = R_gas / c_p
-    c1            = 1.0 / c2
-    
-    # Convert dataq to kg/kg
-    datapi        = (datap / MSLP) ^ (c2)                         # Exner pressure from sounding data
-    thetav        = datat * (1.0 + 0.61 * dataq)                  # Liquid potential temperature
 
-    # theta perturbation
-    dtheta        =    0.0
-    thetac        =    5.0
-    rx            =  500.0
-    ry            = 1500.0
-    r		  = sqrt( ((x[1]-9000)/rx )^2 + ((x[dim] - 2000.0)/ry)^2)
-    #if (r <= 1.0)
-    #    dtheta	  = thetac # *(cos(0.5*π*r))^2
-    #end
-    θ             = thetav + dtheta
-    datarho       = datap / (R_gas * datapi *  θ)
-    e             = dataq * datap * rvapor/(dataq * rvapor + R_gas)
-    =#
+    q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
     
-    u, v, w       = 0.0, 0.0, 0.0
+    u, v, w       = 7.0, -5.5, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
@@ -121,10 +94,10 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
     # Calculation of energy per unit mass
     e_kin = (u^2 + v^2 + w^2) / 2  
     e_pot = gravity * x[dim]
-    e_int = internal_energy(T, q_tot, 0.0, 0.0)
+    e_int = internal_energy(T, q_tot, q_liq, q_ice)
     # Total energy 
-    E = ρ * total_energy(e_kin, e_pot, T, q_tot, 0.0, 0.0)
-    (ρ=ρ, U=U, V=V, W=V, E=E, Qmoist=(ρ * q_tot, 0.0, 0.0)) 
+    E = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
+    (ρ=ρ, U=U, V=V, W=V, E=E, Qmoist=(ρ * q_tot, q_liq, q_ice)) 
 
 end
 
