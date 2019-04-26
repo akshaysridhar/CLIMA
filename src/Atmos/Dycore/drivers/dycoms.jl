@@ -257,7 +257,7 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (10, 10, 10)
+    Ne        = (20, 20, 10)
     N         = 4
     timeend   = 20000.0
     
