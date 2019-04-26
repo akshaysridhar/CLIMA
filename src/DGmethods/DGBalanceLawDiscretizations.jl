@@ -513,7 +513,7 @@ function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
     volumeviscterms!(Val(dim), Val(N), Val(nstate), Val(gradstates),
                      Val(nviscstate), Val(nviscfluxstate), Val(nauxstate),
                      disc.viscous_flux!, disc.viscous_transform!, Q.Q, QV.Q,
-                     vgeo, t, Dmat, topology.realelems)
+                     auxstate.Q, vgeo, t, Dmat, topology.realelems)
 
     MPIStateArrays.finish_ghost_recv!(Q)
 
@@ -521,8 +521,8 @@ function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
                    Val(nviscstate), Val(nviscfluxstate), Val(nauxstate),
                    disc.viscous_numerical_flux!,
                    disc.viscous_numerical_boundary_flux!,
-                   disc.viscous_transform!, Q.Q, QV.Q, vgeo, sgeo, t, vmapM,
-                   vmapP, elemtobndy, topology.realelems)
+                   disc.viscous_transform!, Q.Q, QV.Q, auxstate.Q,
+                   vgeo, sgeo, t, vmapM, vmapP, elemtobndy, topology.realelems)
 
     MPIStateArrays.start_ghost_exchange!(QV)
   end

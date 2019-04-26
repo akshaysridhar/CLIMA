@@ -74,7 +74,7 @@ end
 @inline function velocities!(vel, Q, _...)
   @inbounds begin
     # ordering should match gradstates
-    ρ, U, V, W = Q[1], Q[2], Q[2], Q[3]
+    ρ, U, V, W = Q[1], Q[2], Q[3], Q[4]
     ρinv = 1 / ρ
     vel[1], vel[2], vel[3] = ρinv * U, ρinv * V, ρinv * W
   end

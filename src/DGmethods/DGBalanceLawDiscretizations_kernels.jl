@@ -207,9 +207,10 @@ end
 function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
                           ::Val{gradstates}, ::Val{nviscstate},
                           ::Val{nviscfluxstate}, ::Val{nauxstate},
-                          viscous_flux!, viscous_transform!, Q::Array, QV, vgeo,
-                          t, D, elems) where {dim, N, gradstates, nviscstate,
-                                              nviscfluxstate, nstate, nauxstate}
+                          viscous_flux!, viscous_transform!, Q::Array, QV,
+                          auxstate, vgeo, t, D,
+                          elems) where {dim, N, gradstates, nviscstate,
+                                        nviscfluxstate, nstate, nauxstate}
   DFloat = eltype(Q)
 
   Nq = N + 1
@@ -223,7 +224,7 @@ function volumeviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate},
   QV = reshape(QV, Nq, Nq, Nqk, nviscfluxstate, nelem)
   vgeo = reshape(vgeo, Nq, Nq, Nqk, _nvgeo, nelem)
 
-  s_H = MArray{Tuple{3, Nq, Nq, Nqk, nviscstate}, DFloat}(undef)
+  s_H = MArray{Tuple{Nq, Nq, Nqk, nviscstate}, DFloat}(undef)
 
   l_Q = MArray{Tuple{ngradstate}, DFloat}(undef)
   l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
@@ -282,9 +283,10 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{gradstates},
                         ::Val{nviscstate}, ::Val{nviscfluxstate},
                         ::Val{nauxstate}, viscous_numerical_flux!,
                         viscous_numerical_boundary_flux!, viscous_transform!,
-                        Q::Array, QV, vgeo, sgeo, t, vmapM, vmapP, elemtobndy,
-                        elems) where {dim, N, gradstates, nviscstate,
-                                      nviscfluxstate, nstate, nauxstate}
+                        Q::Array, QV, auxstate, vgeo, sgeo, t, vmapM, vmapP,
+                        elemtobndy, elems) where {dim, N, gradstates,
+                                                  nviscstate, nviscfluxstate,
+                                                  nstate, nauxstate}
   DFloat = eltype(Q)
 
   if dim == 1
