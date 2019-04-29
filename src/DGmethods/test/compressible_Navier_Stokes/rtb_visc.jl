@@ -39,8 +39,6 @@ const ymax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 
-
-
 # preflux computation : `preflux` variables are not advected / diffused 
 # but may be defined from the existing state variables
 @inline function preflux(Q, _...)
@@ -331,21 +329,21 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                          )
   
   # spacedisc = data needed for evaluating the right-hand side function
-  spacedisc = DGBalanceLaw(grid = grid,
-                           length_state_vector = _nstate,
-                           flux! = flux!,
-                           numerical_flux! = (x...) ->
+  spacedisc = DGBalanceLaw(grid = grid,                                         # Required
+                           length_state_vector = _nstate,                       # Required
+                           flux! = flux!,                                       # Required
+                           numerical_flux! = (x...) ->                          # Required
                            NumericalFluxes.rusanov!(x..., flux!, wavespeed,
                                                     preflux),
-                           numerical_boundary_flux! = (x...) ->
-                           NumericalFluxes.rusanov_boundary_flux!(x..., flux!, 
+                           numerical_boundary_flux! = (x...) ->                 # Required for non-periodic cases
+                           NumericalFluxes.rusanov_boundary_flux!(x..., flux!,  
                                                                   bcstate!, 
                                                                   wavespeed,
                                                                   preflux),
-                           nviscstate = _nviscstate,
-                           gradstates = _gradstates,
-                           nviscfluxstate = _nviscfluxstate,
-                           viscous_transform! = velocities!,
+                           nviscstate = _nviscstate,                            # Optional for viscous dissipation 
+                           gradstates = _gradstates,                            # Required for gradient terms
+                           nviscfluxstate = _nviscfluxstate,                    # Required
+                           viscous_transform! = velocities!,                    # Optional 
                            viscous_flux! = compute_stresses!,
                            viscous_numerical_flux! = stresses_numerical_flux!,
                            source! = source!)
