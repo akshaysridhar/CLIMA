@@ -23,7 +23,7 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
   nvar = _nstate + nmoist + ntrace
   ngrad = _nstategrad + 3nmoist
-    
+
   Nq = N + 1
 
   nelem = size(Q)[end]
@@ -36,12 +36,11 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   s_u = Array{DFloat}(undef, Nq, Nq)
   s_v = Array{DFloat}(undef, Nq, Nq)
   s_T = Array{DFloat}(undef, Nq, Nq)
-  s_θ = Array{DFloat}(undef, Nq, Nq)
-  
+
   #Initialise q_m vector of moist variables
   #Requires at least 3 elements for q_t, q_liq, q_ice
   q_m = zeros(DFloat, max(3, nmoist))
-    
+
   @inbounds for e in elems
     for j = 1:Nq, i = 1:Nq
       U, V = Q[i, j, _U, e], Q[i, j, _V, e]
@@ -56,34 +55,19 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       end
       # Saturation temperature to obtain temperature assuming thermodynamic equilibrium
       T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-       
       # TODO: Possibility of carrying q_liq and q_ice through state vector to include non-equilibrium thermodynamics (?)
-      q_liq, q_ice = phase_partitioning_eq(T, ρ, q_m[1])
-      q_m[2] = q_liq
-      q_m[3] = q_ice
-
-      P = air_pressure(T, ρ, q_m[1], q_m[2], q_m[3])
-      for m = 1:nmoist
-        s = _nstate+ m 
-	Q[i,j,s,e] = ρ * q_m[m]
-      end
-  
-      #P  =    air_pressure(T, ρ, q_m[1], q_m[2], q_m[3])
-      θv = virtual_pottemp(T, P, q_m[1], q_m[2], q_m[3])
-              
+      q = PhasePartition_equil(T, ρ, q_m[1])
       s_ρ[i, j] = ρ
       s_u[i, j] = U/ρ
       s_v[i, j] = V/ρ
       s_T[i, j] = T
-      s_θ[i, j] = θv
     end
 
     for j = 1:Nq, i = 1:Nq
-      ρξ = ρη  = zero(DFloat)
-      uξ = uη  = zero(DFloat)
-      vξ = vη  = zero(DFloat)
-      Tξ = Tη  = zero(DFloat)
-      θξ =  θη = zero(DFloat)
+      ρξ = ρη = zero(DFloat)
+      uξ = uη = zero(DFloat)
+      vξ = vη = zero(DFloat)
+      Tξ = Tη = zero(DFloat)
 
       for n = 1:Nq
         ρξ += D[i, n] * s_ρ[n, j]
@@ -97,9 +81,6 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
         Tξ += D[i, n] * s_T[n, j]
         Tη += D[j, n] * s_T[i, n]
-          
-        θξ += D[i, n] * s_θ[n, j]
-        θη += D[j, n] * s_θ[i, n]
       end
 
       ξx, ξy = vgeo[i,j,_ξx,e], vgeo[i,j,_ξy,e]
@@ -117,9 +98,6 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       Tx = ξx*Tξ + ηx*Tη
       Ty = ξy*Tξ + ηy*Tη
 
-      θx = ξx*θξ + ηx*θη
-      θy = ξy*θξ + ηy*θη
-        
       grad[i, j, _ρx, e] = ρx
       grad[i, j, _ρy, e] = ρy
       grad[i, j, _ρz, e] = zero(DFloat)
@@ -139,10 +117,6 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       grad[i, j, _Tx, e] = Tx
       grad[i, j, _Ty, e] = Ty
       grad[i, j, _Tz, e] = zero(DFloat)
-        
-      grad[i, j, _θx, e] = θx
-      grad[i, j, _θy, e] = θy
-      grad[i, j, _θz, e] = zero(DFloat)
     end
 
     # loop over moist variables
@@ -200,7 +174,6 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   s_v = Array{DFloat}(undef, Nq, Nq, Nq)
   s_w = Array{DFloat}(undef, Nq, Nq, Nq)
   s_T = Array{DFloat}(undef, Nq, Nq, Nq)
-  s_θ = Array{DFloat}(undef, Nq, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
 
@@ -217,25 +190,13 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       end
 
       T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-        
       # TODO: Possibility of carrying q_liq and q_ice through state vector to include non-equilibrium thermodynamics
-      q_liq, q_ice = phase_partitioning_eq(T, ρ, q_m[1])
-      q_m[2] = q_liq
-      q_m[3] = q_ice
-
-      for m = 1:nmoist
-        s = _nstate+ m 
-	Q[i,j,k,s,e] = ρ * q_m[m]
-      end
-      P  =    air_pressure(T, ρ, q_m[1], q_liq, q_ice)
-      θv = virtual_pottemp(T, P, q_m[1], q_liq, q_ice)
-
+      q = PhasePartition_equil(T, ρ, q_m[1])
       s_ρ[i, j, k] = ρ
       s_u[i, j, k] = U/ρ
       s_v[i, j, k] = V/ρ
       s_w[i, j, k] = W/ρ
-      s_T[i, j, k] = T
-      s_θ[i, j, k] = θv
+      s_T[i, j, k] = air_temperature(E_int/ρ, q)
     end
 
     for k = 1:Nq, j = 1:Nq, i = 1:Nq
@@ -244,7 +205,6 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       vξ = vη = vζ = zero(DFloat)
       wξ = wη = wζ = zero(DFloat)
       Tξ = Tη = Tζ = zero(DFloat)
-      θξ = θη = θζ = zero(DFloat)
 
       for n = 1:Nq
         ρξ += D[i, n] * s_ρ[n, j, k]
@@ -266,11 +226,6 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         Tξ += D[i, n] * s_T[n, j, k]
         Tη += D[j, n] * s_T[i, n, k]
         Tζ += D[k, n] * s_T[i, j, n]
-
-          
-        θξ += D[i, n] * s_θ[n, j, k]
-        θη += D[j, n] * s_θ[i, n, k]
-        θζ += D[k, n] * s_θ[i, j, n]
       end
 
       ξx, ξy, ξz = vgeo[i,j,k,_ξx,e], vgeo[i,j,k,_ξy,e], vgeo[i,j,k,_ξz,e]
@@ -297,10 +252,6 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       Ty = ξy*Tξ + ηy*Tη + ζy*Tζ
       Tz = ξz*Tξ + ηz*Tη + ζz*Tζ
 
-      θx = ξx*θξ + ηx*θη + ζx*θζ
-      θy = ξy*θξ + ηy*θη + ζy*θζ
-      θz = ξz*θξ + ηz*θη + ζz*θζ
-
       grad[i, j, k, _ρx, e] = ρx
       grad[i, j, k, _ρy, e] = ρy
       grad[i, j, k, _ρz, e] = ρz
@@ -320,10 +271,6 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       grad[i, j, k, _Tx, e] = Tx
       grad[i, j, k, _Ty, e] = Ty
       grad[i, j, k, _Tz, e] = Tz
-
-      grad[i, j, k, _θx, e] = θx
-      grad[i, j, k, _θy, e] = θy
-      grad[i, j, k, _θz, e] = θz
     end
 
     # loop over moist variables
@@ -399,7 +346,6 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         WM = Q[vidM, _W, eM]
         EM = Q[vidM, _E, eM]
         yorzM = (dim == 2) ? vgeo[vidM, _y, eM] : vgeo[vidM, _z, eM]
-
         E_intM = EM - (UM^2 + VM^2+ WM^2)/(2*ρM) - ρM * gravity * yorzM
 
         for m = 1:nmoist
@@ -412,10 +358,9 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         wM=WM/ρM
 
         # Saturation Adjustment
-        TM             = saturation_adjustment(E_intM/ρM, ρM, q_mM[1])
-        q_liqM, q_iceM = phase_partitioning_eq(TM, ρM, q_mM[1])
-        PM             = air_pressure(TM, ρM, q_mM[1], q_liqM, q_iceM)
-          
+        TM = saturation_adjustment(E_intM/ρM, ρM, q_mM[1])
+        qM = PhasePartition_equil(TM, ρM, q_mM[1])
+        PM = air_pressure(TM, ρM, qM)
         bc = elemtobndy[f, e]
 
         if bc == 0
@@ -425,7 +370,6 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
           WP = Q[vidP, _W, eP]
           EP = Q[vidP, _E, eP]
           yorzP = (dim == 2) ? vgeo[vidP, _y, eP] : vgeo[vidP, _z, eP]
-
           for m = 1:nmoist
             s = _nstate + m
             q_mP[m] = Q[vidP, s, eP] / ρP
@@ -435,11 +379,12 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
           # Saturation Adjustment
           TP = saturation_adjustment(E_intP/ρP, ρP, q_mP[1])
-          q_liqP, q_iceP = phase_partitioning_eq(TP, ρP, q_mP[1])
-          PP = air_pressure(TP, ρP, q_mP[1], q_liqP, q_iceP)
+          qP = PhasePartition_equil(TP, ρP, q_mP[1])
+          PP = air_pressure(TP, ρP, qP)
           uP = UP/ρP
           vP = VP/ρP
           wP = WP/ρP
+
         elseif bc == 1
 
           UnM = nxM * UM + nyM * VM + nzM * WM
@@ -504,17 +449,17 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                     rhs::Array, Q, grad, vgeo, gravity, viscosity, D,
                     elems) where {N, nmoist, ntrace}
   DFloat = eltype(Q)
-  nvar   = _nstate + nmoist + ntrace
-  ngrad  = _nstategrad + 3nmoist
-  dim    = 2
+
+  nvar = _nstate + nmoist + ntrace
+  ngrad = _nstategrad + 3nmoist
 
   Nq = N + 1
 
   nelem = size(Q)[end]
 
-  Q    = reshape(Q, Nq, Nq, nvar, nelem)
+  Q = reshape(Q, Nq, Nq, nvar, nelem)
   grad = reshape(grad, Nq, Nq, ngrad, nelem)
-  rhs  = reshape(rhs, Nq, Nq, nvar, nelem)
+  rhs = reshape(rhs, Nq, Nq, nvar, nelem)
   vgeo = reshape(vgeo, Nq, Nq, _nvgeo, nelem)
 
   s_F = Array{DFloat}(undef, Nq, Nq, _nstate)
@@ -523,21 +468,14 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_v = Array{DFloat}(undef, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
-  ymax = maximum(vgeo[:,:,_y,:])
-  xmax = maximum(vgeo[:,:,_x,:])
-  xmin = minimum(vgeo[:,:,_x,:])
 
   @inbounds for e in elems
-
-    delta  = Grids.compute_anisotropic_grid_factor(dim, Nq, vgeo, e)
-    delta2 = delta*delta
-    
     for j = 1:Nq, i = 1:Nq
-      MJ     = vgeo[i, j, _MJ, e]
+      MJ = vgeo[i, j, _MJ, e]
       ξx, ξy = vgeo[i,j,_ξx,e], vgeo[i,j,_ξy,e]
       ηx, ηy = vgeo[i,j,_ηx,e], vgeo[i,j,_ηy,e]
-      x      = vgeo[i,j,_x,e]
-      y      = vgeo[i,j,_y,e]
+      y = vgeo[i,j,_y,e]
+
       U, V = Q[i, j, _U, e], Q[i, j, _V, e]
       ρ, E = Q[i, j, _ρ, e], Q[i, j, _E, e]
       E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
@@ -549,56 +487,15 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
       # Returns temperature after saturation adjustment
       # Required for phase-partitioning to find q_liq, q_ice
-      T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
-      q_m[2]       = q_liq
-      q_m[3]       = q_ice
-#        if(q_liq > 0)
-#            @show(" YES IT IS CLOUDY!!!!!")
-#        end
-      P            =    air_pressure(T, ρ, q_m[1], q_m[2], q_m[3])
-      θv           = virtual_pottemp(T, P, q_m[1], q_m[2], q_m[3])
-      #Update rho, E after saturation adjustment
-      #ρ            =     air_density(T, P, q_m[1], q_m[2], q_m[3])
-      #E_int        = internal_energy(T,    q_m[1], q_m[2], q_m[3])
-      #E            = E_int + (U^2 + V^2)/(2*ρ) + ρ * gravity * y
-      #Q[i,j,_ρ,e]  = ρ 
-      #Q[i,j,_E,e]  = E
-      
-      for m = 1:nmoist
-        s = _nstate+ m 
-	Q[i,j,s,e] = ρ * q_m[m]
-      end
-      
-      ρx, ρy     = grad[i,j,_ρx,e], grad[i,j,_ρy,e]
-      ux, uy, uz = grad[i,j,_ux,e], grad[i,j,_uy,e], 0.0
-      vx, vy, vz = grad[i,j,_vx,e], grad[i,j,_vy,e], 0.0
-      wx, wy, wz =             0.0,             0.0, 0.0
-      Tx, Ty     = grad[i,j,_Tx,e], grad[i,j,_Ty,e], 0.0
-      θvx, θvy   = grad[i,j,_θx,e], grad[i,j,_θy,e], 0.0
-      
-      #---------------------------------------------------------
-      # BUILD magnitude of strain tensor 
-      # Sij = (d(ui)/d(xj) + d(uj)/d(xi))*0.5, i=1,2,3; j=1,2,3
-      #---------------------------------------------------------
-      S11 = ux; S12 = (uy + vx)*0.5; S13 = (uz + wx)*0.5;
-                S22 = vy;            S23 = (vz + wy)*0.5;
-                                     S33 = wz;
+      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+      q = PhasePartition_equil(T, ρ, q_m[1])
+      P = air_pressure(T, ρ, q)
 
-      # |Sij| = sqrt(2*Sij*Sij)     
-      SijSij = S11*S11 + S12*S12 + S13*S13 + 
-               S12*S12 + S22*S22 + S23*S23 + 
-               S13*S13 + S23*S23 + S33*S33      
-      modSij = sqrt(2.0*SijSij)
+      ρx, ρy = grad[i,j,_ρx,e], grad[i,j,_ρy,e]
+      ux, uy = grad[i,j,_ux,e], grad[i,j,_uy,e]
+      vx, vy = grad[i,j,_vx,e], grad[i,j,_vy,e]
+      Tx, Ty = grad[i,j,_Tx,e], grad[i,j,_Ty,e]
 
-      #Richardson number:
-      Ri = (grav/θv)*θvy/(2*modSij + 1.0e-12) #NOTICE: REPLACE with Rim in saturated conditions
-      
-      #Smagorinsky eddy viscosities:
-      auxr = max(0.0, 1.0 - Ri/prandtl)
-      Km = Cs*Cs*delta2*modSij*sqrt(auxr)
-      Kh = 3*Km                 #3.0 comes from KW 1978 paper
-      
       ρinv = 1 / ρ
 
       ldivu = λ_stokes*(ux + vy)
@@ -626,7 +523,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       fluxU_y = v * U        - viscosity*vfluxU_y
       fluxV_y = v * V + P    - viscosity*vfluxV_y
       fluxE_y = v * (E + P)  - viscosity*vfluxE_y
- 
+
       s_F[i, j, _ρ] = MJ * (ξx * fluxρ_x + ξy * fluxρ_y)
       s_F[i, j, _U] = MJ * (ξx * fluxU_x + ξy * fluxU_y)
       s_F[i, j, _V] = MJ * (ξx * fluxV_x + ξy * fluxV_y)
@@ -639,46 +536,11 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       s_G[i, j, _W] = 0
       s_G[i, j, _E] = MJ * (ηx * fluxE_x + ηy * fluxE_y)
 
-    
       # buoyancy term
       rhs[i, j, _V, e] -= ρ * gravity
-      
-      # ------------------------------------
-      # Begin implementation of sponge layer
-      # Linear, via Durran and Klemp (1983)
-      # Note that the functional form is modified 
-      # to a sin^4 function instead of the cosines 
-      # proposed by D & K 
-      # ------------------------------------
-      
-      # Define Sponge Boundaries
-      #=
-      xc = (xmax - xmin)/2
-      ysponge  = 0.85 * ymax
-      xsponger = xmax - 0.15*abs(xmax - xc)
-      xspongel = xmin + 0.15*abs(xmin - xc)
-      =#
-      
-      # Damping coefficient
-      α = 1.00 
-      r_actual = sqrt((x-1900)^2 + (y-800)^2)
-      r_sponge = 1500
 
-      if r_sponge <= r_actual
-        rhs[i, j, _U, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * U 
-        rhs[i, j, _V, e] -= α * sinpi(1/2 * (r_actual - r_sponge)/(r_sponge))^4 * V
-      elseif 2 * r_sponge <= r_actual
-        rhs[i, j, _U, e] -= α * U 
-        rhs[i, j, _V, e] -= α * V
-      end
-      
-      # ---------------------------
-      # End implementation of sponge layer
-      # ---------------------------
-      
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
-    
     end
 
     # loop of ξ-grid lines
@@ -771,7 +633,6 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                     elems) where {N, nmoist, ntrace}
   DFloat = eltype(Q)
 
-  dim = 3
   nvar = _nstate + nmoist + ntrace
   ngrad = _nstategrad + 3nmoist
 
@@ -790,13 +651,10 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_u = Array{DFloat}(undef, Nq, Nq, Nq)
   l_v = Array{DFloat}(undef, Nq, Nq, Nq)
   l_w = Array{DFloat}(undef, Nq, Nq, Nq)
+
   q_m = zeros(DFloat, max(3, nmoist))
 
   @inbounds for e in elems
-
-    delta = Grids.compute_anisotropic_grid_factor(dim, Nq, vgeo, e)
-    delta2 = delta*delta
-      
     for k = 1:Nq, j = 1:Nq, i = 1:Nq
       MJ = vgeo[i, j, k, _MJ, e]
       MJI = vgeo[i, j, k, _MJI, e]
@@ -807,7 +665,6 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
       U, V, W = Q[i, j, k, _U, e], Q[i, j, k, _V, e], Q[i, j, k, _W, e]
       ρ, E = Q[i, j, k, _ρ, e], Q[i, j, k, _E, e]
-
       E_int = E - (U^2 + V^2 + W^2)/(2*ρ) - ρ * gravity * z
 
       for m = 1:nmoist
@@ -818,47 +675,16 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       # Calculate temperpature after saturation adjustment
       # Required for phase partitioning to get q_liq, q_ice
       T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      
-      q_liq, q_ice = phase_partitioning_eq(T, ρ, q_m[1])      
-      q_m[2] = q_liq
-      q_m[3] = q_ice
-      P            =    air_pressure(T, ρ, q_m[1], q_liq, q_ice)
-      θv           = virtual_pottemp(T, P, q_m[1], q_liq, q_ice)
-    
-      for m = 1:nmoist
-        s = _nstate+ m 
-	Q[i,j,k,s,e] = ρ * q_m[m]
-      end
-      
-      ρx, ρy, ρz  = grad[i,j,k,_ρx,e], grad[i,j,k,_ρy,e], grad[i,j,k,_ρz,e]
-      ux, uy, uz  = grad[i,j,k,_ux,e], grad[i,j,k,_uy,e], grad[i,j,k,_uz,e]
-      vx, vy, vz  = grad[i,j,k,_vx,e], grad[i,j,k,_vy,e], grad[i,j,k,_vz,e]
-      wx, wy, wz  = grad[i,j,k,_wx,e], grad[i,j,k,_wy,e], grad[i,j,k,_wz,e]
-      Tx, Ty, Tz  = grad[i,j,k,_Tx,e], grad[i,j,k,_Ty,e], grad[i,j,k,_Tz,e]
-      θvx,θvy,θvz = grad[i,j,k,_θx,e], grad[i,j,k,_θy,e], grad[i,j,k,_θz,e]
 
-      #---------------------------------------------------------
-      # BUILD magnitude of strain tensor 
-      # Sij = (d(ui)/d(xj) + d(uj)/d(xi))*0.5, i=1,2,3; j=1,2,3
-      #---------------------------------------------------------
-      S11 = ux; S12 = (uy + vx)*0.5; S13 = (uz + wx)*0.5;
-                S22 = vy;            S23 = (vz + wy)*0.5;
-                                     S33 = wz;
+      q = PhasePartition_equil(T, ρ, q_m[1])
+      P = air_pressure(T, ρ, q)
 
-      # |Sij| = sqrt(2*Sij*Sij)     
-      SijSij = S11*S11 + S12*S12 + S13*S13 + 
-               S12*S12 + S22*S22 + S23*S23 + 
-               S13*S13 + S23*S23 + S33*S33      
-      modSij = sqrt(2.0*SijSij)
+      ρx, ρy, ρz = grad[i,j,k,_ρx,e], grad[i,j,k,_ρy,e], grad[i,j,k,_ρz,e]
+      ux, uy, uz = grad[i,j,k,_ux,e], grad[i,j,k,_uy,e], grad[i,j,k,_uz,e]
+      vx, vy, vz = grad[i,j,k,_vx,e], grad[i,j,k,_vy,e], grad[i,j,k,_vz,e]
+      wx, wy, wz = grad[i,j,k,_wx,e], grad[i,j,k,_wy,e], grad[i,j,k,_wz,e]
+      Tx, Ty, Tz = grad[i,j,k,_Tx,e], grad[i,j,k,_Ty,e], grad[i,j,k,_Tz,e]
 
-      #Richardson number:
-      Ri = (grav/θv)*θvz/(2*modSij + 1.0e-12) #NOTICE: REPLACE with Rim in saturated conditions
-        
-      #Smagorinsky eddy viscosities:
-      auxr = max(0.0, 1.0 - Ri/prandtl)
-      Km   = Cs*Cs*delta2*modSij*sqrt(auxr)
-      Kh   = 3*Km                 #3.0 comes from KW 1978 paper
-          
       ρinv = 1 / ρ
 
       ldivu = λ_stokes*(ux + vy + wz)
@@ -903,7 +729,7 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       fluxV_z = w * V       - viscosity*vfluxV_z
       fluxW_z = w * W + P   - viscosity*vfluxW_z
       fluxE_z = w * (E + P) - viscosity*vfluxE_z
-      
+
       s_F[i, j, k, _ρ] = MJ * (ξx * fluxρ_x + ξy * fluxρ_y + ξz * fluxρ_z)
       s_F[i, j, k, _U] = MJ * (ξx * fluxU_x + ξy * fluxU_y + ξz * fluxU_z)
       s_F[i, j, k, _V] = MJ * (ξx * fluxV_x + ξy * fluxV_y + ξz * fluxV_z)
@@ -1045,9 +871,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
                   elems, vmapM, vmapP, elemtobndy) where {N, dim, nmoist,
                                                           ntrace}
   DFloat = eltype(Q)
-  
-  q_m = zeros(DFloat, max(3, nmoist))
-    
+
   if dim == 1
     Np = (N+1)
     Nfp = 1
@@ -1108,15 +932,12 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         end
 
         E_intM = EM - (UM^2 + VM^2+ WM^2)/(2*ρM) - ρM * gravity * yorzM
+
         # get adjusted temperature and liquid and ice specific humidities
-        TM             = saturation_adjustment(E_intM/ρM , ρM, q_mM[1])
-        q_liqM, q_iceM = phase_partitioning_eq(TM, ρM, q_mM[1])
-        PM             = air_pressure(TM, ρM, q_mM[1], q_liqM, q_iceM) 
-        ##θvM            = virtual_pottemp(TM, PM, q_mM[1], q_liqM, q_iceM)
-        #ρM             = air_density(TM, PM, q_mM[1], q_liqM, q_iceM)
-        #E_intM         = internal_energy(TM, q_mM[1], q_liqM, q_iceM)
-        #EM             = E_intM + (UM^2 + VM^2 + WM^2)/(2*ρM) + ρM * gravity * yorzM
-          
+        TM = saturation_adjustment(E_intM/ρM , ρM, q_mM[1])
+        qM = PhasePartition_equil(TM, ρM, q_mM[1])
+        PM = air_pressure(TM, ρM, qM)
+
         if bc == 0
 
           ρP = Q[vidP, _ρ, eP]
@@ -1229,7 +1050,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         λM = abs(nxM * uM + nyM * vM + nzM * wM) + soundspeed_air(TM)
         λP = abs(nxM * uP + nyM * vP + nzM * wP) + soundspeed_air(TP)
         λ  = max(λM, λP)
-          
+
         #Compute Numerical Flux
         fluxρS = (nxM * (fluxρM_x + fluxρP_x) + nyM * (fluxρM_y + fluxρP_y) +
                   nzM * (fluxρM_z + fluxρP_z) - λ * (ρP - ρM)) / 2
@@ -1363,6 +1184,4 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
     end
   end
 end
-# }}}
-
 # }}}

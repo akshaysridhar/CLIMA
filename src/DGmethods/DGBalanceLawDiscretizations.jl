@@ -121,14 +121,21 @@ struct DGBalanceLaw <: AbstractDGMethod
 end
 
 """
-     DGBalanceLaw(; grid::DiscontinuousSpectralElementGrid, length_state_vector,
-                  flux!, numerical_flux!, numerical_boundary_flux! = nothing,
-                  viscous_transform! = nothing,
-                  viscous_penalty! = nothing,
-                  viscous_boundary_penalty! = nothing,
-                  auxiliary_state_length=0,
-                  auxiliary_state_initialization! = nothing,
-                  source! = nothing)
+    DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
+                 length_state_vector,
+                 flux!,
+                 numerical_flux!,
+                 numerical_boundary_flux! = nothing,
+                 states_for_gradient_transform = (),
+                 number_gradient_states = 0,
+                 number_viscous_states = 0,
+                 gradient_transform! = nothing,
+                 viscous_transform! = nothing,
+                 viscous_penalty! = nothing,
+                 viscous_boundary_penalty! = nothing,
+                 auxiliary_state_length = 0,
+                 auxiliary_state_initialization! = nothing,
+                 source! = nothing)
 
 Constructs a `DGBalanceLaw` spatial discretization type for the physics defined
 by `flux!` and `source!`. The computational domain is defined by `grid`. The
@@ -213,6 +220,10 @@ stored in the auxiliary state.
 
 TODO: Add docs for
 ```
+states_for_gradient_transform
+number_gradient_states
+number_viscous_states
+gradient_transform!
 viscous_transform!
 viscous_penalty!
 viscous_boundary_penalty!
@@ -223,11 +234,6 @@ viscous_boundary_penalty!
     If `(x, y, z)`, or data derived from this such as spherical coordinates, is
     needed in the flux or source the user is responsible to storing this in the
     auxiliary state
-
-!!! todo
-
-    - support viscous fluxes (`states_for_gradient_transform` is in the argument
-    list as part of this future interface)
 
 """
 function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
@@ -255,6 +261,20 @@ function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
    numerical_boundary_flux! === nothing &&
    error("no `numerical_boundary_flux!` given when topology "*
          "has boundary"))
+
+  if number_viscous_states > 0 || number_gradient_states > 0 ||
+    length(states_for_gradient_transform) > 0
+
+    # These should all be true in this case
+    @assert number_viscous_states > 0
+    @assert number_gradient_states > 0
+    @assert length(states_for_gradient_transform) > 0
+    @assert gradient_transform! !== nothing
+    @assert viscous_transform! !== nothing
+    @assert viscous_penalty! !== nothing
+    (Topologies.hasboundary(topology)) && (@assert viscous_boundary_penalty! !==
+                                           nothing)
+  end
 
   # TODO: Clean up this MPIStateArray interface...
   Qvisc = MPIStateArray{Tuple{Np, number_viscous_states},
