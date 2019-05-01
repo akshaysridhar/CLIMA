@@ -33,7 +33,7 @@ function read_sounding()
     return (sounding, nzmax, ncols)
 end
 
-function dycoms(x...; ntrace=0, nmoist=0, dim=3)
+function dycoms(x...;ntrace=0, nmoist=0, dim=3)
 
     DFloat 	    = eltype(x)
     p0::DFloat 	    = MSLP
@@ -85,6 +85,7 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
     ρ     = air_density(T, P, q_tot, 0.0, 0.0)
 
     #Get q_liq from q_tot and T
+
     q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
     
     u, v, w       = datau, datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
@@ -103,17 +104,20 @@ function dycoms(x...; ntrace=0, nmoist=0, dim=3)
 end
 
 
-function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
+function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, 
               timeend; gravity=true, viscosity=2.5, dt=nothing,
               exact_timeend=true) 
+    
     dim = length(brickrange)
+
     topl = BrickTopology(# MPI communicator to connect elements/partition
                          mpicomm,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
                          brickrange,
-                         periodicity=(true, true, false))
-#                         periodicity=(true, ntuple(j->false, dim-1)...))
+                         periodicity=(true, false))
+
+    Ne_x = length(brickrange[1])-1
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             # Compute floating point type
@@ -123,11 +127,13 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                             DeviceArray = ArrayType,
                                             # polynomial order for LGL grid
                                             polynomialorder = N,
-                                            # how to skew the mesh degrees of
+                                            numeleminx = Ne_x
+                                            # how to skew the  degrees of
                                             # freedom (for instance spherical
                                             # or topography maps)
                                             # warp = warpgridfun
                                             )
+
 
     function sponge(x, y)
 
@@ -177,7 +183,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne,
                                            viscosity=viscosity,
                                            ntrace=ntrace,
                                            nmoist=nmoist,
-                                           sponge=sponge)
+                                           sponge=sponge,
+                                           )
 
     # This is a actual state/function that lives on the grid    
     #vgeo = grid.vgeo
@@ -257,7 +264,7 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (20, 20, 10)
+    Ne        = (5, 5, 1)
     N         = 4
     timeend   = 20000.0
     
@@ -270,13 +277,13 @@ let
     
     DFloat = Float64
     for ArrayType in (Array,)
-        #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-        #              range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
         brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-                      range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
-                      range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
+                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+        #              range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
+        #              range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))
 
-        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, Ne, timeend)
+        main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N, timeend)
     end
 end
 
