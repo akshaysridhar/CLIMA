@@ -38,7 +38,7 @@ constant.
 """
 struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
                                   DeviceArray, nmoist, ntrace, DASAT3,
-                                  GT } <: AD.AbstractAtmosDiscretization
+                                  GT, numeleminx} <: AD.AbstractAtmosDiscretization
   "grid"
   grid::GT
 
@@ -47,7 +47,7 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
 
   "viscosity constant"
   viscosity::T
-
+  
   "storage for the grad"
   grad::DASAT3
 
@@ -64,14 +64,14 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
   VanillaAtmosDiscretization{nmoist, ntrace}(grid; kw...)
 
   function VanillaAtmosDiscretization{nmoist, ntrace
-                                      }(grid::AbstractGrid{T, dim, N, Np, DA};
+                                      }(grid::AbstractGrid{T, dim, N, Np, DA, Ne_x};
                                         # Use gravity?
                                         gravity = true,
                                         # viscosity constant
                                         viscosity = 0,
-                                        sponge = (x...) ->0
+                                        sponge = (x...) -> 0,
                                         ) where {T, dim, N, Np, DA,
-                                                 nmoist, ntrace}
+                                                 nmoist, ntrace, Ne_x}
     topology = grid.topology
     
     ngrad = _nstategrad + 3*nmoist
@@ -90,7 +90,7 @@ struct VanillaAtmosDiscretization{T, dim, polynomialorder, numberofDOFs,
     GT = typeof(grid)
     DASAT3 = typeof(grad)
 
-    new{T, dim, N, Np, DA, nmoist, ntrace, DASAT3, GT}(grid,
+    new{T, dim, N, Np, DA, nmoist, ntrace, DASAT3, GT, Ne_x}(grid,
                                                        gravity ? grav : 0,
                                                        viscosity, grad, sponge)
   end
@@ -99,10 +99,10 @@ end
 function Base.getproperty(X::VanillaAtmosDiscretization{T, dim, polynomialorder,
                                                         numberofDOFs,
                                                         DeviceArray, nmoist,
-                                                        ntrace},
+                                                        ntrace, numeleminx},
                           s::Symbol) where {T, dim, polynomialorder,
                                             numberofDOFs, DeviceArray, nmoist,
-                                            ntrace}
+                                            ntrace, numeleminx}
   if s ∈ keys(stateid)
     stateid[s]
   elseif s == :nstate
@@ -294,8 +294,8 @@ rhs!(dQ, Q, p::Nothing, t, sd::VanillaAtmosDiscretization) = rhs!(dQ, Q, t, sd)
 
 function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
               disc::VanillaAtmosDiscretization{T, dim, N, Np, DA, nmoist,
-                                               ntrace}
-             ) where {S, T, dim, N, Np, DA, nmoist, ntrace}
+                                               ntrace, Ne_x}
+             ) where {S, T, dim, N, Np, DA, nmoist, ntrace, Ne_x}
   grid = disc.grid
   topology = grid.topology
 
@@ -309,6 +309,7 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   vmapM = grid.vmapM
   vmapP = grid.vmapP
   elemtobndy = grid.elemtobndy
+  elemtoelem = topology.elemtoelem 
 
   DFloat = eltype(Q)
   @assert DFloat == eltype(Q)
@@ -342,6 +343,9 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
              vgeo, gravity, viscosity, Dmat, topology.realelems, disc.sponge)
+  
+  netest(Val(Ne_x))
+  #radiation!(Val(2), Val(N), Val(nmoist), Val(ntrace), Q, vgeo, elemtoelem, Val(Ne_x)) 
 
   MPIStateArrays.finish_ghost_exchange!(grad)
 
