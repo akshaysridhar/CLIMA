@@ -18,9 +18,9 @@ using CLIMA.MoistThermodynamics
 @parameter k_μ cp_d/prandtl "thermal conductivity / dynamic viscosity"
 @parameter Cs      12//100  "Smagorinsky constant"
 
-const _nstate = 5
-const _ρ, _U, _V, _W, _E = 1:_nstate
-const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
+const _nstate = 6
+const _ρ, _U, _V, _W, _E, _rad = 1:_nstate
+const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, Rid = _rad)
 const _nstategrad = 18
 const (_ρx, _ρy, _ρz, _ux, _uy, _uz, _vx, _vy, _vz, _wx, _wy, _wz,
        _Tx, _Ty, _Tz, _θx, _θy, _θz) = 1:_nstategrad
@@ -345,8 +345,10 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
  
   MPIStateArrays.start_ghost_exchange!(grad)
 
-
-  rad_rhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), Q.Q, 
+  #Build and store pointwise radiation:
+  (_, _, nelem) = size(Q)
+  F_rad = Array{DFloat}(undef, N+1, N+1, nelem)
+  rad_rhs(Val(dim), Val(N), Val(nmoist), Val(ntrace), F_rad, Q.Q, 
            vgeo, sgeo, vmapM, vmapP, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.radiation)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
@@ -401,11 +403,12 @@ function writevtk(prefix, vgeo::Array, Q::Array,
   V = reshape((@view Q[:, _V, :]), ntuple(j->Nq, dim)..., nelem)
   W = reshape((@view Q[:, _W, :]), ntuple(j->Nq, dim)..., nelem)
   E = reshape((@view Q[:, _E, :]), ntuple(j->Nq, dim)..., nelem)
+  RAD = reshape((@view Q[:, _rad, :]), ntuple(j->Nq, dim)..., nelem)
   Qt= reshape((@view Q[:, _nstate+1, :]), ntuple(j->Nq, dim)..., nelem)
   Ql= reshape((@view Q[:, _nstate+2, :]), ntuple(j->Nq, dim)..., nelem)
 
   writemesh(prefix, X...;
-               fields=(("RHO", ρ), ("U", U), ("V", V), ("W", W), ("E", E), ("Qtot", Qt), ("Qliq", Ql)),
+               fields=(("RHO", ρ), ("U", U), ("V", V), ("W", W), ("E", E), ("Qtot", Qt), ("Qliq", Ql), ("RADIATION", RAD)),
               realelems=G.topology.realelems)
     
   #fields = ntuple(i->("Q$i", reshape((@view Q[:,i,:]), ntuple(j->Nq,dim)...,nelem)), size(Q,2)) 

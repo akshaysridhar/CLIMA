@@ -19,9 +19,9 @@ using CLIMA.ParametersType
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
 
-const _nstate = 5
-const _ρ, _U, _V, _W, _E = 1:_nstate
-const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
+const _nstate = 6
+const _ρ, _U, _V, _W, _E, _rad = 1:_nstate
+const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, Rid = _rad)
 
 # {{{ FIXME: remove this after we've figure out how to pass through to kernel
 const _nvgeo = 14
@@ -147,24 +147,23 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
     # {{{
     # RADIATION 
     # }}}
-
     function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
-
-        
+        F_rad         = 0
         DFloat        = eltype(Q)
         radiation_rhs = similar(Q) # OUTPUT array
         
         # Number of elements along bottom plane (required for 1D integration stencil)
         N_horizontal_elems = length(brickrange[1]) - 1     
-        botelems      = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
                 
-        #= Radiation constants for Dycoms
-        F_0 = 70.0
-        F_1 = 22.0
-        κ   = 85.0
-        D   = 3.75e-6
-        y_i = 840
-        α_z = 1
+        # Radiation constants for Dycoms
+        F_0  = 70.0
+        F_1  = 22.0
+        κ    = 85.0
+        D_ls = 3.75e-6
+        y_i  = 840
+        α_z  = 1
+        ρ_i  = 1.13
       
         Nq = N + 1        
         if dim == 1
@@ -180,10 +179,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             Nfp = (N+1) * (N+1)
             nface = 6
         end
-        =#
-        
+       
         #nvgeo = size(vgeo,2)
-        Nfp      = (N+1)^(dim-1)
         f        = 1
        
         nelem    = size(Q)[end]
@@ -227,8 +224,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         #
         @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
-            Q_int0         = 0
-            Q_int1         = 0
+            Q_int0         = 0.0
+            Q_int1         = 0.0
             #
             # WARNING: this assumes a structured grid 
             # Parallel sides (vertical / horizontal) so that the surface metrics can 
@@ -239,9 +236,9 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 f = 1
                 for n = 1:Nfp
                     sMJ  = sgeo[_sMJ, n, f, e]
-#                    idM  = vmapM[n, f, e]
-#                    vidM = ((idM - 1) % Np) + 1 
-#=
+                    idM  = vmapM[n, f, e]
+                    vidM = ((idM - 1) % Np) + 1 
+
                     y     = vgeo[vidM, _y, e]
                     U, V  = Q[vidM, _U, e], Q[vidM, _V, e]
                     ρ, E  = Q[vidM, _ρ, e], Q[vidM, _E, e]
@@ -251,14 +248,15 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         s = _nstate + m 
                         q_m[m] = Q[vidM, s, e] / ρ
                     end
-                    
+                    #
                     # Returns temperature after saturation adjustment 
                     # Required for phase-partitioning to find q_liq, q_ice
+                    #
                     T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
                     q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
                     q_m[2]       = q_liq
                     q_m[3]       = q_ice
-                    
+                    (R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
                   
                     if ( abs(q_m[1] - 8.0e-3) <= 1e-8 )
                         y_i = y
@@ -266,30 +264,27 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         y_i = 840.0
                     end
                     
-                    if (y > y_i)
-                        Q_int0 +=  sMJ * ρ #* q_liq* κ
+                    if (y >= y_i)
+                        Q_int0 +=  sMJ*ρ*q_liq*κ
+                        deltay = y - y_i
                     else
-                        Q_int1 +=  sMJ * ρ #* q_liq* κ
+                        Q_int1 +=  sMJ*ρ*q_liq*κ
+                        deltay = 0
                     end
-@show(Q_int0)
-                      # integrate along column radiation 
-             #         F_rad = F_0 * exp( -10) #-Q_int0) #+
-        #          F_1 * exp(-Q_int1) +
-        #          ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3)/4 + y_i*(y - y_i)^(1/3))
-        =#
 
-                     Q_int0 +=  sMJ #* q_liq* κ
+                    #
+                    # integrate along column radiation
+                    #
+                    cpm = cp
+                    F_rad = F_0 * exp(-Q_int0) +
+                            F_1 * exp(-Q_int1) +
+                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
+
+                    Q[vidM, _rad, e] = F_rad #For plotting only
                 end
-            end
-
-            @show(Q_int0)
-      
-        #  radiation_rhs[i,j,_E,e] += F_rad
-        #  end
-        # end
-            
-
-        end 
+            end           
+        end
+        return F_rad
     end
 
 
@@ -396,7 +391,7 @@ end
 
 step = [0]
 mkpath("vtk_dycoms")
-cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
+cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
     outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
     @printf(io,
             "-------------------------------------------------------------\n")

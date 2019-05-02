@@ -503,17 +503,23 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 end
 # }}}
 
-function rad_rhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                    Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
-                    elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
-  
-  DFloat = eltype(Q)
-  nvar   = _nstate + nmoist + ntrace
+function rad_rhs(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
+                  F_rad::Array, Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
+                  elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
+    
+    DFloat = eltype(Q)
+    nvar   = _nstate + nmoist + ntrace
 
-  Nq        = N + 1
-  nelem     = size(Q)[end]
-  testarray = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems) 
+    Nq             = N + 1
+    nelem          = size(Q)[end]
 
+    for e = 1:nelem
+        for j = 1:Nq, i = 1:Nq
+            F_rad[i, j, e] = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
+        end
+    end
+    
+    return F_rad
 end
 
 # {{{ Volume RHS for 2-D
