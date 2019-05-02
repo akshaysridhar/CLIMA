@@ -120,6 +120,26 @@ end
   end
 end
 
+@inline function bcstate2D!(QP, VFP, auxP, QM, VFM, auxM, bctype, t, _...)
+  @inbounds begin
+    x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
+    initialcondition!(Val(2), QP, t, x, y, z)
+    VFP.=VFM
+    nothing
+  end
+end
+
+@inline function bcstate3D!(QP, VFP, auxP, QM, VFM, auxM, bctype, t, _...)
+  @inbounds begin
+    x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
+    initialcondition!(Val(3), QP, t, x, y, z)
+    VFP.=VFM
+    nothing
+  end
+end
+
+@inline stresses_boundary_penalty!(VF, _...) = VF.=0
+
 @inline function stresses_penalty!(VF, nM, velM, QM, aM, velP, QP, aP, t)
   @inbounds begin
     n_Δvel = similar(VF, Size(3, 3))
@@ -152,6 +172,7 @@ end
   #source_ls_subsidence!(S,Q,aux,t)
   end
 end
+
 @inline function source_rayleigh_sponge!(dim,S,Q,aux,t)
   ```
   Rayleigh sponge function: Linear damping / relaxation to specified
@@ -258,7 +279,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,true))
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(false,false))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -275,11 +296,12 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                                     cns_flux!, 
                                                     wavespeed,
                                                     preflux),
-                           #numerical_boundary_flux! = (x...) -> 
-                           #NumericalFluxes.rusanov!(x...,
-                           #                         cns_flux!,
-                           #                         wavespeed,
-                           #                         preflux),
+                           numerical_boundary_flux! = (x...) -> 
+                           NumericalFluxes.rusanov_boundary_flux!(x...,
+                                                    cns_flux!,
+                                                    dim == 2 ? bcstate2D! : bcstate3D!,
+                                                    wavespeed,
+                                                    preflux),
                            number_gradient_states = _ngradstates,
                            states_for_gradient_transform =
                             _states_for_gradient_transform,
@@ -287,11 +309,11 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            gradient_transform! = velocities!,
                            viscous_transform! = compute_stresses!,
                            viscous_penalty! = stresses_penalty!,
-                           #viscous_boundary_penalty! = nothing,
+                           viscous_boundary_penalty! = stresses_boundary_penalty!,
                            auxiliary_state_length = _nauxstate,
                            auxiliary_state_initialization! =
-                           auxiliary_state_initialization!)
-                           #source! = (x...) -> source!(Val(dim), x...))
+                           auxiliary_state_initialization!,
+                           source! = (x...) -> source!(Val(dim), x...))
 
   # This is a actual state/function that lives on the grid
   initialcondition(Q, x...) = initialcondition!(Val(dim), Q, DFloat(0), x...)
