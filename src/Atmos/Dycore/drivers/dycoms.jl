@@ -149,21 +149,23 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
     # }}}
 
     function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
+
         
-        # Number of elements along bottom plane (required for 1D integration stencil)
-        N_horizontal_elems = length(brickrange[1]) - 1
-            
-        DFloat = eltype(Q)
+        DFloat        = eltype(Q)
         radiation_rhs = similar(Q) # OUTPUT array
         
-        # Radiation constants for Dycoms
+        # Number of elements along bottom plane (required for 1D integration stencil)
+        N_horizontal_elems = length(brickrange[1]) - 1     
+        botelems      = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+                
+        #= Radiation constants for Dycoms
         F_0 = 70.0
         F_1 = 22.0
         κ   = 85.0
         D   = 3.75e-6
         y_i = 840
         α_z = 1
-        
+      
         Nq = N + 1        
         if dim == 1
             Np = (N+1)
@@ -178,58 +180,28 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             Nfp = (N+1) * (N+1)
             nface = 6
         end
+        =#
         
         #nvgeo = size(vgeo,2)
+        Nfp      = (N+1)^(dim-1)
+        f        = 1
+       
         nelem    = size(Q)[end]
-        q_m      = zeros(DFloat, max(3, nmoist))       
-        botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems+1)
+        q_m      = zeros(DFloat, max(3, nmoist))               
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
 
+        ibot     = 0   
         @inbounds for e in elems
             #
             # Extract bottom elements:
             #
-            ibot = 0 
             if (e == elemtoelem[3,e])
                 ibot += 1
                 botelems[ibot] = e
             end
         end
-        #
-        # Extract element columns from the structured grid:
-        #=
-        vcol     = 0     
-        ibot     = 0 
-        @inbounds for ebot in botelems
-            ibot += 1
-            # Assuming non-periodic conditions for the top, bottom
-            # We use the list of bottom elements to then find the 
-            # elements `stacked` vertically
-            local_e = ebot
-            elemind = 1 
-            vert_col[ibot, elemind] = ebot
-            while (local_e != elemtoelem[4,local_e] ) 
-                elemind += 1
-                vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-                local_e = elemtoelem[4, local_e]
-            end
-        end
-        =#
-        return nothing
-    end
-    #=
-     
-        @inbounds for e in elems
-            #
-            # Extract bottom elements:
-            #
-            ibot = 0 
-            if (e == elemtoelem[3,e])
-                ibot += 1
-                botelems[ibot] = e
-            end
-        end
+        
         #
         # Extract element columns from the structured grid:
         #
@@ -249,11 +221,11 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 local_e = elemtoelem[4, local_e]
             end
         end
-       #=
+       
         #
         # Integrate column-wise
         #
-        @inbounds for ibot in botelems
+        @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
             Q_int0         = 0
             Q_int1         = 0
@@ -263,12 +235,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             # be assumed constant across all element nodes
             #
             @inbounds for e in vert_elem_list
- #               faceid = elemtoelem[4,e]
+                faceid = elemtoelem[4,e]
                 f = 1
-#                for n = 1:Nfp
-    #                sMJ  = sgeo[_sMJ, n, f, e]
-    #                idM  = vmapM[n, f, e]
-    #                vidM = ((idM - 1) % Np) + 1 
+                for n = 1:Nfp
+                    sMJ  = sgeo[_sMJ, n, f, e]
+#                    idM  = vmapM[n, f, e]
+#                    vidM = ((idM - 1) % Np) + 1 
 #=
                     y     = vgeo[vidM, _y, e]
                     U, V  = Q[vidM, _U, e], Q[vidM, _V, e]
@@ -306,19 +278,21 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         #          ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3)/4 + y_i*(y - y_i)^(1/3))
         =#
 
-          #      end
+                     Q_int0 +=  sMJ #* q_liq* κ
+                end
             end
 
-            =#
+            @show(Q_int0)
       
         #  radiation_rhs[i,j,_E,e] += F_rad
         #  end
         # end
             
-        #    @show(Q_int0, Q_int1)
+
         end 
     end
-=#
+
+
 #{{{
 # }}}
 function sponge(x, y)
