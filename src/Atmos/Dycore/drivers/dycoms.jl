@@ -183,7 +183,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
 
         #nvgeo = size(vgeo,2)
         nelem = size(Q)[end]
-        q_m = zeros(DFloat, max(3, nmoist))
+        q_m   = zeros(DFloat, max(3, nmoist))
         
         botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
@@ -238,31 +238,38 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     idM  = vmapM[n, f, e]
                     vidM = ((idM - 1) % Np) + 1 
 
-                    y      = vgeo[vidM, _y, e]
-                    U, V   = Q[vidM, _U, e], Q[vidM, _V, e]
-                    ρ, E   = Q[vidM, _ρ, e], Q[vidM, _E, e]
-                    q_m[1] = Q[vidM, _qt, e]
-                    E_int  = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
-                    T      = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+                    y     = vgeo[vidM, _y, e]
+                    U, V  = Q[vidM, _U, e], Q[vidM, _V, e]
+                    ρ, E  = Q[vidM, _ρ, e], Q[vidM, _E, e]
+                    E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
                     
-                    q_liq, q_ice = phase_partitioning_eq(T, ρ, q_m[1])
+                    for m = 1:nmoist
+                        s = _nstate + m 
+                        q_m[m] = Q[vidM, s, e] / ρ
+                    end
+                    
+                    # Returns temperature after saturation adjustment 
+                    # Required for phase-partitioning to find q_liq, q_ice
+                    T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+                    q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
                     q_m[2]       = q_liq
                     q_m[3]       = q_ice
-
-                    if ( abs(q_ - 8.0e-3) <= 1e-8 )
+                    
+                  
+                    if ( abs(q_m[1] - 8.0e-3) <= 1e-8 )
                         y_i = y
-                            else
+                    else
                         y_i = 840.0
                     end
                     
                     if (y > y_i)
-                        Q_int0 +=  sMJ * ρ *  κ
+                        Q_int0 +=  sMJ * ρ * q_liq* κ
                     else
-                        Q_int1 +=  sMJ * ρ * κ
+                        Q_int1 +=  sMJ * ρ * q_liq* κ
                     end
                 end
             end
-            @show(Q_int0)
+            @show(Q_int0, Q_int1)
         end 
 
         # integrate along column radiation 
