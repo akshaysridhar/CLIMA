@@ -128,7 +128,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
                          brickrange,
-                         periodicity=(true, false))
+                         periodicity=(false, false))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             # Compute floating point type
@@ -148,25 +148,23 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
     # RADIATION 
     # }}}
 
-    # Number of elements along bottom plane (required for 1D integration stencil)
-    N_horizontal_elems = length(brickrange[1]) - 1
-    
-    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems) 
-
-        # Radiation constants for Dycoms
-        F0 = 70
-        F1 = 22
-        κ = 85
-        D = 3.75e-6
-        y_i = 840
-        α_z = 1
-        ρ = 1.13
-
-        #
+    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
+        
+        # Number of elements along bottom plane (required for 1D integration stencil)
+        N_horizontal_elems = length(brickrange[1]) - 1
+            
         DFloat = eltype(Q)
         radiation_rhs = similar(Q) # OUTPUT array
-        Nq = N + 1
         
+        # Radiation constants for Dycoms
+        F_0 = 70.0
+        F_1 = 22.0
+        κ   = 85.0
+        D   = 3.75e-6
+        y_i = 840
+        α_z = 1
+        
+        Nq = N + 1        
         if dim == 1
             Np = (N+1)
             Nfp = 1
@@ -180,15 +178,48 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             Nfp = (N+1) * (N+1)
             nface = 6
         end
-
-        #nvgeo = size(vgeo,2)
-        nelem = size(Q)[end]
-        q_m   = zeros(DFloat, max(3, nmoist))
         
-        botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        #nvgeo = size(vgeo,2)
+        nelem    = size(Q)[end]
+        q_m      = zeros(DFloat, max(3, nmoist))       
+        botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems+1)
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
-        
+
+        @inbounds for e in elems
+            #
+            # Extract bottom elements:
+            #
+            ibot = 0 
+            if (e == elemtoelem[3,e])
+                ibot += 1
+                botelems[ibot] = e
+            end
+        end
+        #
+        # Extract element columns from the structured grid:
+        #=
+        vcol     = 0     
+        ibot     = 0 
+        @inbounds for ebot in botelems
+            ibot += 1
+            # Assuming non-periodic conditions for the top, bottom
+            # We use the list of bottom elements to then find the 
+            # elements `stacked` vertically
+            local_e = ebot
+            elemind = 1 
+            vert_col[ibot, elemind] = ebot
+            while (local_e != elemtoelem[4,local_e] ) 
+                elemind += 1
+                vert_col[ibot, elemind] = elemtoelem[4,local_e] 
+                local_e = elemtoelem[4, local_e]
+            end
+        end
+        =#
+        return nothing
+    end
+    #=
+     
         @inbounds for e in elems
             #
             # Extract bottom elements:
@@ -218,6 +249,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 local_e = elemtoelem[4, local_e]
             end
         end
+       #=
         #
         # Integrate column-wise
         #
@@ -231,13 +263,13 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             # be assumed constant across all element nodes
             #
             @inbounds for e in vert_elem_list
-                faceid = elemtoelem[4,e]
+ #               faceid = elemtoelem[4,e]
                 f = 1
-                for n = 1:Nfp
-                    sMJ  = sgeo[_sMJ, n, f, e]
-                    idM  = vmapM[n, f, e]
-                    vidM = ((idM - 1) % Np) + 1 
-
+#                for n = 1:Nfp
+    #                sMJ  = sgeo[_sMJ, n, f, e]
+    #                idM  = vmapM[n, f, e]
+    #                vidM = ((idM - 1) % Np) + 1 
+#=
                     y     = vgeo[vidM, _y, e]
                     U, V  = Q[vidM, _U, e], Q[vidM, _V, e]
                     ρ, E  = Q[vidM, _ρ, e], Q[vidM, _E, e]
@@ -263,25 +295,30 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     end
                     
                     if (y > y_i)
-                        Q_int0 +=  sMJ * ρ * q_liq* κ
+                        Q_int0 +=  sMJ * ρ #* q_liq* κ
                     else
-                        Q_int1 +=  sMJ * ρ * q_liq* κ
+                        Q_int1 +=  sMJ * ρ #* q_liq* κ
                     end
-                end
-            end
-            @show(Q_int0, Q_int1)
-        end 
+@show(Q_int0)
+                      # integrate along column radiation 
+             #         F_rad = F_0 * exp( -10) #-Q_int0) #+
+        #          F_1 * exp(-Q_int1) +
+        #          ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3)/4 + y_i*(y - y_i)^(1/3))
+        =#
 
-        # integrate along column radiation 
-        #  F_rad =   F_0 * exp(-Q_int0) 
-        #  + F_1 * exp(-Q_int1)
-        #  + ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3) / 4 + y_i*(y-y_i)^(1/3))
-        #
+          #      end
+            end
+
+            =#
+      
         #  radiation_rhs[i,j,_E,e] += F_rad
         #  end
         # end
+            
+        #    @show(Q_int0, Q_int1)
+        end 
     end
-
+=#
 #{{{
 # }}}
 function sponge(x, y)
@@ -414,26 +451,22 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (1, 3, 1)
+    Ne        = (5, 20, 1)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0
     
-    xmin_domain = -1600.0
-    xmax_domain =  1600.0
-    ymin_domain = -1600.0
-    ymax_domain =  1600.0
+    xmin_domain = -600.0
+    xmax_domain =  600.0
+    #ymin_domain = -1600.0
+    #ymax_domain =  1600.0
     zmin_domain =     0.0
     zmax_domain =  1500.0
     
     DFloat = Float64
     for ArrayType in (Array,)
-        brickrange = (range(DFloat(0); length=Ne[1]+1, stop=1),
-                      range(DFloat(0); length=Ne[2]+1, stop=1))
-
-
-        #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-        #              range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
         
         #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
         #              range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
