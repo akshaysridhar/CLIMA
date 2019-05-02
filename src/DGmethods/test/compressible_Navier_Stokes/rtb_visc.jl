@@ -181,11 +181,11 @@ end
   ```
   gravity::eltype(Q) = grav
   @inbounds begin
-      S[_ρ] += 0
-      S[_U] += 0
-      S[_V] += 0
-      S[_W] += 0
-      S[_E] += 0
+
+    S[_U] += -sinpi()^4
+    S[_V] += -sinpi()^4
+    S[_W] += 0
+
   end
 end
 
@@ -401,7 +401,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (10, 10, 1)
-    dt = 1e-3
+    dt = 1e-2
     timeend = 100
     polynomialorder = 5
     for DFloat in (Float64,) #Float32)
