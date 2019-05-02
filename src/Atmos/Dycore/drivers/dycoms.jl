@@ -145,6 +145,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
       Nq = N + 1
       nvgeo = size(vgeo,2)
       nelem = size(Q)[end]
+      @show(size(vgeo), nvgeo)
       vgeo = reshape(vgeo, Nq, Nq, nvgeo, nelem)
       q_m = zeros(DFloat, max(3, nmoist))
       
