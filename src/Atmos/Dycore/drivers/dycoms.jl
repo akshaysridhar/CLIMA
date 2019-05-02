@@ -101,7 +101,7 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
 
     q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
     
-    u, v, w       = datau, datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
+    u, v, w       = 0*datau, 0*datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
@@ -239,10 +239,10 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     vidM = ((idM - 1) % Np) + 1 
                     
                     y = vgeo[vidM, _y, e]
-                    ρ = Q[vidM, _ρ, e]
-                    U = Q[vidM, _U, e]
-                    V = Q[vidM, _V, e]
-                    E = Q[vidM, _E, e]
+                    ρ =    Q[vidM, _ρ, e]
+                    U =    Q[vidM, _U, e]
+                    V =    Q[vidM, _V, e]
+                    E =    Q[vidM, _E, e]
                     #@show( ρ)
                     E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
                     
@@ -253,40 +253,38 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     end
                     (R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
                     
-                    if ( q_m[1] >= 0.008 )
-                        y_i = y
-                    else
+                    #if ( q_m[1] >= 0.008 )
+                    #    y_i = y
+                    #else
                         y_i = 840.0
-                    end
-                    
+                    #end
+
                     if (y >= y_i)
-                        Q_int0 +=  sMJ * κ * ρ * q_m[2]
-                        deltay = y - y_i
+                        
+                        Q_int0 +=  sMJ * κ * ρ# * q_m[2]
                     else
-                        Q_int1 +=  sMJ * κ * ρ * q_m[2]
-                        deltay = 0
+                        Q_int1 +=  sMJ * κ * ρ# * q_m[2]
                     end
 
                     #
                     # integrate along column radiation
                     #
-                    cpm = cp
-
-                    F_rad = F_0 * exp(-Q_int0) #+
-                    #                            F_1 * exp(-Q_int1) #+
-                    #                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
-
+                    deltay3 = cbrt(y - y_i)
+                    F_rad = F_0 * exp(-Q_int0) +
+                            F_1 * exp(-Q_int1) +
+                            ρ_i * cp * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+                    
                     
                     #if(F_rad != 70)
-                      @show(F_rad, Q_int0)
+                    #  @show(F_rad, Q_int0)
                     #end
                     #Q[vidM, _rad, e] = F_rad #For plotting only
 
                 end
             end            
-        @show(Q_int0)
+        #@show(Q_int0)
         end
-        return 0.0
+        return F_rad
     end
 
 
@@ -422,7 +420,7 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (5, 20, 1)
+    Ne        = (5, 20)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0
