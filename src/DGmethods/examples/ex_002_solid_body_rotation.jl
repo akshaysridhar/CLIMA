@@ -89,9 +89,9 @@ end
 #md # Now we define a function which given a value for $q$ computes the physical
 #md # flux $\boldsymbol{F} = \vec{u} q$. The balance law solver will will pass
 #md # user-defined auxiliary state at a degree of freedom through to the flux
-#md # function as the third argument (the fourth argument which is not needed
-#md # for this example is the simulation time).
-function advectionflux!(F, state, uvec, _)
+#md # function as the fourth argument; the third and fifth arguments which are
+#md # not needed for this example is the viscous state and simulation time).
+function advectionflux!(F, state, _, uvec, _)
   DFloat = eltype(state) # get the floating point type we are using
   @inbounds begin
     q = state[1]
@@ -111,7 +111,7 @@ end
 # passed in through arguments 4 and 6 of the numerical flux callback. Since the
 # two sides of the interface are collocated the auxiliary state on the two sides
 # should be the same.
-function upwindflux!(fs, nM, stateM, uvecM, stateP, uvecP, t)
+function upwindflux!(fs, nM, stateM, viscM, uvecM, stateP, viscP, uvecP, t)
   DFloat = eltype(fs)
   @inbounds begin
     ## determine the advection speed and direction
@@ -144,7 +144,8 @@ end
 # the boundary numerical flux is the same as the upwind flux except with $q^{+}$
 # set to zero; more complicated PDES and boundary conditions would require more
 # complex constructions.
-function upwindboundaryflux!(fs, nM, stateM, uvecM, stateP, uvecP, bctype, t)
+function upwindboundaryflux!(fs, nM, stateM, viscM, uvecM, stateP, viscP, uvecP,
+                             bctype, t)
   DFloat = eltype(fs)
   @inbounds begin
     ## determine the advection speed and direction
@@ -223,15 +224,15 @@ function setupDG(mpicomm, dim, Ne, polynomialorder, DFloat=Float64,
                                           polynomialorder, FloatType = DFloat,
                                           DeviceArray = ArrayType,)
 
-  # Note the additional keyword arguments: `inviscid_numerical_boundary_flux!`
+  # Note the additional keyword arguments: `numerical_boundary_flux!`
   # which is used to pass the numerical flux function that implements the
   # boundary condition, `auxiliary_state_length` which defines the number of
   # auxiliary state fields at each degree of freedom, and
   # `auxiliary_state_initialization!` which initializes the auxiliary state.
   spatialdiscretization = DGBalanceLaw(grid = grid, length_state_vector = 1,
-                                       inviscid_flux! = advectionflux!,
-                                       inviscid_numerical_flux! = upwindflux!,
-                                       inviscid_numerical_boundary_flux! =
+                                       flux! = advectionflux!,
+                                       numerical_flux! = upwindflux!,
+                                       numerical_boundary_flux! =
                                        upwindboundaryflux!,
                                        auxiliary_state_length = num_aux_states,
                                        auxiliary_state_initialization! =
@@ -265,6 +266,11 @@ let
   dt = CFL / polynomialorder^2
   lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
   finaltime = 1.0
+  if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
+      && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
+    parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
+    finaltime = 2dt                                           #src
+  end                                                         #src
 
   # For simplicity we only include the vtk callback
 
@@ -334,6 +340,11 @@ let
     h = 1 / Ne
     CFL = h / (2π)
     dt = CFL / polynomialorder^2
+    if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
+        && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
+      parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
+      finaltime = 2dt                                           #src
+    end                                                         #src
     lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
 
     solve!(Q, lsrk; timeend = finaltime)
@@ -360,8 +371,8 @@ end
 #------------------------------------------------------------------------------
 
 # ### Finalizing MPI (if necessary)
-Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
-isinteractive() || MPI.Finalize()
+Sys.iswindows() || MPI.finalize_atexit()
+Sys.iswindows() && !isinteractive() && MPI.Finalize()
 #md nothing # hide
 
 #md # ## [Plain Program](@id ex_002_solid_body_rotation-plain-program)

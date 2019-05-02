@@ -14,7 +14,7 @@
 # ## Introduction
 #
 # In this example we will solve the constant coefficient advection equation on a
-# periodic domain; domain is taken to be the unit square or cube depending on
+# periodic domain; the domain is taken to be the unit square or cube depending on
 # whether the problem is two- or three-dimensional.
 #
 # The partial differential equation we wish to solve is
@@ -115,13 +115,15 @@ end
 #
 # In the CLIMA balance law solver the numerical flux function is a user-defined
 # function that fills in an `MVector` for the numerical flux given two states,
-# a unit normal to the face, the simulation time, and a user-defined auxiliary
-# state; the auxiliary state will be discussed in a subsequent example. In the
-# function below `F` is the numerical flux to fill, `nM` is the unit normal
-# pointing away from the minus side and toward the plus side, `QM` and `QP` are
-# `MVector`s of the solution state on the minus  and plus sides of the interface,
-# similar `auxM` and `auxP` are the user-defined auxiliary state values on the
-# minus  and plus sides, and `t` is the simulation time.
+# the "viscous state", a unit normal to the face, the simulation time, and a
+# user-defined auxiliary state; the viscous and auxiliary states will be
+# discussed in a subsequent examples. In the function below `F` is the numerical
+# flux to fill, `nM` is the unit normal pointing away from the minus side and
+# toward the plus side, `QM` and `QP` are `MVector`s of the solution state on
+# the minus and plus sides of the interface, `viscM` and `viscP` are the viscous
+# states on the minus and plus sides, `auxM` and `auxP` are the user-defined
+# auxiliary state values on the minus and plus sides, and `t` is the simulation
+# time.
 #
 # For linear advection the solution to the Riemann problem is trivial, since
 # if $\vec{n}^{-} \cdot \vec{u} ≥ 0$ the state $q$ is being advected from
@@ -135,7 +137,7 @@ end
 # \end{cases}
 # ```
 # This is done in the following function
-function upwindflux!(fs, nM, stateM, auxM, stateP, auxP, t)
+function upwindflux!(fs, nM, stateM, viscM, auxM, stateP, viscP, auxP, t)
   DFloat = eltype(fs)
   @inbounds begin
     ## determine the advection speed and direction
@@ -181,14 +183,14 @@ end
 #------------------------------------------------------------------------------
 
 # ### Exact Solution
-# For periodic constant velocity advection the exact solution is trivial to
+# For periodic constant-velocity advection the exact solution is trivial to
 # compute. Assuming that $\phi(x)$ is the periodically replicated initial
 # condition, the analytic solution is
 # ```math
 # q(\vec{x}, t) = \phi(\vec{x} - \vec{u} t).
 # ```
 # This will be useful later since it will allow us to check our work by
-# computing error in our solution and estimate the convergence rate.
+# computing the error in our solution and estimating the convergence rate.
 #
 # For a general initial condition on the unit domain the following function can
 # be used:
@@ -278,8 +280,8 @@ function setupDG(mpicomm, dim, Ne, polynomialorder, DFloat=Float64,
   # `advectionflux!` and numerical flux `upwindflux!` defined above; we only
   # have a single state variable $q$ hence `length_state_vector = 1`
   spatialdiscretization = DGBalanceLaw(grid = grid, length_state_vector = 1,
-                                       inviscid_flux! = advectionflux!,
-                                       inviscid_numerical_flux! = upwindflux!)
+                                       flux! = advectionflux!,
+                                       numerical_flux! = upwindflux!)
 
   # (end of function)
 end
@@ -348,6 +350,11 @@ let
   # initial condition `Q`. The solution will be updated in place so that the
   # final solution will also be stored in `Q`.
   finaltime = 1.0
+  if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
+      && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
+    parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
+    finaltime = 2dt                                           #src
+  end                                                         #src
   solve!(Q, lsrk; timeend = finaltime)
 
   # The final solution can be visualized in a similar manner to the initial
@@ -405,6 +412,11 @@ let
   dt = CFL / polynomialorder^2
   lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
   finaltime = 1.0
+  if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
+      && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
+    parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
+    finaltime = 2dt                                           #src
+  end                                                         #src
 
   # The ODE solver callback functions are called both before the ODE solver
   # begins and then after each time step.
@@ -528,6 +540,11 @@ let
     h = 1 / Ne
     CFL = h / maximum(abs.(uvec[1:dim]))
     dt = CFL / polynomialorder^2
+    if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
+        && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
+      parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
+      finaltime = 2dt                                           #src
+    end                                                         #src
     lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
 
     solve!(Q, lsrk; timeend = finaltime)
@@ -557,8 +574,8 @@ end
 # If we are running interactively we do not want to finalize MPI now but at
 # exit; this does not work for windows hence the check. Otherwise we can
 # finalize MPI now.
-Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
-isinteractive() || MPI.Finalize()
+Sys.iswindows() || MPI.finalize_atexit()
+Sys.iswindows() && !isinteractive() && MPI.Finalize()
 #md nothing # hide
 
 #md # ## [Plain Program](@id ex_001_periodic_advection-plain-program)

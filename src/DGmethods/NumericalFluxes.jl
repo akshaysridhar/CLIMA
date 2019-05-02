@@ -9,7 +9,7 @@ Calculate the Rusanov (aka local Lax-Friedrichs) numerical flux given the plus
 and minus side states/viscous states `QP`/`QVP` and `QM`/`QVM` using the physical
 flux function `flux!` and `wavespeed` calculation.
 
-The `flux!` has almost the same calling convention as `inviscid_flux!` from
+The `flux!` has almost the same calling convention as `flux!` from
 [`DGBalanceLaw`](@ref) except that `preflux(Q, aux, t)` is splatted at the end
 of the call.
 
