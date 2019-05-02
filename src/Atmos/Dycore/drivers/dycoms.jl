@@ -248,16 +248,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         s = _nstate + m 
                         q_m[m] = Q[vidM, s, e] / ρ
                     end
-                    #
-                    # Returns temperature after saturation adjustment 
-                    # Required for phase-partitioning to find q_liq, q_ice
-                    #
-                    T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-                    q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
-                    q_m[2]       = q_liq
-                    q_m[3]       = q_ice
                     (R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
-                  
+                    
                     if ( q_m[1] >= 0.008 )
                         y_i = y
                     else
@@ -280,7 +272,11 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     F_rad = F_0 * exp(-Q_int0) #+
 #                            F_1 * exp(-Q_int1) #+
 #                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
-                                       
+
+                    
+                    if(F_rad != 70)
+                        @show(F_rad, Q_int0)
+                    end
                     #Q[vidM, _rad, e] = F_rad #For plotting only
                 end
             end           
