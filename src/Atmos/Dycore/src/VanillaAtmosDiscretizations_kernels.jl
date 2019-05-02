@@ -679,9 +679,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
       # integrate along column radiation
         radiation_value = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
-        if(radiation_value != 70)
-            @show(radiation_value)
-        end
+
         
       #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]
 

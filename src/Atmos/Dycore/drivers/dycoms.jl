@@ -257,10 +257,10 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     end
                         
                     if (y >= y_i)
-                        Q_int0 +=  sMJ*ρ*q_liq*κ
+                        Q_int0 +=  sMJ*ρ*q_m[2]*κ
                         deltay = y - y_i
                     else
-                        Q_int1 +=  sMJ*ρ*q_liq*κ
+                        Q_int1 +=  sMJ*ρ*q_m[2]*κ
                         deltay = 0
                     end
 
