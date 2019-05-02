@@ -19,6 +19,20 @@ using CLIMA.ParametersType
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
 
+const _nstate = 5
+const _ρ, _U, _V, _W, _E = 1:_nstate
+const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
+
+# {{{ FIXME: remove this after we've figure out how to pass through to kernel
+const _nvgeo = 14
+const _ξx, _ηx, _ζx, _ξy, _ηy, _ζy, _ξz, _ηz, _ζz, _MJ, _MJI,
+_x, _y, _z = 1:_nvgeo
+
+const _nsgeo = 5
+const _nx, _ny, _nz, _sMJ, _vMJI = 1:_nsgeo
+# }}}
+
+
 # {{{
 
 function read_sounding()
@@ -130,54 +144,67 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                                             # warp = warpgridfun
                                             )
 
-# {{{
-# RADIATION 
-# }}}
+    # {{{
+    # RADIATION 
+    # }}}
 
     # Number of elements along bottom plane (required for 1D integration stencil)
     N_horizontal_elems = length(brickrange[1]) - 1
     
-    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, elemtoelem, elems) 
+    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems) 
 
-      DFloat = eltype(Q)
-      radiation_rhs = similar(Q) # OUTPUT array
+        # Radiation constants for Dycoms
+        F0 = 70
+        F1 = 22
+        κ = 85
+        D = 3.75e-6
+        y_i = 840
+        α_z = 1
+        ρ = 1.13
 
-      Nq = N + 1
-      nvgeo = size(vgeo,2)
-      nelem = size(Q)[end]
-      @show(size(vgeo), nvgeo)
-      vgeo = reshape(vgeo, Nq, Nq, nvgeo, nelem)
-      q_m = zeros(DFloat, max(3, nmoist))
-      
-      @inbounds for e in elems
-        for j = 1:Nq, i = 1:Nq
-          MJ     = vgeo[i, j, _MJ, e]
-          ξx, ξy = vgeo[i,j,_ξx,e], vgeo[i,j,_ξy,e]
-          ηx, ηy = vgeo[i,j,_ηx,e], vgeo[i,j,_ηy,e]
-          y      = vgeo[i,j,_y,e]
-          U, V = Q[i, j, _U, e], Q[i, j, _V, e]
-          ρ, E = Q[i, j, _ρ, e], Q[i, j, _E, e]
-          E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
-          T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-          q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
-          q_m[2]       = q_liq
-          q_m[3]       = q_ice
-          Q_int = 0 
-          ibot = 0 
-          botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        #
+        DFloat = eltype(Q)
+        radiation_rhs = similar(Q) # OUTPUT array
+        Nq = N + 1
+        
+        if dim == 1
+            Np = (N+1)
+            Nfp = 1
+            nface = 2
+        elseif dim == 2
+            Np = (N+1) * (N+1)
+            Nfp = (N+1)
+            nface = 4
+        elseif dim == 3
+            Np = (N+1) * (N+1) * (N+1)
+            Nfp = (N+1) * (N+1)
+            nface = 6
+        end
 
-          if (e == elemtoelem[3,e])
-             ibot += 1
-             botelems[ibot] = e
-          end
-          
-          vcol = 0 
-          Ne_vert = Int64(length(elems) / N_horizontal_elems)
-          vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
-          ibot = 0 
-          
-          # Loop through all vertical elements
-          @inbounds for ebot in botelems
+        #nvgeo = size(vgeo,2)
+        nelem = size(Q)[end]
+        q_m = zeros(DFloat, max(3, nmoist))
+        
+        botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        Ne_vert  = Int64(length(elems) / N_horizontal_elems)
+        vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
+        
+        @inbounds for e in elems
+            #
+            # Extract bottom elements:
+            #
+            ibot = 0 
+            if (e == elemtoelem[3,e])
+                ibot += 1
+                botelems[ibot] = e
+            end
+        end
+        #
+        # Extract element columns from the structured grid:
+        #
+        vcol     = 0     
+        ibot     = 0 
+        @inbounds for ebot in botelems
             ibot += 1
             # Assuming non-periodic conditions for the top, bottom
             # We use the list of bottom elements to then find the 
@@ -186,179 +213,189 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
             elemind = 1 
             vert_col[ibot, elemind] = ebot
             while (local_e != elemtoelem[4,local_e] ) 
-              elemind += 1
-              vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-              @show(ibot, elemind)
-              local_e = elemtoelem[4, local_e]
+                elemind += 1
+                vert_col[ibot, elemind] = elemtoelem[4,local_e] 
+                local_e = elemtoelem[4, local_e]
             end
-          end
-      
-          # DYCOMS Constants
-          F0 = 70
-          F1 = 22
-          κ = 85
-          D = 3.75e-6
-          z_i = 840
-          α_z = 1
-          ρ = 1.13
-          
-          @inbounds for ibot in botelems
-            elem_list = vert_col[ibot,:]
-            Q_int = 0
-            # Note that this assumes a structured grid 
+        end
+        #
+        # Integrate column-wise
+        #
+        @inbounds for ibot in botelems
+            vert_elem_list = vert_col[ibot,:]
+            Q_int0         = 0
+            Q_int1         = 0
+            #
+            # WARNING: this assumes a structured grid 
             # Parallel sides (vertical / horizontal) so that the surface metrics can 
             # be assumed constant across all element nodes
-             @inbounds for e in elem_list
-              faceid = elemtoelem[4,e]
+            #
+            @inbounds for e in vert_elem_list
+                faceid = elemtoelem[4,e]
+                f = 1
                 for n = 1:Nfp
-                  sMJ = sgeo[_sMJ, n, f, e]
-                  idM = vmapM[n, f, e]
-                  vidM = ((idM - 1) % Np) + 1 
-                  y = vgeo[vidM, _y, e]
-                  if y <= y_i 
-                    r_l = 0.0009
-                    ρ = 1.22
-                  else
-                    r_l = 0.0015
-                    ρ = 1.13
-                  end
-                  Q +=  sMJ * ρ * r_l * κ
+                    sMJ  = sgeo[_sMJ, n, f, e]
+                    idM  = vmapM[n, f, e]
+                    vidM = ((idM - 1) % Np) + 1 
+
+                    y      = vgeo[vidM, _y, e]
+                    U, V   = Q[vidM, _U, e], Q[vidM, _V, e]
+                    ρ, E   = Q[vidM, _ρ, e], Q[vidM, _E, e]
+                    q_m[1] = Q[vidM, _qt, e]
+                    E_int  = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
+                    T      = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+                    
+                    q_liq, q_ice = phase_partitioning_eq(T, ρ, q_m[1])
+                    q_m[2]       = q_liq
+                    q_m[3]       = q_ice
+
+                    if ( abs(q_ - 8.0e-3) <= 1e-8 )
+                        y_i = y
+                            else
+                        y_i = 840.0
+                    end
+                    
+                    if (y > y_i)
+                        Q_int0 +=  sMJ * ρ *  κ
+                    else
+                        Q_int1 +=  sMJ * ρ * κ
+                    end
                 end
-                @show(Q)
-             end
-          end 
+            end
+            @show(Q_int0)
+        end 
 
-          # integrate along column radiation 
-          F_rad =   F_0 * exp(-Q_int0) 
-                  + F_1 * exp(-Q_int1)
-                  + ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3) / 4 + y_i*(y-y_i)^(1/3))
-
-          radiation_rhs[i,j,_E,e] += F_rad
-        end
-      end
-end
+        # integrate along column radiation 
+        #  F_rad =   F_0 * exp(-Q_int0) 
+        #  + F_1 * exp(-Q_int1)
+        #  + ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3) / 4 + y_i*(y-y_i)^(1/3))
+        #
+        #  radiation_rhs[i,j,_E,e] += F_rad
+        #  end
+        # end
+    end
 
 #{{{
 # }}}
-    function sponge(x, y)
+function sponge(x, y)
 
-        xmin = brickrange[1][1]
-        xmax = brickrange[1][end]
-        ymin = brickrange[2][1]
-        ymax = brickrange[2][end]
-        
-        # Define Sponge Boundaries      
-        xc       = (xmax + xmin)/2
-        ysponge  = 0.85 * ymax
-        xsponger = xmax - 0.15*abs(xmax - xc)
-        xspongel = xmin + 0.15*abs(xmin - xc)
-        
-        csxl  = 0.0
-        csxr  = 0.0
-        ctop  = 0.0
-        csx   = 0.0 #1.0
-        ct    = 0.0 #1.0
-                
-        #x left and right
-        #xsl
-        if (x <= xspongel)
-            csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
-        end
-        #xsr
-        if (x >= xsponger)
-            csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
-        end
-        
-        #Vertical sponge:         
-        if (y >= ysponge)
-            ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
-        end
-
-        beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
-        beta  = min(beta, 1.0)
-        alpha = 1.0 - beta        
-        
-        return (alpha, beta)
-    end
-    #---END SPONGE
+    xmin = brickrange[1][1]
+    xmax = brickrange[1][end]
+    ymin = brickrange[2][1]
+    ymax = brickrange[2][end]
     
-    # spacedisc = data needed for evaluating the right-hand side function    
-    spacedisc = VanillaAtmosDiscretization(grid,
-                                           gravity=gravity,
-                                           viscosity=viscosity,
-                                           ntrace=ntrace,
-                                           nmoist=nmoist,
-                                           sponge=sponge,
-                                           radiation=radiation
-                                           )
-
-    # This is a actual state/function that lives on the grid    
-    #vgeo = grid.vgeo
-    #initial_sounding       = interpolate_sounding(dim, N, Ne, vgeo, nmoist, ntrace)
-    initialcondition(x...) = dycoms(x...;
-                                    ntrace=ntrace,
-                                    nmoist=nmoist,
-                                    dim=dim)
+    # Define Sponge Boundaries      
+    xc       = (xmax + xmin)/2
+    ysponge  = 0.85 * ymax
+    xsponger = xmax - 0.15*abs(xmax - xc)
+    xspongel = xmin + 0.15*abs(xmin - xc)
     
-    Q = MPIStateArray(spacedisc, initialcondition)
-
-    # Determine the time step
-    (dt == nothing) && (dt = VanillaAtmosDiscretizations.estimatedt(spacedisc, Q))
-    if exact_timeend
-        nsteps = ceil(Int64, timeend / dt)
-        dt = timeend / nsteps
+    csxl  = 0.0
+    csxr  = 0.0
+    ctop  = 0.0
+    csx   = 0.0 #1.0
+    ct    = 0.0 #1.0
+    
+    #x left and right
+    #xsl
+    if (x <= xspongel)
+        csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+    end
+    #xsr
+    if (x >= xsponger)
+        csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+    end
+    
+    #Vertical sponge:         
+    if (y >= ysponge)
+        ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
     end
 
-    # Initialize the Method (extra needed buffers created here)
-    # Could also add an init here for instance if the ODE solver has some
-    # state and reading from a restart file
+    beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
+    beta  = min(beta, 1.0)
+    alpha = 1.0 - beta        
+    
+    return (alpha, beta)
+end
+#---END SPONGE
 
-    # TODO: Should we use get property to get the rhs function?
-    lsrk = LowStorageRungeKutta(getrhsfunction(spacedisc), Q; dt = dt, t0 = 0)
+# spacedisc = data needed for evaluating the right-hand side function    
+spacedisc = VanillaAtmosDiscretization(grid,
+                                       gravity=gravity,
+                                       viscosity=viscosity,
+                                       ntrace=ntrace,
+                                       nmoist=nmoist,
+                                       sponge=sponge,
+                                       radiation=radiation
+                                       )
 
-    # Get the initial energy
-    io = MPI.Comm_rank(mpicomm) == 0 ? stdout : open("/dev/null", "w")
-    eng0 = norm(Q)
-    @printf(io, "||Q||₂ (initial) =  %.16e\n", eng0)
+# This is a actual state/function that lives on the grid    
+#vgeo = grid.vgeo
+#initial_sounding       = interpolate_sounding(dim, N, Ne, vgeo, nmoist, ntrace)
+initialcondition(x...) = dycoms(x...;
+                                ntrace=ntrace,
+                                nmoist=nmoist,
+                                dim=dim)
 
-    # Set up the information callback
-    timer = [time_ns()]
-    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
-        if s
-            timer[1] = time_ns()
-        else
-            run_time = (time_ns() - timer[1]) * 1e-9
-            (min, sec) = fldmod(run_time, 60)
-            (hrs, min) = fldmod(min, 60)
-            @printf(io,
-                    "-------------------------------------------------------------\n")
-            @printf(io, "simtime =  %.16e\n", ODESolvers.gettime(lsrk))
-            @printf(io, "runtime =  %03d:%02d:%05.2f (hour:min:sec)\n", hrs, min, sec)
-            @printf(io, "||Q_t||infty, ||Q_l||infty  =  %.16e; %.16e\n", maximum(Q[:, 6, :]), maximum(Q[:, 7, :]))
-        end
-        nothing
-    end
+Q = MPIStateArray(spacedisc, initialcondition)
 
-    step = [0]
-    mkpath("vtk_dycoms")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
-        outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
+# Determine the time step
+(dt == nothing) && (dt = VanillaAtmosDiscretizations.estimatedt(spacedisc, Q))
+if exact_timeend
+    nsteps = ceil(Int64, timeend / dt)
+    dt = timeend / nsteps
+end
+
+# Initialize the Method (extra needed buffers created here)
+# Could also add an init here for instance if the ODE solver has some
+# state and reading from a restart file
+
+# TODO: Should we use get property to get the rhs function?
+lsrk = LowStorageRungeKutta(getrhsfunction(spacedisc), Q; dt = dt, t0 = 0)
+
+# Get the initial energy
+io = MPI.Comm_rank(mpicomm) == 0 ? stdout : open("/dev/null", "w")
+eng0 = norm(Q)
+@printf(io, "||Q||₂ (initial) =  %.16e\n", eng0)
+
+# Set up the information callback
+timer = [time_ns()]
+cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
+    if s
+        timer[1] = time_ns()
+    else
+        run_time = (time_ns() - timer[1]) * 1e-9
+        (min, sec) = fldmod(run_time, 60)
+        (hrs, min) = fldmod(min, 60)
         @printf(io,
                 "-------------------------------------------------------------\n")
-        @printf(io, "doing VTK output =  %s\n", outprefix)
-        VanillaAtmosDiscretizations.writevtk(outprefix, Q, spacedisc)
-        step[1] += 1
-        nothing
+        @printf(io, "simtime =  %.16e\n", ODESolvers.gettime(lsrk))
+        @printf(io, "runtime =  %03d:%02d:%05.2f (hour:min:sec)\n", hrs, min, sec)
+        @printf(io, "||Q_t||infty, ||Q_l||infty  =  %.16e; %.16e\n", maximum(Q[:, 6, :]), maximum(Q[:, 7, :]))
     end
+    nothing
+end
 
-    solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+step = [0]
+mkpath("vtk_dycoms")
+cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
+    outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
+    @printf(io,
+            "-------------------------------------------------------------\n")
+    @printf(io, "doing VTK output =  %s\n", outprefix)
+    VanillaAtmosDiscretizations.writevtk(outprefix, Q, spacedisc)
+    step[1] += 1
+    nothing
+end
 
-    # Print some end of the simulation information
-    engf = norm(Q)
-    @printf(io, "-------------------------------------------------------------\n")
-    @printf(io, "||Q||₂ ( final ) =  %.16e\n", engf)
-    @printf(io, "||Q||₂ (initial) / ||Q||₂ ( final ) = %+.16e\n", engf / eng0)
-    @printf(io, "||Q||₂ ( final ) - ||Q||₂ (initial) = %+.16e\n", eng0 - engf)
+solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+
+# Print some end of the simulation information
+engf = norm(Q)
+@printf(io, "-------------------------------------------------------------\n")
+@printf(io, "||Q||₂ ( final ) =  %.16e\n", engf)
+@printf(io, "||Q||₂ (initial) / ||Q||₂ ( final ) = %+.16e\n", engf / eng0)
+@printf(io, "||Q||₂ ( final ) - ||Q||₂ (initial) = %+.16e\n", eng0 - engf)
 end
 
 let
@@ -366,11 +403,11 @@ let
 
     Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
     mpicomm    = MPI.COMM_WORLD
-        
+    
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (1, 2, 1)
+    Ne        = (1, 3, 1)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0
@@ -384,8 +421,13 @@ let
     
     DFloat = Float64
     for ArrayType in (Array,)
-        brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
-                      range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        brickrange = (range(DFloat(0); length=Ne[1]+1, stop=1),
+                      range(DFloat(0); length=Ne[2]+1, stop=1))
+
+
+        #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
+        #              range(DFloat(zmin_domain); length=Ne[2]+1, stop=zmax_domain))
+        
         #brickrange = (range(DFloat(xmin_domain); length=Ne[1]+1, stop=xmax_domain),
         #              range(DFloat(ymin_domain); length=Ne[2]+1, stop=ymax_domain),
         #              range(DFloat(zmin_domain); length=Ne[3]+1, stop=zmax_domain))

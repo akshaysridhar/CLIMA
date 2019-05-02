@@ -504,17 +504,15 @@ end
 # }}}
 
 function rad_rhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                    Q, vgeo, sgeo, gravity, viscosity, D,
+                    Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
                     elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
   
   DFloat = eltype(Q)
   nvar   = _nstate + nmoist + ntrace
 
-  Nq = N + 1
-  nelem = size(Q)[end]
-  Q    = reshape(Q, Nq, Nq, nvar, nelem)
-  vgeo = reshape(vgeo, Nq, Nq, _nvgeo, nelem)
-  testarray = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, elemtoelem, elems) 
+  Nq        = N + 1
+  nelem     = size(Q)[end]
+  testarray = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems) 
 
 end
 

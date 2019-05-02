@@ -347,7 +347,7 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
 
 
   rad_rhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), Q.Q, 
-           vgeo, sgeo, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.radiation)
+           vgeo, sgeo, vmapM, vmapP, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.radiation)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
              vgeo, gravity, viscosity, Dmat, topology.realelems, disc.sponge)
