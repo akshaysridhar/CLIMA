@@ -258,7 +258,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(false,false))
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,true))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -275,11 +275,11 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                                     cns_flux!, 
                                                     wavespeed,
                                                     preflux),
-                           numerical_boundary_flux! = (x...) -> 
-                           NumericalFluxes.rusanov_boundary_flux!(x...,
-                                                    cns_flux!,
-                                                    wavespeed,
-                                                    preflux),
+                           #numerical_boundary_flux! = (x...) -> 
+                           #NumericalFluxes.rusanov_boundary_flux!(x...,
+                           #                         cns_flux!,
+                           #                         wavespeed,
+                           #                         preflux),
                            number_gradient_states = _ngradstates,
                            states_for_gradient_transform =
                             _states_for_gradient_transform,
