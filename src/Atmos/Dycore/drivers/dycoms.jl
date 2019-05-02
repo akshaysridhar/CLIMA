@@ -161,7 +161,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         F_1  = 22.0
         κ    = 85.0
         D_ls = 3.75e-6
-        y_i  = 840
+        y_i  = 840.0
         α_z  = 1
         ρ_i  = 1.13
       
@@ -261,18 +261,22 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
 
                     if (y >= y_i)
                         
-                        Q_int0 +=  sMJ * κ * ρ# * q_m[2]
+                        Q_int0 +=  sMJ * κ * ρ * q_m[2]
                     else
-                        Q_int1 +=  sMJ * κ * ρ# * q_m[2]
+                        Q_int1 +=  sMJ * κ * ρ * q_m[2]
                     end
 
                     #
                     # integrate along column radiation
                     #
                     deltay3 = cbrt(y - y_i)
+
                     F_rad = F_0 * exp(-Q_int0) +
-                            F_1 * exp(-Q_int1) +
-                            ρ_i * cp * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+                            F_1 * exp(-Q_int1)
+                    if(deltay3 != 0)
+                        F_rad += ρ_i * cp * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+                        #@show(deltay3^4, F_rad)
+                    end
                     
                     
                     #if(F_rad != 70)
