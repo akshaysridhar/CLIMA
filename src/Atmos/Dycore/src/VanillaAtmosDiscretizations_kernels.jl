@@ -502,9 +502,9 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   end
 end
 # }}}
-
+#=
 function rad_rhs(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                  F_rad::Array, Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
+                  F_rad, Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
                   elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
     
     DFloat = eltype(Q)
@@ -521,12 +521,13 @@ function rad_rhs(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
     
     return F_rad
 end
+=#
 
 # {{{ Volume RHS for 2-D
 function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                    rhs::Array, Q, grad, vgeo, gravity, viscosity, D,
-                    elems, sponge) where {N, nmoist, ntrace}
-
+                    rhs::Array, Q, grad, vgeo, sgeo,  vmapM, vmapP, gravity, viscosity, D,
+                    elems,  elemtoelem, sponge, radiation) where {N, nmoist, ntrace}
+    
   DFloat = eltype(Q)
   nvar   = _nstate + nmoist + ntrace
   ngrad  = _nstategrad + 3nmoist
@@ -676,7 +677,12 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       rhs[i, j, _U, e] -= beta * U
       rhs[i, j, _V, e] -= beta * V
 
-      # integrate along column radiation 
+      # integrate along column radiation
+        radiation_value = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
+        if(radiation_value != 70)
+            @show(radiation_value)
+        end
+        
       #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]
 
       # Store velocity

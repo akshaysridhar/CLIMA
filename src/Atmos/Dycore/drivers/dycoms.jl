@@ -128,7 +128,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
                          brickrange,
-                         periodicity=(false, false))
+                         periodicity=(true, false))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             # Compute floating point type
@@ -258,12 +258,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     q_m[3]       = q_ice
                     (R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
                   
-                    if ( abs(q_m[1] - 8.0e-3) <= 1e-8 )
+                    if ( q_m[1] >= 0.008 )
                         y_i = y
                     else
                         y_i = 840.0
                     end
-                    
+                        
                     if (y >= y_i)
                         Q_int0 +=  sMJ*ρ*q_liq*κ
                         deltay = y - y_i
@@ -276,11 +276,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     # integrate along column radiation
                     #
                     cpm = cp
-                    F_rad = F_0 * exp(-Q_int0) +
-                            F_1 * exp(-Q_int1) +
-                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
 
-                    Q[vidM, _rad, e] = F_rad #For plotting only
+                    F_rad = F_0 * exp(-Q_int0) #+
+#                            F_1 * exp(-Q_int1) #+
+#                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
+                                       
+                    #Q[vidM, _rad, e] = F_rad #For plotting only
                 end
             end           
         end

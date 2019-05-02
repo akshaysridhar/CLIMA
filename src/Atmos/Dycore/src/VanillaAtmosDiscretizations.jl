@@ -346,13 +346,13 @@ function rhs!(dQ::MPIStateArray{S, T}, Q::MPIStateArray{S, T}, t::T,
   MPIStateArrays.start_ghost_exchange!(grad)
 
   #Build and store pointwise radiation:
-  (_, _, nelem) = size(Q)
-  F_rad = Array{DFloat}(undef, N+1, N+1, nelem)
-  rad_rhs(Val(dim), Val(N), Val(nmoist), Val(ntrace), F_rad, Q.Q, 
-           vgeo, sgeo, vmapM, vmapP, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.radiation)
+  #(_, _, nelem) = size(Q)
+  #F_rad = Array{DFloat}(undef, N+1, N+1, nelem)
+  #rad_rhs(Val(dim), Val(N), Val(nmoist), Val(ntrace), F_rad, Q.Q, 
+  #         vgeo, sgeo, vmapM, vmapP, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.radiation)
 
   volumerhs!(Val(dim), Val(N), Val(nmoist), Val(ntrace), dQ.Q, Q.Q, grad.Q,
-             vgeo, gravity, viscosity, Dmat, topology.realelems, disc.sponge)
+             vgeo, sgeo, vmapM, vmapP, gravity, viscosity, Dmat, topology.realelems, topology.elemtoelem, disc.sponge, disc.radiation)
   
   MPIStateArrays.finish_ghost_exchange!(grad)
 
