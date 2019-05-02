@@ -384,7 +384,7 @@ cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
                 "-------------------------------------------------------------\n")
         @printf(io, "simtime =  %.16e\n", ODESolvers.gettime(lsrk))
         @printf(io, "runtime =  %03d:%02d:%05.2f (hour:min:sec)\n", hrs, min, sec)
-        @printf(io, "||Q_t||infty, ||Q_l||infty  =  %.16e; %.16e\n", maximum(Q[:, 6, :]), maximum(Q[:, 7, :]))
+        @printf(io, "||Q_t||infty, ||Q_l||infty  =  %.16e; %.16e\n", maximum(Q[:, _nstate+1, :]), maximum(Q[:, _nstate+2, :]))
     end
     nothing
 end
