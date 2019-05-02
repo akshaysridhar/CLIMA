@@ -143,7 +143,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
       radiation_rhs = similar(Q) # OUTPUT array
 
       Nq = N + 1
-      nvgeo = length(vgeo[2]) 
+      nvgeo = size(vgeo,2)
+      nelem = size(Q)[end]
       vgeo = reshape(vgeo, Nq, Nq, nvgeo, nelem)
       q_m = zeros(DFloat, max(3, nmoist))
       
