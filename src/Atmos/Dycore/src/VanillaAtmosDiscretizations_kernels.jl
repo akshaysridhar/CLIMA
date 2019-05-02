@@ -503,115 +503,19 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 end
 # }}}
 
-function netest(::Val{Ne_x}) where {Ne_x}
-  @show(Ne_x)
-end
-
-function radiation!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                    Q,vgeo, elemtoelem, ::Val{Ne_x}) where {N, nmoist, ntrace, Ne_x}
-
+function rad_rhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
+                    Q, vgeo, sgeo, gravity, viscosity, D,
+                    elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
+  
   DFloat = eltype(Q)
-  N_horizontal_elems = Ne[1]
   nvar   = _nstate + nmoist + ntrace
-  ngrad  = _nstategrad + 3nmoist
-  dim    = 2
+
   Nq = N + 1
-  nface = 2*dim
-  f = 1
-  Np = (Nq)^dim
-  Nfp = (Nq)^(dim-1)
   nelem = size(Q)[end]
   Q    = reshape(Q, Nq, Nq, nvar, nelem)
-  radiation_rhs = similar(Q)
   vgeo = reshape(vgeo, Nq, Nq, _nvgeo, nelem)
-  q_m = zeros(DFloat, max(3, nmoist))
+  testarray = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, elemtoelem, elems) 
 
-  # 1D integration
-  # convert to integration function FIXME
-  @inbounds for e in elems
-    for j = 1:Nq, i = 1:Nq
-      MJ     = vgeo[i, j, _MJ, e]
-      ξx, ξy = vgeo[i,j,_ξx,e], vgeo[i,j,_ξy,e]
-      ηx, ηy = vgeo[i,j,_ηx,e], vgeo[i,j,_ηy,e]
-      y      = vgeo[i,j,_y,e]
-      U, V = Q[i, j, _U, e], Q[i, j, _V, e]
-      ρ, E = Q[i, j, _ρ, e], Q[i, j, _E, e]
-      E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
-      T            = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      q_liq, q_ice = phase_partitioning_eq(T,       ρ, q_m[1])
-      q_m[2]       = q_liq
-      q_m[3]       = q_ice
-      Q_int = 0 
-      ibot = 0 
-      botelems = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
-      if (e == elemtoelem[3,e])
-         ibot += 1
-         botelems[ibot] = e
-      end
-      vcol = 0 
-      Ne_vert = Int64(length(elems) / N_horizontal_elems)
-      vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
-      ibot = 0 
-      
-      @inbounds for ebot in botelems
-        ibot += 1
-        # Assuming non-periodic conditions for the top, bottom
-        # We use the list of bottom elements to then find the 
-        # elements `stacked` vertically
-        local_e = ebot
-        elemind = 1 
-        vert_col[ibot, elemind] = ebot
-        while (local_e != elemtoelem[4,local_e] ) 
-          elemind += 1
-          vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-          @show(ibot, elemind)
-          local_e = elemtoelem[4, local_e]
-        end
-      end
-  
-      # DYCOMS Constants
-      F0 = 70
-      F1 = 22
-      κ = 85
-      D = 3.75e-6
-      z_i = 840
-      α_z = 1
-      ρ = 1.13
-      
-      @inbounds for ibot in botelems
-        elem_list = vert_col[ibot,:]
-        Q_int = 0
-        # Note that this assumes a structured grid 
-        # Parallel sides (vertical / horizontal) so that the surface metrics can 
-        # be assumed constant across all element nodes
-         @inbounds for e in elem_list
-          faceid = elemtoelem[4,e]
-            for n = 1:Nfp
-              sMJ = sgeo[_sMJ, n, f, e]
-              idM = vmapM[n, f, e]
-              vidM = ((idM - 1) % Np) + 1 
-              y = vgeo[vidM, _y, e]
-              if y <= y_i 
-                r_l = 0.0009
-                ρ = 1.22
-              else
-                r_l = 0.0015
-                ρ = 1.13
-              end
-              Q +=  sMJ * ρ * r_l * κ
-            end
-            @show(Q)
-         end
-      end 
-
-      # integrate along column radiation 
-      F_rad =   F_0 * exp(-Q_int0) 
-      		    + F_1 * exp(-Q_int1)
-              + ρ_i * cp_m * D_ls * α_z * ((y - y_i)^(4/3) / 4 + y_i*(y-y_i)^(1/3))
-
-      radiation_rhs[i,j,_E,e] += F_rad
-    end
-  end
 end
 
 # {{{ Volume RHS for 2-D
