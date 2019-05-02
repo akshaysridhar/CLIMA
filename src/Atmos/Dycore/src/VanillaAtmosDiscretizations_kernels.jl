@@ -537,6 +537,9 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
   nelem = size(Q)[end]
 
+  Qaux = similar(Q)
+  Qaux .= Q
+    
   Q    = reshape(Q, Nq, Nq, nvar, nelem)
   grad = reshape(grad, Nq, Nq, ngrad, nelem)
   rhs  = reshape(rhs, Nq, Nq, nvar, nelem)
@@ -678,7 +681,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       rhs[i, j, _V, e] -= beta * V
 
       # integrate along column radiation
-        radiation_value = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
+        radiation_value = radiation(dim, N, nmoist, ntrace, Qaux, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
 
         
       #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]

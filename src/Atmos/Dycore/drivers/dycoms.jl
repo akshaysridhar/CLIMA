@@ -1,6 +1,5 @@
 using MPI
 
-
 using CLIMA.Topologies
 using CLIMA.Grids
 using CLIMA.AtmosDycore.VanillaAtmosDiscretizations
@@ -18,6 +17,7 @@ using Printf
 using CLIMA.ParametersType
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
+import Canary
 
 const _nstate = 6
 const _ρ, _U, _V, _W, _E, _rad = 1:_nstate
@@ -218,15 +218,14 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 local_e = elemtoelem[4, local_e]
             end
         end
-       
+        
         #
         # Integrate column-wise
         #
         @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
-            Q_int0         = 0.0
-            Q_int1         = 0.0
-            #
+            Q_int0, Q_int1 = 0.0, 0.0
+            
             # WARNING: this assumes a structured grid 
             # Parallel sides (vertical / horizontal) so that the surface metrics can 
             # be assumed constant across all element nodes
@@ -238,15 +237,19 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     sMJ  = sgeo[_sMJ, n, f, e]
                     idM  = vmapM[n, f, e]
                     vidM = ((idM - 1) % Np) + 1 
-
-                    y     = vgeo[vidM, _y, e]
-                    U, V  = Q[vidM, _U, e], Q[vidM, _V, e]
-                    ρ, E  = Q[vidM, _ρ, e], Q[vidM, _E, e]
+                    
+                    y = vgeo[vidM, _y, e]
+                    ρ = Q[vidM, _ρ, e]
+                    U = Q[vidM, _U, e]
+                    V = Q[vidM, _V, e]
+                    E = Q[vidM, _E, e]
+                    #@show( ρ)
                     E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
                     
                     for m = 1:nmoist
                         s = _nstate + m 
                         q_m[m] = Q[vidM, s, e] / ρ
+                       
                     end
                     (R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
                     
@@ -255,12 +258,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     else
                         y_i = 840.0
                     end
-                        
+                    
                     if (y >= y_i)
-                        Q_int0 +=  sMJ*ρ*q_m[2]*κ
+                        Q_int0 +=  sMJ * κ * ρ * q_m[2]
                         deltay = y - y_i
                     else
-                        Q_int1 +=  sMJ*ρ*q_m[2]*κ
+                        Q_int1 +=  sMJ * κ * ρ * q_m[2]
                         deltay = 0
                     end
 
@@ -270,18 +273,20 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     cpm = cp
 
                     F_rad = F_0 * exp(-Q_int0) #+
-#                            F_1 * exp(-Q_int1) #+
-#                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
+                    #                            F_1 * exp(-Q_int1) #+
+                    #                            ρ_i * cpm * D_ls * α_z * ((deltay)^(4/3)/4 + y_i*(deltay)^(1/3))
 
                     
-                    if(F_rad != 70)
-                        @show(F_rad, Q_int0)
-                    end
+                    #if(F_rad != 70)
+                      @show(F_rad, Q_int0)
+                    #end
                     #Q[vidM, _rad, e] = F_rad #For plotting only
+
                 end
-            end           
+            end            
+        @show(Q_int0)
         end
-        return F_rad
+        return 0.0
     end
 
 
@@ -388,7 +393,7 @@ end
 
 step = [0]
 mkpath("vtk_dycoms")
-cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+cbvtk = GenericCallbacks.EveryXSimulationSteps(1) do (init=false)
     outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
     @printf(io,
             "-------------------------------------------------------------\n")
