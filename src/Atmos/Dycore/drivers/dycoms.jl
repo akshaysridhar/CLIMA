@@ -259,8 +259,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         y_i = 840.0
                     #end
 
-                    if (y >= y_i)
-                        
+                    if (y >= y_i)                      
                         Q_int0 +=  sMJ * κ * ρ * q_m[2]
                     else
                         Q_int1 +=  sMJ * κ * ρ * q_m[2]
@@ -285,10 +284,9 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     #Q[vidM, _rad, e] = F_rad #For plotting only
 
                 end
-            end            
-        #@show(Q_int0)
+            end
         end
-        return F_rad
+        return F_rad, deltay3, 
     end
 
 
