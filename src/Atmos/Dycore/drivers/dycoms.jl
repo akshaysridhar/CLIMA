@@ -147,130 +147,128 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
     # {{{
     # RADIATION 
     # }}}
-  function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, y)
-      DFloat        = eltype(Q)
-      radiation_rhs = similar(Q) # OUTPUT array
-      # Number of elements along bottom plane (required for 1D integration stencil)
-      N_horizontal_elems = length(brickrange[1]) - 1     
-      botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
-      # Radiation constants for Dycoms
-      F_0  = 70.0
-      F_1  = 22.0
-      κ    = 85.0
-      D_ls = 3.75e-6
-      y_i  = 840.0
-      α_z  = 1
-      ρ_i  = 1.13
-      Nq = N + 1        
-      if dim == 1
-          Np = (N+1)
-          Nfp = 1
-          nface = 2
-      elseif dim == 2
-          Np = (N+1) * (N+1)
-          Nfp = (N+1)
-          nface = 4
-      elseif dim == 3
-          Np = (N+1) * (N+1) * (N+1)
-          Nfp = (N+1) * (N+1)
-          nface = 6
-      end
-     
-      #nvgeo = size(vgeo,2)
-      f        = 1
-     
-      nelem    = size(Q)[end]
-      F_rad    = zeros(N, nelem)
-      q_m      = zeros(DFloat, max(3, nmoist))               
-      Ne_vert  = Int64(length(elems) / N_horizontal_elems)
-      vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
+    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, y)
+        DFloat        = eltype(Q)
+        radiation_rhs = similar(Q) # OUTPUT array
+        # Number of elements along bottom plane (required for 1D integration stencil)
+        N_horizontal_elems = length(brickrange[1]) - 1     
+        botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        # Radiation constants for Dycoms
+        F_0  = 70.0
+        F_1  = 22.0
+        κ    = 85.0
+        D_ls = 3.75e-6
+        y_i  = 840.0
+        α_z  = 1
+        ρ_i  = 1.13
+        Nq = N + 1        
+        if dim == 1
+            Np = (N+1)
+            Nfp = 1
+            nface = 2
+        elseif dim == 2
+            Np = (N+1) * (N+1)
+            Nfp = (N+1)
+            nface = 4
+        elseif dim == 3
+            Np = (N+1) * (N+1) * (N+1)
+            Nfp = (N+1) * (N+1)
+            nface = 6
+        end
+        
+        #nvgeo = size(vgeo,2)
+        f        = 1
+        
+        nelem    = size(Q)[end]
+        F_rad    = zeros(N, nelem)
+        q_m      = zeros(DFloat, max(3, nmoist))               
+        Ne_vert  = Int64(length(elems) / N_horizontal_elems)
+        vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
 
-      ibot     = 0   
-      @inbounds for e in elems
-          #
-          # Extract bottom elements:
-          #
-          if (e == elemtoelem[3,e])
-              ibot += 1
-              botelems[ibot] = e
-          end
-      end
-      
-      # Extract element columns from the structured grid:
-      vcol     = 0     
-      ibot     = 0 
-      @inbounds for ebot in botelems
-          ibot += 1
-          # Assuming non-periodic conditions for the top, bottom
-          # We use the list of bottom elements to then find the 
-          # elements `stacked` vertically
-          local_e = ebot
-          elemind = 1 
-          vert_col[ibot, elemind] = ebot
-          while (local_e != elemtoelem[4,local_e] ) 
-              elemind += 1
-              vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-              local_e = elemtoelem[4, local_e]
-          end
-      end
-      # Integrate column-wise
+
+        #
+        # Extract bottom elements:
+        #
+        ibot     = 0
+        @inbounds for e in elems
+            if (e == elemtoelem[3,e])
+                ibot += 1
+                botelems[ibot] = e
+            end
+        end
+        #
+        # Extract element columns from the structured grid:
+        #
+        vcol     = 0     
+        ibot     = 0 
+        @inbounds for ebot in botelems
+            ibot += 1
+            # Assuming non-periodic conditions for the top, bottom
+            # We use the list of bottom elements to then find the 
+            # elements `stacked` vertically
+            local_e = ebot
+            elemind = 1 
+            vert_col[ibot, elemind] = ebot
+            while (local_e != elemtoelem[4,local_e] ) 
+                elemind += 1
+                vert_col[ibot, elemind] = elemtoelem[4,local_e] 
+                local_e = elemtoelem[4, local_e]
+            end
+        end
+        #
+        # Integrate column-wise
+        #
+        y_i = 840.0
         @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
-           
+            
             # WARNING: this assumes a structured grid 
             # Parallel sides (vertical / horizontal) so that the surface metrics can 
             # be assumed constant across all element nodes
             #
-            for icol = 1:N
+            Q_int = 0.0
+            @inbounds for e in vert_elem_list
+                faceid = elemtoelem[4,e]
                 
-                Q_int0, Q_int1 = 0.0, 0.0
-                @inbounds for e in vert_elem_list
-                    faceid = elemtoelem[4,e]
+                f = 1             
+                for n = 1:Nfp
+                    sMJ  = sgeo[_sMJ, n, f, e]
+                    idM  = vmapM[n, f, e]
+                    vidM = ((idM - 1) % Np) + 1 
+                    ρ    = Q[vidM, _ρ, e]
+                    U    = Q[vidM, _U, e]
+                    V    = Q[vidM, _V, e]
+                    E    = Q[vidM, _E, e]                        
+                    E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
+                    for m = 1:nmoist
+                        s = _nstate + m 
+                        q_m[m] = Q[vidM, s, e] / ρ
+                    end
+                    #(R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
+                    #if ( q_m[1] >= 0.008 )
+                    #    y_i = y
+                    #else
                     
-                    f = 1
-                    
-                    for n = 1:Nfp
-                        sMJ  = sgeo[_sMJ, n, f, e]
-                        idM  = vmapM[n, f, e]
-                        vidM = ((idM - 1) % Np) + 1 
-                        ρ    = Q[vidM, _ρ, e]
-                        U    = Q[vidM, _U, e]
-                        V    = Q[vidM, _V, e]
-                        E    = Q[vidM, _E, e]
-                        #@show( ρ)
-                        E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
-                        for m = 1:nmoist
-                            s = _nstate + m 
-                            q_m[m] = Q[vidM, s, e] / ρ
-                        end
-                        #(R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
-                        #if ( q_m[1] >= 0.008 )
-                        #    y_i = y
-                        #else
-                        y_i = 840.0
-                        #end
-                        Q_int0 +=  sMJ #* κ * ρ * q_m[2]
-                        #else
-                        #    Q_int1 +=  sMJ #* κ * ρ * q_m[2]
-                        #end
-                        # integrate along column radiation
-                        #F_rad = F_0 * exp(-Q_int0) +
-                        #        F_1 * exp(-Q_int1) 
-                        #if(F_rad != 70)
-                        #  @show(F_rad, Q_int0)
-                        #end
-                        #Q[vidM, _rad, e] = F_rad #For plotting only
-
-                    end                   
+                    #end
+                    #if( y <= y_i)
+                        Q_int +=  sMJ * κ * ρ * q_m[2]                      
+                    #end
                 end
-                @show(Q_int0)
+                if(y <= y_i)
+                    F_rad = F_1 * exp(-Q_int)
+                else
+                    F_rad = F_0 * exp(-Q_int)
+                end
             end
+            #@show(y, F_rad, F_1, Q_int, exp(-Q_int))
         end
 
-      #deltay3 = cbrt(y - y_i)
-      #F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3) 
-      #return F_rad
-  end
+#        deltay3 = cbrt(y - y_i)
+        #        F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+
+
+        return F_rad
+    end
 
 
 #{{{
