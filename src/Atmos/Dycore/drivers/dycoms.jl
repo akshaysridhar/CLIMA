@@ -216,23 +216,27 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
       # Integrate column-wise
         @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
-            Q_int0, Q_int1 = 0.0, 0.0
+           
             # WARNING: this assumes a structured grid 
             # Parallel sides (vertical / horizontal) so that the surface metrics can 
             # be assumed constant across all element nodes
             #
-            @inbounds for e in vert_elem_list
-                faceid = elemtoelem[4,e]
-                  for icol = 1:N
+            for icol = 1:N
+                
+                Q_int0, Q_int1 = 0.0, 0.0
+                @inbounds for e in vert_elem_list
+                    faceid = elemtoelem[4,e]
+                    
                     f = 1
+                    
                     for n = 1:Nfp
                         sMJ  = sgeo[_sMJ, n, f, e]
                         idM  = vmapM[n, f, e]
                         vidM = ((idM - 1) % Np) + 1 
-                        ρ =    Q[vidM, _ρ, e]
-                        U =    Q[vidM, _U, e]
-                        V =    Q[vidM, _V, e]
-                        E =    Q[vidM, _E, e]
+                        ρ    = Q[vidM, _ρ, e]
+                        U    = Q[vidM, _U, e]
+                        V    = Q[vidM, _V, e]
+                        E    = Q[vidM, _E, e]
                         #@show( ρ)
                         E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
                         for m = 1:nmoist
@@ -243,29 +247,29 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         #if ( q_m[1] >= 0.008 )
                         #    y_i = y
                         #else
-                            y_i = 840.0
+                        y_i = 840.0
                         #end
-                        if (y >= y_i)                      
-                            Q_int0 +=  sMJ * κ * ρ * q_m[2]
-                        else
-                            Q_int1 +=  sMJ * κ * ρ * q_m[2]
-                        end
+                        Q_int0 +=  sMJ #* κ * ρ * q_m[2]
+                        #else
+                        #    Q_int1 +=  sMJ #* κ * ρ * q_m[2]
+                        #end
                         # integrate along column radiation
-                        F_rad = F_0 * exp(-Q_int0) +
-                                F_1 * exp(-Q_int1) 
+                        #F_rad = F_0 * exp(-Q_int0) +
+                        #        F_1 * exp(-Q_int1) 
                         #if(F_rad != 70)
                         #  @show(F_rad, Q_int0)
                         #end
                         #Q[vidM, _rad, e] = F_rad #For plotting only
 
-                    end
-                 end
-              end
-          end
+                    end                   
+                end
+                @show(Q_int0)
+            end
+        end
 
-      deltay3 = cbrt(y - y_i)
-      F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3) 
-      return F_rad
+      #deltay3 = cbrt(y - y_i)
+      #F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3) 
+      #return F_rad
   end
 
 
