@@ -184,7 +184,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         q_m      = zeros(DFloat, max(3, nmoist))               
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
-
+        F_rad0,  F_rad1 = 0, 0
 
         #
         # Extract bottom elements:
@@ -218,6 +218,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         #
         # Integrate column-wise
         #
+        Q_int = 0
         y_i = 840.0
         @inbounds for ibot = 1:length(botelems)
             vert_elem_list = vert_col[ibot,:]
@@ -251,23 +252,28 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     
                     #end
                     #if( y <= y_i)
-                        Q_int +=  sMJ * κ * ρ * q_m[2]                      
+                        Q_int += sMJ * κ * ρ * q_m[2]                      
                     #end
                 end
-                if(y <= y_i)
-                    F_rad = F_1 * exp(-Q_int)
+             
+#=
+
+                if(y > y_i)
+                    F_rad1 = F_1 * exp(-Q_int)
                 else
-                    F_rad = F_0 * exp(-Q_int)
+                    F_rad0 = F_0 * exp(-Q_int)
                 end
+
+                F_rad = F_rad1 + F_rad0
+         =#       
             end
             #@show(y, F_rad, F_1, Q_int, exp(-Q_int))
         end
+        return Q_int
+        
+       # deltay3 = max(0, cbrt(y - y_i))
+       # F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
 
-#        deltay3 = cbrt(y - y_i)
-        #        F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
-
-
-        return F_rad
     end
 
 
