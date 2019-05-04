@@ -1,3 +1,4 @@
+# This file generates the solution used in method of manufactured solutions
 using LinearAlgebra, SymPy, Printf
 
 @syms x y z t real=true
