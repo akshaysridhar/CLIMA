@@ -48,8 +48,7 @@ function read_sounding()
 end
 
 function dycoms(x...;ntrace=0, nmoist=0, dim=3)
-    
-    
+
     DFloat 	    = eltype(x)
     p0::DFloat 	    = MSLP
     
@@ -101,13 +100,11 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     #Get q_liq from q_tot and T
 
     q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
-    q_liq = q_liq/3
     
     u, v, w       = 0*datau, 0*datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
-    
     
     # Calculation of energy per unit mass
     e_kin = (u^2 + v^2 + w^2) / 2  
@@ -115,7 +112,7 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     e_int = internal_energy(T, q_tot, q_liq, q_ice)
     # Total energy 
     E = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, ρ * q_liq, ρ * q_ice))
+    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, q_liq, q_ice)) 
 
 end
 
@@ -147,12 +144,11 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                                             # warp = warpgridfun
                                             )
 
-
-    
     # {{{
     # RADIATION 
     # }}}
-    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, y)
+    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, local_i, local_j, global_elem, y_coord)
+
         DFloat        = eltype(Q)
         radiation_rhs = similar(Q) # OUTPUT array
         # Number of elements along bottom plane (required for 1D integration stencil)
@@ -185,8 +181,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         f        = 1
         
         nelem    = size(Q)[end]
-        F_rad    = zeros(N, nelem)
-        q_m      = zeros(DFloat, max(3, nmoist))               
+        F_rad    = 0 #zeros(N, nelem)
+        qm_local = zeros(DFloat, max(3, nmoist))               
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
         F_rad0,  F_rad1 = 0, 0
@@ -195,10 +191,10 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         # Extract bottom elements:
         #
         ibot     = 0
-        @inbounds for e in elems
-            if (e == elemtoelem[3,e])
+        @inbounds for global_elem in elems
+            if (global_elem == elemtoelem[3,global_elem])
                 ibot += 1
-                botelems[ibot] = e
+                botelems[ibot] = global_elem
             end
         end
         #
@@ -220,68 +216,69 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 local_e = elemtoelem[4, local_e]
             end
         end
-        #
-        # Integrate column-wise
-        #
-        Q_int = 0
-        y_i = 840.0
-        @inbounds for ibot = 1:length(botelems)
-            vert_elem_list = vert_col[ibot,:]
-            
-            # WARNING: this assumes a structured grid 
-            # Parallel sides (vertical / horizontal) so that the surface metrics can 
-            # be assumed constant across all element nodes
-            #
-            Q_int = 0.0
-            @inbounds for e in vert_elem_list
-                faceid = elemtoelem[4,e]
-                
-                f = 1             
-                for n = 1:Nfp
-                    sMJ  = sgeo[_sMJ, n, f, e]
-                    idM  = vmapM[n, f, e]
-                    vidM = ((idM - 1) % Np) + 1 
-                    ρ    = Q[vidM, _ρ, e]
-                    U    = Q[vidM, _U, e]
-                    V    = Q[vidM, _V, e]
-                    E    = Q[vidM, _E, e]                        
-                    E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
-                    for m = 1:nmoist
-                        s = _nstate + m 
-                        q_m[m] = Q[vidM, s, e] / ρ
-                    end
-                    q_liq =  q_m[2]
-                    #(R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
-                    #if ( q_m[1] >= 0.008 )
-                    #    y_i = y
-                    #else
-                    
-                    #end
-                    #if( y <= y_i)
-                    Q_int += sMJ * κ * ρ * q_liq                     
-                    #end
-                end
-                
-                #=
-
-                if(y > y_i)
-                F_rad1 = F_1 * exp(-Q_int)
-                else
-                F_rad0 = F_0 * exp(-Q_int)
-                end
-
-                F_rad = F_rad1 + F_rad0
-                =#       
-            end
-            #@show(y, F_rad, F_1, Q_int, exp(-Q_int))
-        end
-        return Q_int
         
-        # deltay3 = max(0, cbrt(y - y_i))
-        # F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+        # Build equivalent column map to carry out DG integration
+        # 
+        @inbounds for ibot = 1:length(botelems)
+            current_stack = vert_col[ibot,:]
+            if global_elem in(current_stack) == true
+              ibot = current_stack[1]
+              break
+            end
+          end
+        
+        # Integrate column-wise
+        y_i = 840.0
+        
+      # @inbounds for ibot = 1:length(botelems)
+      vert_elem_list = vert_col[ibot,:]
+      # WARNING: this assumes a structured grid 
+      # Parallel sides (vertical / horizontal) so that the surface metrics can 
+      # be assumed constant across all element nodes
+      #
+      Q_int   = 0.0
+      counter = 0
+      coeff_rad = 0
+      Q02z   = 0
+      Qz2inf = 0
+      Q02inf = 0
+
+      @inbounds for global_elem in vert_elem_list
+          e = global_elem
+          faceid = elemtoelem[4,e]
+          f = 1
+          for n = 1:Nfp
+              counter += 1
+              # We need an index with the number of the vertical pt 
+              sMJ  = sgeo[_sMJ, n, f, e]
+              idM  = vmapM[n, f, e]
+              vidM = ((idM - 1) % Np) + 1
+              y_local = vgeo[vidM, _y, e] 
+              ρ_local = Q[vidM, _ρ, e]
+              for m = 1:nmoist
+                  s = _nstate + m 
+                  qm_local[m] = Q[vidM, s, e] / ρ_local
+              end
+              if( y_local <= y_coord)
+                Q02z += sMJ * κ * ρ_local * qm_local[2]
+              end
+              Q02inf += sMJ * κ * ρ_local * qm_local[2]
+              (y_coord - y_i) >=0 ? Δy_i = (y_coord - y_i) : Δy_i = 0 
+              coeff_rad =  ρ_i * α_z * D_ls * cp_d 
+              Qz2inf = Q02inf - Q02z
+              F_rad  = F_0 * exp(-Qz2inf) 
+                     + F_1 * exp(-Q02z)
+                     + coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
+          
+          end
+      end
+    
+      return F_rad
 
     end
-
+          # Cut off delta y if less than zero  (not explicitly in paper but 
+          # reproduces the profile in Stevens et al 2005)
+   # end
 
 
 
@@ -417,7 +414,7 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (5, 20)
+    Ne        = (1, 5)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0

@@ -539,7 +539,8 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
   Qaux = similar(Q)
   Qaux .= Q
-    
+  vgeo_aux = similar(vgeo)
+  vgeo_aux .= vgeo
   Q    = reshape(Q, Nq, Nq, nvar, nelem)
   grad = reshape(grad, Nq, Nq, ngrad, nelem)
   rhs  = reshape(rhs, Nq, Nq, nvar, nelem)
@@ -551,14 +552,12 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   l_v = Array{DFloat}(undef, Nq, Nq)
 
   q_m = zeros(DFloat, max(3, nmoist))
-Q_int = 0
+  Q_int = 0
   # 1D integration
   # convert to integration function FIXME
   @inbounds for e in elems
-
     delta  = Grids.compute_anisotropic_grid_factor(dim, Nq, vgeo, e)
     delta2 = delta*delta
-
     for j = 1:Nq, i = 1:Nq
       MJ     = vgeo[i, j, _MJ, e]
       ξx, ξy = vgeo[i,j,_ξx,e], vgeo[i,j,_ξy,e]
@@ -680,29 +679,19 @@ Q_int = 0
       rhs[i, j, _U, e] -= beta * U
       rhs[i, j, _V, e] -= beta * V
 
- F_0  = 70.0
-        F_1  = 22.0
-        κ    = 85.0
-        D_ls = 3.75e-6
-        y_i  = 840.0
-        α_z  = 1
-        ρ_i  = 1.13
-          F_rad1,   F_rad0,   F_rad2 = 0,0,0
-        # integrate along column radiation
-        Q_int = 0
-        Q_int = radiation(dim, N, nmoist, ntrace, Qaux, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, y)
-        y_i = 840
-        if(y <= y_i)
-            F_rad1 += F_1 * exp(-Q_int)
-        else
-            F_rad0 += F_0 * exp(-Q_int)
-        end
-        
-        deltay3 = max(0, cbrt(y - y_i))
-        F_rad2 =  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
 
-        Q[i, j, _rad, e] =+ F_rad1 + F_rad0 + F_rad2 #radiation_value
-        #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]
+      F_rad1,   F_rad0,   F_rad2 = 0,0,0
+      F_0  = 70.0
+      F_1  = 22.0
+      κ    = 85.0
+      D_ls = 3.75e-6
+      y_i  = 840.0
+      α_z  = 1
+      ρ_i  = 1.13
+      # integrate along column radiation
+      
+      Q[i, j, _rad, e] = radiation(dim, N, nmoist, ntrace, Qaux, vgeo_aux, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
+      #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]
 
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v
