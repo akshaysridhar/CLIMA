@@ -691,15 +691,15 @@ Q_int = 0
         # integrate along column radiation
         Q_int = 0
         Q_int = radiation(dim, N, nmoist, ntrace, Qaux, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, y)
-        #y_i = 840
-        #if(y <= y_i)
+        y_i = 840
+        if(y <= y_i)
             F_rad1 += F_1 * exp(-Q_int)
-        #else
+        else
             F_rad0 += F_0 * exp(-Q_int)
-        #end
+        end
         
-        #deltay3 = max(0, cbrt(y - y_i))
-        #F_rad2 =  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+        deltay3 = max(0, cbrt(y - y_i))
+        F_rad2 =  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
 
         Q[i, j, _rad, e] =+ F_rad1 + F_rad0 + F_rad2 #radiation_value
         #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]

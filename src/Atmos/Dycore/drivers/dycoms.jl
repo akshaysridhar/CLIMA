@@ -48,7 +48,8 @@ function read_sounding()
 end
 
 function dycoms(x...;ntrace=0, nmoist=0, dim=3)
-
+    
+    
     DFloat 	    = eltype(x)
     p0::DFloat 	    = MSLP
     
@@ -100,11 +101,13 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     #Get q_liq from q_tot and T
 
     q_liq, q_ice = phase_partitioning_eq(T, ρ, q_tot)
+    q_liq = q_liq/3
     
     u, v, w       = 0*datau, 0*datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
+    
     
     # Calculation of energy per unit mass
     e_kin = (u^2 + v^2 + w^2) / 2  
@@ -112,7 +115,7 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     e_int = internal_energy(T, q_tot, q_liq, q_ice)
     # Total energy 
     E = ρ * total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, q_liq, q_ice)) 
+    (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot, ρ * q_liq, ρ * q_ice))
 
 end
 
@@ -144,6 +147,8 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                                             # warp = warpgridfun
                                             )
 
+
+    
     # {{{
     # RADIATION 
     # }}}
@@ -245,6 +250,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         s = _nstate + m 
                         q_m[m] = Q[vidM, s, e] / ρ
                     end
+                    q_liq =  q_m[2]
                     #(R_gas, cp, cv, γ) = moist_gas_constants(q_m[1], q_m[2], q_m[3])
                     #if ( q_m[1] >= 0.008 )
                     #    y_i = y
@@ -252,29 +258,31 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                     
                     #end
                     #if( y <= y_i)
-                        Q_int += sMJ * κ * ρ * q_m[2]                      
+                    Q_int += sMJ * κ * ρ * q_liq                     
                     #end
                 end
-             
-#=
+                
+                #=
 
                 if(y > y_i)
-                    F_rad1 = F_1 * exp(-Q_int)
+                F_rad1 = F_1 * exp(-Q_int)
                 else
-                    F_rad0 = F_0 * exp(-Q_int)
+                F_rad0 = F_0 * exp(-Q_int)
                 end
 
                 F_rad = F_rad1 + F_rad0
-         =#       
+                =#       
             end
             #@show(y, F_rad, F_1, Q_int, exp(-Q_int))
         end
         return Q_int
         
-       # deltay3 = max(0, cbrt(y - y_i))
-       # F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
+        # deltay3 = max(0, cbrt(y - y_i))
+        # F_rad +=  + ρ_i * cp_d * D_ls * α_z * (0.25*deltay3^4 + y_i*deltay3)
 
     end
+
+
 
 
 #{{{
