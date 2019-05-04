@@ -243,6 +243,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 faceid = elemtoelem[4,e]
                 f = 1             
                 for n = 1:Nfp
+                    counter += 1
                     # We need an index with the number of the vertical pt 
                     sMJ  = sgeo[_sMJ, n, f, e]
                     idM  = vmapM[n, f, e]
@@ -254,7 +255,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                         s = _nstate + m 
                         qm_local[m] = Q[vidM, s, e] / ρ_local
                     end
-                    #(_,cp,_,_)=moist_gas_constants(qm_local[1], qm_local[2], qm_local[3])
+                    #(_,cp,_,_)=moist_gas_constants(qm_local[1], qm_local[2], qm_local[3])  
                     Q02inf += sMJ * κ * ρ_local * qm_local[2]
 
                     if( y_local <= y_coord)

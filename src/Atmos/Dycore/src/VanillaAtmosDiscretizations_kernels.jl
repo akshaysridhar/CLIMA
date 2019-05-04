@@ -688,7 +688,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       ρ_i  = 1.13
       # integrate along column radiation
       
-      Q[i, j, _rad, e] =+ radiation(dim, N, nmoist, ntrace, Qaux, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
+      Q[i, j, _rad, e] = radiation(dim, N, nmoist, ntrace, Qaux, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
       #rhs[i,j,_E,e] += radiation_rhs[i, j, _E, e]
 
       # Store velocity
