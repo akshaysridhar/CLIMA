@@ -181,7 +181,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         f        = 1
         
         nelem    = size(Q)[end]
-        F_rad    = zeros(N, nelem)
+        F_rad    = 0 #zeros(N, nelem)
         qm_local = zeros(DFloat, max(3, nmoist))               
         Ne_vert  = Int64(length(elems) / N_horizontal_elems)
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
@@ -191,10 +191,10 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         # Extract bottom elements:
         #
         ibot     = 0
-        @inbounds for e in elems
-            if (e == elemtoelem[3,e])
+        @inbounds for global_elem in elems
+            if (global_elem == elemtoelem[3,global_elem])
                 ibot += 1
-                botelems[ibot] = e
+                botelems[ibot] = global_elem
             end
         end
         #
@@ -218,68 +218,67 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         end
         
         # Build equivalent column map to carry out DG integration
-        #
-        
-        
+        # 
+        @inbounds for ibot = 1:length(botelems)
+            current_stack = vert_col[ibot,:]
+            if global_elem in(current_stack) == true
+              ibot = current_stack[1]
+              break
+            end
+          end
         
         # Integrate column-wise
-        Q_int = 0
         y_i = 840.0
+        
+      # @inbounds for ibot = 1:length(botelems)
+      vert_elem_list = vert_col[ibot,:]
+      # WARNING: this assumes a structured grid 
+      # Parallel sides (vertical / horizontal) so that the surface metrics can 
+      # be assumed constant across all element nodes
+      #
+      Q_int   = 0.0
+      counter = 0
+      coeff_rad = 0
+      Q02z   = 0
+      Qz2inf = 0
+      Q02inf = 0
 
-        @inbounds for ibot = 1:length(botelems)
-            vert_elem_list = vert_col[ibot,:]
-            # WARNING: this assumes a structured grid 
-            # Parallel sides (vertical / horizontal) so that the surface metrics can 
-            # be assumed constant across all element nodes
-            #
-            Q_int = 0.0
-            counter = 0
-
-            Q02z = 0
-            Qz2inf = 0
-            Q02inf = 0
-
-            @inbounds for e in vert_elem_list
-                faceid = elemtoelem[4,e]
-                f = 1             
-                for n = 1:Nfp
-                    counter += 1
-                    # We need an index with the number of the vertical pt 
-                    sMJ  = sgeo[_sMJ, n, f, e]
-                    idM  = vmapM[n, f, e]
-                    vidM = ((idM - 1) % Np) + 1
-                    y_local = vgeo[vidM, _y, e]
-                    ρ_local = Q[vidM, _ρ, e]
-
-                    for m = 1:nmoist
-                        s = _nstate + m 
-                        qm_local[m] = Q[vidM, s, e] / ρ_local
-                    end
-                    #(_,cp,_,_)=moist_gas_constants(qm_local[1], qm_local[2], qm_local[3])  
-                    Q02inf += sMJ * κ * ρ_local * qm_local[2]
-
-                    if( y_local <= y_coord)
-                      Q02z += sMJ * κ * ρ_local * qm_local[2]
-                    end
-
-                    Qz2inf = Q02inf - Q02z
-
-                    (y_local - y_i) >=0 ? Δy_i = (y_local - y_i) : Δy_i = 0 
+      @inbounds for global_elem in vert_elem_list
+          e = global_elem
+          faceid = elemtoelem[4,e]
+          f = 1
+          for n = 1:Nfp
+              counter += 1
+              # We need an index with the number of the vertical pt 
+              sMJ  = sgeo[_sMJ, n, f, e]
+              idM  = vmapM[n, f, e]
+              vidM = ((idM - 1) % Np) + 1
+              y_local = vgeo[vidM, _y, e] 
+              ρ_local = Q[vidM, _ρ, e]
+              for m = 1:nmoist
+                  s = _nstate + m 
+                  qm_local[m] = Q[vidM, s, e] / ρ_local
+              end
+              if( y_local <= y_coord)
+                Q02z += sMJ * κ * ρ_local * qm_local[2]
+              end
+              Q02inf += sMJ * κ * ρ_local * qm_local[2]
+              (y_coord - y_i) >=0 ? Δy_i = (y_coord - y_i) : Δy_i = 0 
+              coeff_rad =  ρ_i * α_z * D_ls * cp_d 
+              Qz2inf = Q02inf - Q02z
+              F_rad  = F_0 * exp(-Qz2inf) 
+                     + F_1 * exp(-Q02z)
+                     + coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
           
-                    F_rad = F_0 * exp(-Qz2inf) 
-                          + F_1 * exp(-Q02z)
-                          + ρ_i * α_z * D_ls * cp_d * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
-          
-
-                end
-             end
           end
-
-          # Cut off delta y if less than zero  (not explicitly in paper but 
-          # reproduces the profile in Stevens et al 2005)
-        return F_rad
+      end
+    
+      return F_rad
 
     end
+          # Cut off delta y if less than zero  (not explicitly in paper but 
+          # reproduces the profile in Stevens et al 2005)
+   # end
 
 
 
@@ -415,7 +414,7 @@ let
     viscosity = 75
     nmoist    = 3
     ntrace    = 0
-    Ne        = (5, 20)
+    Ne        = (1, 5)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0
