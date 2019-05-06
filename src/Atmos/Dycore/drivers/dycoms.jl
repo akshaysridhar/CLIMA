@@ -85,6 +85,7 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     datap          = spl_pinit(x[dim])
     dataq          = dataq * 1.0e-3
     
+    randnum   = rand(1)[1] / 100
     R_gas::DFloat   = gas_constant_air(dataq, 0.0, 0.0)
     c_p::DFloat     = cp_m(dataq,0.0,0.0)
     c_v::DFloat     = cv_m(dataq,0.0,0.0)
@@ -92,7 +93,7 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     gravity::DFloat = grav
 
     θ_liq = datat
-    q_tot = dataq
+    q_tot = dataq + randnum * dataq
     P     = datap
     T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, q_tot, 0.0, 0.0)
     ρ     = air_density(T, P, q_tot, 0.0, 0.0)
@@ -105,7 +106,6 @@ function dycoms(x...;ntrace=0, nmoist=0, dim=3)
     U      	  = ρ * u
     V      	  = ρ * v
     W      	  = ρ * w
-    
     # Calculation of energy per unit mass
     e_kin = (u^2 + v^2 + w^2) / 2  
     e_pot = gravity * x[dim]
@@ -154,6 +154,7 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         # Number of elements along bottom plane (required for 1D integration stencil)
         N_horizontal_elems = length(brickrange[1]) - 1     
         botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+        
         # Radiation constants for Dycoms
         F_0  = 70.0
         F_1  = 22.0
@@ -187,57 +188,54 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
         vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
         F_rad0,  F_rad1 = 0, 0
 
-        #
-        # Extract bottom elements:
-        #
-        ibot     = 0
-        @inbounds for global_elem in elems
-            if (global_elem == elemtoelem[3,global_elem])
-                ibot += 1
-                botelems[ibot] = global_elem
-            end
-        end
-        #
-        # Extract element columns from the structured grid:
-        #
-        vcol     = 0     
-        ibot     = 0 
-        @inbounds for ebot in botelems
-            ibot += 1
-            # Assuming non-periodic conditions for the top, bottom
-            # We use the list of bottom elements to then find the 
-            # elements `stacked` vertically
-            local_e = ebot
-            elemind = 1 
-            vert_col[ibot, elemind] = ebot
-            while (local_e != elemtoelem[4,local_e] ) 
-                elemind += 1
-                vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-                local_e = elemtoelem[4, local_e]
-            end
-        end
-        
-        # Build equivalent column map to carry out DG integration
-        # 
-        @inbounds for ibot = 1:length(botelems)
-            current_stack = vert_col[ibot,:]
-            if global_elem in(current_stack) == true
-              ibot = current_stack[1]
-              break
-            end
+      #
+      # Extract bottom elements:
+      # botelems is an array that contains the element numbers for all elements 
+      # that support the bottom boundary condition
+      ibot     = 0
+      @inbounds for global_elem in elems
+          if (global_elem == elemtoelem[3,global_elem])
+              ibot += 1
+              botelems[ibot] = global_elem
           end
+      end
+      #
+      # Extract element columns from the structured grid:
+      #
+      ibot     = 0 
+      @inbounds for ebot in botelems
+          ibot += 1
+          # Assuming non-periodic conditions for the top, bottom
+          # We use the list of bottom elements to then find the 
+          # elements `stacked` vertically
+          local_e = ebot
+          elemind = 1 
+          vert_col[ibot, elemind] = ebot
+          while (local_e != elemtoelem[4,local_e] ) 
+              elemind += 1
+              vert_col[ibot, elemind] = elemtoelem[4,local_e] 
+              local_e = elemtoelem[4, local_e]
+          end
+      end
         
-        # Integrate column-wise
-        y_i = 840.0
+      # Build equivalent column map to carry out DG integration
+      @inbounds for ibot = 1:length(botelems)
+          current_stack = vert_col[ibot,:]
+          if global_elem in(current_stack) == true
+            ibot = current_stack[1]
+            break
+          end
+      end
+        
+      # Integrate column-wise
+      y_i = 840.0
         
       # @inbounds for ibot = 1:length(botelems)
       vert_elem_list = vert_col[ibot,:]
       # WARNING: this assumes a structured grid 
       # Parallel sides (vertical / horizontal) so that the surface metrics can 
       # be assumed constant across all element nodes
-      #
       Q_int   = 0.0
-      counter = 0
       coeff_rad = 0
       Q02z   = 0
       Qz2inf = 0
@@ -248,7 +246,6 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
           faceid = elemtoelem[4,e]
           f = 1
           for n = 1:Nfp
-              counter += 1
               # We need an index with the number of the vertical pt 
               sMJ  = sgeo[_sMJ, n, f, e]
               idM  = vmapM[n, f, e]
@@ -263,20 +260,14 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                 Q02z += sMJ * κ * ρ_local * qm_local[2]
               end
               Q02inf += sMJ * κ * ρ_local * qm_local[2]
-              (y_coord - y_i) >=0 ? Δy_i = (y_coord - y_i) : Δy_i = 0 
               coeff_rad =  ρ_i * α_z * D_ls * cp_d 
               Qz2inf = Q02inf - Q02z
-              F_rad  = F_0 * exp(-Qz2inf) 
-                     + F_1 * exp(-Q02z)
-                     + coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
-          
           end
       end
-    
-      return F_rad
+      (y_coord - y_i) >=0 ? Δy_i = (y_coord - y_i) : Δy_i = 0 
+      return F_0 * exp(-Qz2inf) + F_1 * exp(-Q02z) + coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
 
     end
-          # Cut off delta y if less than zero  (not explicitly in paper but 
           # reproduces the profile in Stevens et al 2005)
    # end
 
@@ -367,7 +358,7 @@ eng0 = norm(Q)
 
 # Set up the information callback
 timer = [time_ns()]
-cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
+cbinfo = GenericCallbacks.EveryXWallTimeSeconds(100, mpicomm) do (s=false)
     if s
         timer[1] = time_ns()
     else
@@ -385,7 +376,7 @@ end
 
 step = [0]
 mkpath("vtk_dycoms")
-cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
     outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
     @printf(io,
             "-------------------------------------------------------------\n")
@@ -411,10 +402,10 @@ let
     Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
     mpicomm    = MPI.COMM_WORLD
     
-    viscosity = 75
+    viscosity = 100
     nmoist    = 3
     ntrace    = 0
-    Ne        = (1, 5)
+    Ne        = (20, 20)
     N         = 4
     Ne_x      = Ne[1]
     timeend   = 20000.0
