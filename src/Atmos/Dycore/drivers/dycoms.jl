@@ -122,8 +122,9 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
               exact_timeend=true) 
     
     dim = length(brickrange)
-
-    topl = BrickTopology(# MPI communicator to connect elements/partition
+    
+    # To facilitate parallelised columnwise operations we use the StackedBrickTopology
+    topl = StackedBrickTopology(# MPI communicator to connect elements/partition
                          mpicomm,
                          # tuple of point element edges in each dimension
                          # (dim is inferred from this)
@@ -144,13 +145,16 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                                             # warp = warpgridfun
                                             )
 
-    # {{{
-    # RADIATION 
-    # }}}
+
+    function stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, altitude, local_i, local_j, element_absolute, nmoist,ntrace)
+        DFloat = eltype(Q)
+        @show(size(vgeo), size(Q))
+        vgeo_stacked = reshape(Q, Nq, Nq, nvar, nelem_x, nelem_y)
+    end
+
     function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, local_i, local_j, global_elem, y_coord)
 
         DFloat        = eltype(Q)
-        radiation_rhs = similar(Q) # OUTPUT array
         # Number of elements along bottom plane (required for 1D integration stencil)
         N_horizontal_elems = length(brickrange[1]) - 1     
         botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
@@ -240,7 +244,12 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
       Q02z   = 0
       Qz2inf = 0
       Q02inf = 0
-
+      #=
+      @show(size(vgeo))
+      #vgeo_stacked = reshape(vgeo, Nq, Nq, 9, 2, 2)
+      @show(vert_col)
+      @show(size(Q))
+      =#
       @inbounds for global_elem in vert_elem_list
           e = global_elem
           faceid = elemtoelem[4,e]
@@ -327,9 +336,6 @@ spacedisc = VanillaAtmosDiscretization(grid,
                                        radiation=radiation
                                        )
 
-# This is a actual state/function that lives on the grid    
-#vgeo = grid.vgeo
-#initial_sounding       = interpolate_sounding(dim, N, Ne, vgeo, nmoist, ntrace)
 initialcondition(x...) = dycoms(x...;
                                 ntrace=ntrace,
                                 nmoist=nmoist,
@@ -376,7 +382,7 @@ end
 
 step = [0]
 mkpath("vtk_dycoms")
-cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
+cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
     outprefix = @sprintf("vtk_dycoms/RTB_%dD_mpirank%04d_step%04d", dim, MPI.Comm_rank(mpicomm), step[1])
     @printf(io,
             "-------------------------------------------------------------\n")
@@ -405,10 +411,10 @@ let
     viscosity = 100
     nmoist    = 3
     ntrace    = 0
-    Ne        = (20, 20)
-    N         = 4
+    Ne        = (2, 2)
+    N         = 3
     Ne_x      = Ne[1]
-    timeend   = 20000.0
+    timeend   = 0.02
     
     xmin_domain = -600.0
     xmax_domain =  600.0

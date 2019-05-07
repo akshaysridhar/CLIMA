@@ -502,26 +502,6 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
   end
 end
 # }}}
-#=
-function rad_rhs(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
-                  F_rad, Q, vgeo, sgeo, vmapM, vmapP, gravity, viscosity, D,
-                  elems, elemtoelem, radiation) where {dim, N, nmoist, ntrace}
-    
-    DFloat = eltype(Q)
-    nvar   = _nstate + nmoist + ntrace
-
-    Nq             = N + 1
-    nelem          = size(Q)[end]
-
-    for e = 1:nelem
-        for j = 1:Nq, i = 1:Nq
-            F_rad[i, j, e] = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems)
-        end
-    end
-    
-    return F_rad
-end
-=#
 
 # {{{ Volume RHS for 2-D
 function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
@@ -591,7 +571,7 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       
       for m = 1:nmoist
         s = _nstate+ m 
-	      Q[i,j,s,e] = ρ * q_m[m]
+	Q[i,j,s,e] = ρ * q_m[m]
       end
       
       ρx, ρy     = grad[i,j,_ρx,e], grad[i,j,_ρy,e]
@@ -689,7 +669,29 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       α_z  = 1
       ρ_i  = 1.13
       # integrate along column radiation
-      F_rad = radiation(dim, N, nmoist, ntrace, Qaux, vgeo_aux, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
+      
+      function stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, altitude, local_i, local_j, element_absolute, Ne, nmoist,ntrace)
+          DFloat = eltype(Q)
+          nelem = size(Q)[end]
+          # FIXME : Remove hardcoded numbers
+          nelem_x = Ne[1]
+          nelem_y = Ne[2]
+          vgeo_stacked = reshape(Q, Nq, Nq, nvar, nelem_x, nelem_y)
+          Q_stacked = reshape(Q,Nq, Nq, nvar, nelem_x, nelem_y)
+          J = zeros(Nq,nelem)
+          (ξ,ω) = Canary.lglpoints(DFloat, N)
+          D = spectralderivative(ξ)
+          
+          @inbounds for e = 1:nelem
+            ωJ[:,e] = D * y[:, e] .* ω
+          end
+
+          return 0  
+      end
+
+      F_rad = stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, y, i, j, e, nmoist,ntrace)
+
+      #F_rad = radiation(dim, N, nmoist, ntrace, Qaux, vgeo_aux, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
       Q[i, j, _rad, e] =  F_rad
       rhs[i,j,_E,e] += F_rad
 
