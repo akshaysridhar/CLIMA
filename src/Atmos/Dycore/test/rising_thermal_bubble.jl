@@ -24,16 +24,18 @@ function rising_thermal_bubble(x...; ntrace=0, nmoist=0, dim=3)
   c_p::DFloat     = cp_d
   c_v::DFloat     = cv_d
   gravity::DFloat = grav
-  q_tot::DFloat   = 0
+  q_tot::DFloat   = 0.00196
   
   r = sqrt((x[1] - 500)^2 + (x[dim] - 350)^2)
   rc::DFloat = 250
   θ_ref::DFloat = 300
   θ_c::DFloat = 0.5
   Δθ::DFloat = 0.0
+  
   if r <= rc
     Δθ = θ_c * (1 + cos(π * r / rc)) / 2
   end
+
   θ = θ_ref + Δθ
   π_k = 1 - gravity / (c_p * θ) * x[dim]
   ρ = p0 / (R_gas * θ) * (π_k)^ (c_v / R_gas)
@@ -43,12 +45,20 @@ function rising_thermal_bubble(x...; ntrace=0, nmoist=0, dim=3)
   U = ρ * u
   V = ρ * v
   W = ρ * w
+  
   P = p0 * (R_gas * (ρ * θ) / p0)^(c_p / c_v)
   T = P / (ρ * R_gas)
   # Calculation of energy per unit mass
   e_kin = (u^2 + v^2 + w^2) / 2  
   e_pot = gravity * x[dim]
-  e_int = MoistThermodynamics.internal_energy(T)
+  e_int = internal_energy(T)
+  
+  TS   = PhaseEquil(e_int, q_tot, ρ)
+  IES  = internal_energy(TS)
+  T_TS = air_temperature(TS) # Does this carry out the saturation adjustment operation  ? 
+  if T != T_TS
+    @show(T-T_TS)
+  end
   # Total energy 
   E = ρ * MoistThermodynamics.total_energy(e_kin, e_pot, T)
   (ρ=ρ, U=U, V=V, W=W, E=E, Qmoist=(ρ * q_tot,)) 

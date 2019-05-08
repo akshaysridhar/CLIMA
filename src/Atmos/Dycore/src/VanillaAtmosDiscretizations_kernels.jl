@@ -46,16 +46,17 @@ function volumegrad!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       U, V = Q[i, j, _U, e], Q[i, j, _V, e]
       ρ, E = Q[i, j, _ρ, e], Q[i, j, _E, e]
       y = vgeo[i,j,_y,e]
-      E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y  
+      E_int = E - (U^2 + V^2)/(2*ρ) - ρ * gravity * y
       # Get specific humidity quantities from state vector
       # per unit mass conversion required for sat_adjust only
       for m = 1:nmoist
           s = _nstate + m 
           q_m[m]  = Q[i, j, s, e] / ρ  
       end
+      # MoistThermodynamics now allows us to get the thermodynamic state
+      TS = PhaseEquil(E_int/ρ, q_m[1], ρ)
       # Saturation temperature to obtain temperature assuming thermodynamic equilibrium 
-      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      # TODO: Possibility of carrying q_liq and q_ice through state vector to include non-equilibrium thermodynamics (?)
+      T = air_temperature(TS)
       q = PhasePartition_equil(T, ρ, q_m[1])
       s_ρ[i, j] = ρ
       s_u[i, j] = U/ρ
@@ -189,14 +190,16 @@ function volumegrad!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
          q_m[m] = Q[i, j, k, s, e] / ρ
       end
       
-      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      # TODO: Possibility of carrying q_liq and q_ice through state vector to include non-equilibrium thermodynamics
+      TS = PhaseEquil(E_int/ρ, q_m[1], ρ)
+      # Saturation temperature to obtain temperature assuming thermodynamic equilibrium 
+      T = air_temperature(TS)
       q = PhasePartition_equil(T, ρ, q_m[1])
+      # TODO: Possibility of carrying q_liq and q_ice through state vector to include non-equilibrium thermodynamics
       s_ρ[i, j, k] = ρ
       s_u[i, j, k] = U/ρ
       s_v[i, j, k] = V/ρ
       s_w[i, j, k] = W/ρ
-      s_T[i, j, k] = air_temperature(E_int/ρ, q)
+      s_T[i, j, k] = air_temperature(TS)
     end
 
     for k = 1:Nq, j = 1:Nq, i = 1:Nq
@@ -376,11 +379,11 @@ function facegrad!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
            end
           
           E_intP = EP - (UP^2 + VP^2+ WP^2)/(2*ρP) - ρP * gravity * yorzP
-          
-          # Saturation Adjustment
-          TP = saturation_adjustment(E_intP/ρP, ρP, q_mP[1])
+          TSP = PhaseEquil(E_intP/ρP, ρP, q_mP[1])
+          TP = air_temperature(TSP)
           qP = PhasePartition_equil(TP, ρP, q_mP[1])
-          PP = air_pressure(TP, ρP, qP)
+          PP = air_pressure(TSP)
+          # Saturation Adjustment
           uP = UP/ρP
           vP = VP/ρP
           wP = WP/ρP
@@ -487,9 +490,10 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
      
       # Returns temperature after saturation adjustment 
       # Required for phase-partitioning to find q_liq, q_ice
-      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
+      TS = PhaseEquil(E_int/ρ, ρ, q_m[1])
+      T = air_temperature(TS)
       q = PhasePartition_equil(T, ρ, q_m[1])
-      P = air_pressure(T, ρ, q)
+      P = air_pressure(TS)
       
       ρx, ρy = grad[i,j,_ρx,e], grad[i,j,_ρy,e]
       ux, uy = grad[i,j,_ux,e], grad[i,j,_uy,e]
@@ -673,10 +677,10 @@ function volumerhs!(::Val{3}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       end
       # Calculate temperpature after saturation adjustment
       # Required for phase partitioning to get q_liq, q_ice
-      T = saturation_adjustment(E_int/ρ, ρ, q_m[1])
-      
+      TS = PhaseEquil(E_int/ρ, ρ, q_m[1])
+      T = air_temperature(TS)
       q = PhasePartition_equil(T, ρ, q_m[1])      
-      P = air_pressure(T, ρ, q)
+      P = air_pressure(TS)
       
       ρx, ρy, ρz = grad[i,j,k,_ρx,e], grad[i,j,k,_ρy,e], grad[i,j,k,_ρz,e]
       ux, uy, uz = grad[i,j,k,_ux,e], grad[i,j,k,_uy,e], grad[i,j,k,_uz,e]
@@ -933,9 +937,10 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
         E_intM = EM - (UM^2 + VM^2+ WM^2)/(2*ρM) - ρM * gravity * yorzM
 
         # get adjusted temperature and liquid and ice specific humidities
-        TM = saturation_adjustment(E_intM/ρM , ρM, q_mM[1])
+        TSM = PhaseEquil(E_intM/ρM, ρM, q_mM[1])
+        TM = air_temperature(TSM)
         qM = PhasePartition_equil(TM, ρM, q_mM[1])
-        PM = air_pressure(TM, ρM, qM)
+        PM = air_pressure(TSM)
         
         if bc == 0
           
@@ -952,10 +957,11 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
 
           yorzP = (dim == 2) ? vgeo[vidP, _y, eP] : vgeo[vidP, _z, eP]
           E_intP= EP - (UP^2 + VP^2+ WP^2)/(2*ρP) - ρP * gravity * yorzP
-        
-          TP = saturation_adjustment(E_intP/ρP, ρP, q_mP[1])
+          
+          TSP = PhaseEquil(E_intP/ρP, ρP, q_mP[1])
+          TP = air_temperature(TSP)
           qP = PhasePartition_equil(TP, ρP, q_mP[1])
-          PP = air_pressure(TP, ρP, qP)
+          PP = air_pressure(TSP)
 
           ρxP = grad[vidP, _ρx, eP]
           ρyP = grad[vidP, _ρy, eP]
@@ -972,7 +978,9 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
           TxP = grad[vidP, _Tx, eP]
           TyP = grad[vidP, _Ty, eP]
           TzP = grad[vidP, _Tz, eP]
+
         elseif bc == 1
+          
           UnM = nxM * UM + nyM * VM + nzM * WM
           UP = UM - 2 * UnM * nxM
           VP = VM - 2 * UnM * nyM
