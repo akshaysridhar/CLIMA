@@ -34,7 +34,7 @@ if !@isdefined integration_testing
 end
 
 const γ_exact = 7 // 5
-const μ_exact = 1 // 100
+const μ_exact = 10
 const xmin = 0
 const ymin = 0
 const xmax = 3000
@@ -63,7 +63,6 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q)...)
 @inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
     ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    
     # stress tensor
     τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
     τ12 = τ21 = VF[_τ12]
@@ -127,10 +126,12 @@ end
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
 
     ρM, UM, VM, WM, EM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E]
-    Un = nM[1] * U + nM[2] * V + nM[3] * W
-    UP = UM - nM[1]*Un
-    VP = VM - nM[2]*Un
-    WP = WM - nM[3]*Un
+    UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
+    UP = UM - 2 * nM[1] * UnM
+    VP = VM - 2 * nM[2] * UnM
+    WP = WM - 2 * nM[3] * UnM
+    ρP = ρM
+    EP = EM
   end
 end
 
