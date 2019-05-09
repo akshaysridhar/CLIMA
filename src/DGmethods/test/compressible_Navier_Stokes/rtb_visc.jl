@@ -120,21 +120,17 @@ end
   end
 end
 
-@inline function bcstate2D!(QP, VFP, auxP, QM, VFM, auxM, bctype, t, _...)
+# generic bc for 2d , 3d
+@inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM,
+                            vM, wM, ρMinv)
   @inbounds begin
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
-    initialcondition!(Val(2), QP, t, x, y, z)
-    VFP.=VFM
-    nothing
-  end
-end
 
-@inline function bcstate3D!(QP, VFP, auxP, QM, VFM, auxM, bctype, t, _...)
-  @inbounds begin
-    x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
-    initialcondition!(Val(3), QP, t, x, y, z)
-    VFP.=VFM
-    nothing
+    ρM, UM, VM, WM, EM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E]
+    Un = nM[1] * U + nM[2] * V + nM[3] * W
+    UP = UM - nM[1]*Un
+    VP = VM - nM[2]*Un
+    WP = WM - nM[3]*Un
   end
 end
 
@@ -182,8 +178,8 @@ end
   gravity::eltype(Q) = grav
   @inbounds begin
 
-    S[_U] += -sinpi()^4
-    S[_V] += -sinpi()^4
+    S[_U] += 0#-sinpi()^4
+    S[_V] += 0#-sinpi()^4
     S[_W] += 0
 
   end
@@ -272,14 +268,14 @@ end
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   ArrayType = Array
-  
+  # CuArray option 
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(false,false))
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,false))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -299,7 +295,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            numerical_boundary_flux! = (x...) -> 
                            NumericalFluxes.rusanov_boundary_flux!(x...,
                                                     cns_flux!,
-                                                    dim == 2 ? bcstate2D! : bcstate3D!,
+                                                    bcstate!,
                                                     wavespeed,
                                                     preflux),
                            number_gradient_states = _ngradstates,
@@ -402,7 +398,7 @@ let
     # User defined polynomial order 
     numelem = (10, 10, 1)
     dt = 1e-2
-    timeend = 100
+    timeend = 1
     polynomialorder = 5
     for DFloat in (Float64,) #Float32)
       for dim = 2:3
