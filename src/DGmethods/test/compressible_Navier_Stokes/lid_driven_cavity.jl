@@ -18,39 +18,32 @@ using Logging, Printf, Dates
 using Random
 
 
-# Define variable ID , γ_exact since we are using dry dynamics here 
-const _nstate = 3 # Defining a 2D problem with 3 states: mass and 2 momentum components
-const _nviscstates = 3
-const _ngradstates = 2
-const _ρ , _U, _V = 1:_nstate
+const _nstate = 4 # Defining a 2D problem with 3 states: mass and 2 momentum components
+const _nviscstates = 4
+const _ngradstates = 3
+const _ρ , _U, _V, _E = 1:_nstate
 const _states_for_gradient_transform = (_ρ, _U, _V)
-const stateid = (ρid = _ρ, Uid  = _U, Vid = _V)
-const statenames = ("ρ", "U", "V")
+
+const stateid = (ρid = _ρ, Uid  = _U, Vid = _V, Eid = _E)
+const statenames = ("ρ", "U", "V", "E")
 const γ_exact = 7 // 5
 const μ_exact = 2.5   # enhanced diffusivity 
+const _τ11, _τ22, _τ12 = 1:_nviscstates
 
-#= DISABLE INTEGRATION TESTING FOR DEBUG CASES 
-if !@isdefined integration_testing
-    const integration_testing =
-        parse(Bool, lowercase(get(ENV,"JULIA_CLIMA_INTEGRATION_TESTING","false")))
-    using Random
-end
-=# 
 
 # Need the pressure terms for fully compressible code in the solution of the lid-driven cavity problem
 @inline function preflux(Q, _...)
   γ::eltype(Q) = γ_exact
-  @inbounds ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
+  @inbounds ρ, U, V, E = Q[_ρ], Q[_U], Q[_V], Q[_E]
   ρinv = 1 / ρ
-  u, v, w = ρinv * U, ρinv * V, ρinv * W
-  ((γ-1)*(E - ρinv * (U^2 + V^2 + W^2) / 2), u, v, w, ρinv)
+  u, v = ρinv * U, ρinv * V
+  ((γ-1)*(E - ρinv * (U^2 + V^2) / 2), u, v, ρinv)
 end
 
-
 #{{{ physical flux function
-cnsflux!(F, Q, QV, aux, t) =
-cnsflux!(F, Q, QV, aux, t, preflux(Q)...)
-@inline function cnsflux!(F, Q, QV, aux, t, P, u, v, w, ρinv)
+cnsflux!(F, Q, VF, aux, t) =
+cnsflux!(F, Q, VF, aux, t, preflux(Q)...)
+@inline function cnsflux!(F, Q, VF, aux, t, P, u, v, ρinv)
   @inbounds begin
     # 2D viscous stress tensor
     τ11, τ22 = VF[_τ11], VF[_τ22]
@@ -72,15 +65,16 @@ end
     @inbounds begin
       ρ, U, V = Q[_ρ], Q[_U], Q[_V]
       ρinv = 1 / ρ
-      vel[1] = ρinv * U, vel[2] = ρinv * V 
+      vel[1] = ρinv * U
+      vel[2] = ρinv * V 
     end
 end
 #}}}
 
 #{{{ wavespeed for compressible flow: acoustic limitation
-@inline function wavespeed(n, Q, aux, t, P, u, v, w, ρinv)
+@inline function wavespeed(n, Q, aux, t, P, u, v, ρinv)
   γ::eltype(Q) = γ_exact
-  @inbounds abs(n[1] * u + n[2] * v + n[3] * w) + sqrt(ρinv * γ * P)
+  @inbounds abs(n[1] * u + n[2] * v) + sqrt(ρinv * γ * P)
 end
 #}}} wavespeed
 
@@ -98,7 +92,7 @@ end
   end
 end
 
-@inline function stresses_penalty!(vF, nM, velM, QM, aM, velP, QP, aP, t)
+@inline function stresses_penalty!(VF, nM, velM, QM, aM, velP, QP, aP, t)
   @inbounds begin
     n_Δvel = similar(VF, size(2,2))
     for j = 1:2, i = 1:2
@@ -110,6 +104,17 @@ end
 
 @inline stresses_boundary_penalty!(VF, _...) = VF.=0
 
+@inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, ρinv)
+  @inbounds begin
+    ρM, UM, VM,EM = QM[_ρ], QM[_U], QM[_V], QM[_E]
+    UnM = nM[1] * UM + nM[2] * VM  
+    UP = UM - 2 * nM[1] * UnM
+    VP = VM - 2 * nM[2] * UnM
+    ρP = ρM
+    EP = EM
+  end
+end
+
 # Domain parameters
 const xmax = 2π
 const ymax = 2π
@@ -119,8 +124,6 @@ function lid_driven_cavity!(Q, t, x, y, z)
     ρ = 1.22
     U = 0
     V = 0  
-    # This specifies the domain initial condition. 
-    # Note that the forcing comes from the non-zero velocity lid
 end
 
 
@@ -133,10 +136,10 @@ function main(mpicomm, DFloat, topl, N, timeend, ArrayType, dt)
                                             )
 
     #{{{ numerical fluxes
-    numflux!(x...)      =  NumericalFluxes.rusanov!(x..., advectionflux!, wavespeed,preflux)
-    numbcflux!(F, x...) =  F .= 0 # for the basic case, set boundary fluxes to zero 
-    # note that the top boundary needs to have a tangential non-zero velocity componenta
-
+    numflux!(x...)   = NumericalFluxes.rusanov!(x..., cnsflux!, wavespeed,preflux)
+    numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cnsflux!,
+                                                              bcstate!,
+                                                              wavespeed, preflux)
     spacedisc = DGBalanceLaw(grid = grid,
                              length_state_vector = _nstate,
                              flux! = cnsflux!,
@@ -144,7 +147,7 @@ function main(mpicomm, DFloat, topl, N, timeend, ArrayType, dt)
                              numerical_boundary_flux! = numbcflux!,
                              number_gradient_states = _ngradstates,
                              states_for_gradient_transform =
-                               _states_for_gradient_transform,
+                             _states_for_gradient_transform,
                              number_viscous_states = _nviscstates,
                              gradient_transform! = velocities!,
                              viscous_transform! = viscous_stresses!,
