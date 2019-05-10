@@ -37,8 +37,8 @@ const γ_exact = 7 // 5
 const μ_exact = 10
 const xmin = 0
 const ymin = 0
-const xmax = 3000
-const ymax = 3000
+const xmax = 1500
+const ymax = 1500
 const xc   = xmax / 2
 const yc   = ymax / 2
 
@@ -95,7 +95,19 @@ end
   end
 end
 
-# Visous flux
+const _nauxstate = 6
+const _a_x, _a_y, _a_z, _a_modSij, _a_θ, _a_θz = 1:_nauxstate
+@inline function auxiliary_state_initialization!(aux, x, y, z)
+  @inbounds begin
+    aux[_a_x] = x
+    aux[_a_y] = y
+    aux[_a_z] = z
+    aux[_a_modSij] = 0 
+    aux[_a_θ] = 0  # θ and dθ/dz is necessary 
+  end
+end
+
+# Viscous fluxes. Contains the strain rate tensor required for the smagorinsky calculations 
 @inline function compute_stresses!(VF, grad_vel, _...)
   μ::eltype(VF) = μ_exact
   @inbounds begin
@@ -109,6 +121,16 @@ end
     ϵ12 = (dudy + dvdx) / 2
     ϵ13 = (dudz + dwdx) / 2
     ϵ23 = (dvdz + dwdy) / 2
+
+    # --------------------------------------------
+    # SMAGORINSKY COEFFICIENT COMPONENTS
+    # --------------------------------------------
+    SijSij = (ϵ11 + ϵ22 + ϵ33
+              + 2.0 * ϵ12
+              + 2.0 * ϵ13 
+              + 2.0 * ϵ23) 
+    # mod strain rate ϵ ---------------------------
+
     # deviatoric stresses
     VF[_τ11] = 2μ * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ22] = 2μ * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
@@ -116,21 +138,24 @@ end
     VF[_τ12] = 2μ * ϵ12
     VF[_τ13] = 2μ * ϵ13
     VF[_τ23] = 2μ * ϵ23
+
   end
 end
 
 # generic bc for 2d , 3d
-@inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM,
-                            vM, wM, ρMinv)
+@inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, wM, ρinvM)
   @inbounds begin
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-    UP = UM - 2 * nM[1] * UnM
-    VP = VM - 2 * nM[2] * UnM
-    WP = WM - 2 * nM[3] * UnM
-    ρP = ρM
-    EP = EM
+    QP[_U] = UM - 2 * nM[1] * UnM
+    QP[_V] = VM - 2 * nM[2] * UnM
+    QP[_W] = WM - 2 * nM[3] * UnM
+    QP[_ρ] = ρM
+    QP[_E] = EM
+    auxM .= auxP
+    preflux(QP, auxP, t)
+    # Required return from this function is either nothing or preflux with plus state as arguments
   end
 end
 
@@ -149,7 +174,7 @@ end
 # --------------DEFINE SOURCES HERE -------------------------------#
 #  TODO: Make sure that the source values are not being over-written
 # ------------------------------------------------------------------
-@inline function source!(dim,S,Q,aux,t)
+@inline function source!(S,Q,aux,t)
   ```
   The function source! collects all the individual source terms 
   associated with a given problem. We do not define sources here, 
@@ -158,34 +183,44 @@ end
   by terms defined elsewhere
   ```
 
-  S[:] = 0
+  # Initialise the final block source term 
+  S .= 0
 
+  # Typically these sources are imported from modules
   @inbounds begin
-  #source_rayleigh_sponge!(S,Q,aux,t)
-  #source_squircle_sponge!(S,Q,aux,t)
-  source_geopot!(dim, S,Q,aux,t)
+  source_squircle_sponge!(S,Q,aux,t)
+  source_geopot!(S, Q, aux, t)
   #source_radiation!(S,Q,aux,t)
   #source_ls_subsidence!(S,Q,aux,t)
   end
 end
 
-@inline function source_rayleigh_sponge!(dim,S,Q,aux,t)
+@inline function source_squircle_sponge!(S,Q,aux,t)
   ```
   Rayleigh sponge function: Linear damping / relaxation to specified
   reference values. In the current implementation we relax velocities
   at the boundaries to a still atmosphere.
   ```
   gravity::eltype(Q) = grav
+  α = 0.5
+  U, V, W = Q[_U], Q[_V], Q[_W]
+  x, y, z = aux[_a_x], aux[_a_y], aux[_a_z]
+  rp = (x^4 + y^4 + z^4)^(1/4) 
+  rsponge = 0.90 * xmax # Sponge damper extent  
   @inbounds begin
-
-    S[_U] += 0#-sinpi()^4
-    S[_V] += 0#-sinpi()^4
-    S[_W] += 0
-
+    if rp > rsponge
+      S[_U] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * U
+      S[_V] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * V
+      S[_W] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * W
+    elseif rp > 2 * rsponge
+      S[_U] -= U
+      S[_V] -= V
+      S[_W] -= W
+    end
   end
 end
 
-@inline function source_geopot!(dim,S,Q,aux,t)
+@inline function source_geopot!(S,Q,aux,t)
   ```
   Geopotential source term. Gravity forcing applied to the vertical
   momentum equation
@@ -197,7 +232,7 @@ end
   end
 end
 
-@inline function source_ls_subsidence!(dim,S,Q,aux,t)
+@inline function source_ls_subsidence!(S,Q,aux,t)
   ```
   Large scale subsidence common to several atmospheric observational
   campaigns. In the absence of a GCM to drive the flow we may need to 
@@ -255,43 +290,26 @@ function initialcondition!(dim, Q, t, x, y, z, _...)
   @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
 end
 
-const _nauxstate = 3
-const _a_x, _a_y, _a_z = 1:_nauxstate
-@inline function auxiliary_state_initialization!(aux, x, y, z)
-  @inbounds begin
-    aux[_a_x] = x
-    aux[_a_y] = y
-    aux[_a_z] = z
-  end
-end
-
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   ArrayType = Array
-  # CuArray option 
+  # CuArray option (TODO merge new master)
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
+                range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)),
+                range(DFloat(xmin), length=Ne[3]+1, DFloat(xmax)))
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,false))
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(false,false,false))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
                                           DeviceArray = ArrayType,
-                                          polynomialorder = N,
-                                         )
+                                          polynomialorder = N)
   
-  numflux!(x...) = NumericalFluxes.rusanov!(x..., 
-                                            cns_flux!, 
-                                            wavespeed,
-                                            preflux)
-  numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., 
-                                                            cns_flux!,
-                                                            bcstate!,
-                                                            wavespeed, 
-                                                            preflux)
+  numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed, preflux)
+  numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed, preflux)
 
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
@@ -309,7 +327,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            viscous_boundary_penalty! = stresses_boundary_penalty!,
                            auxiliary_state_length = _nauxstate,
                            auxiliary_state_initialization! =
-                           auxiliary_state_initialization!)
+                           auxiliary_state_initialization!,
+                           source! = source!)
 
   # This is a actual state/function that lives on the grid
   initialcondition(Q, x...) = initialcondition!(Val(dim), Q, DFloat(0), x...)
@@ -341,7 +360,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   step = [0]
   mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
     outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
@@ -396,12 +415,12 @@ let
     # User defined timestep estimate
     # User defined simulation end time
     # User defined polynomial order 
-    numelem = (10, 10, 1)
+    numelem = (5,5,5)
     dt = 1e-2
-    timeend = 1
-    polynomialorder = 5
-    for DFloat in (Float64,) #Float32)
-      for dim = 2:3
+    timeend = 10
+    polynomialorder = 4
+    for DFloat in (Float32,) #Float32)
+      for dim = 3:3
         Random.seed!(0)
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                         DFloat, dt)
