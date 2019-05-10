@@ -49,6 +49,7 @@ const yc   = ymax / 2
   ρinv = 1 / ρ
   u, v, w = ρinv * U, ρinv * V, ρinv * W
   ((γ-1)*(E - ρinv * (U^2 + V^2 + W^2) / 2), u, v, w, ρinv)
+  # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
 
 # max eigenvalue
@@ -154,6 +155,7 @@ end
     QP[_ρ] = ρM
     QP[_E] = EM
     auxM .= auxP
+    # To calculate PP, uP, vP, wP, ρinvP we use the preflux function 
     preflux(QP, auxP, t)
     # Required return from this function is either nothing or preflux with plus state as arguments
   end
