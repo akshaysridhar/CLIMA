@@ -43,12 +43,18 @@ const xc   = xmax / 2
 const yc   = ymax / 2
 
 # preflux computation
-@inline function preflux(Q, _...)
+@inline function preflux(Q,VF, aux, _...)
   γ::eltype(Q) = γ_exact
+  gravity::eltype(Q) = grav
+  R_gas::eltype(Q) = R_d
   @inbounds ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
   ρinv = 1 / ρ
+  x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
   u, v, w = ρinv * U, ρinv * V, ρinv * W
-  ((γ-1)*(E - ρinv * (U^2 + V^2 + W^2) / 2), u, v, w, ρinv)
+  E_int = E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y
+  T = air_temperature(E_int/ρ)
+  P = ρ * R_gas * T # Test with dry atmosphere
+  (P, u, v, w, ρinv)
   # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
 
@@ -59,7 +65,7 @@ end
 end
 
 # flux function
-cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q)...)
+cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
 
 @inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
@@ -96,15 +102,13 @@ end
   end
 end
 
-const _nauxstate = 6
-const _a_x, _a_y, _a_z, _a_modSij, _a_θ, _a_θz = 1:_nauxstate
+const _nauxstate = 3
+const _a_x, _a_y, _a_z, = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z)
   @inbounds begin
     aux[_a_x] = x
     aux[_a_y] = y
     aux[_a_z] = z
-    aux[_a_modSij] = 0 
-    aux[_a_θ] = 0  # θ and dθ/dz is necessary 
   end
 end
 
@@ -154,9 +158,10 @@ end
     QP[_W] = WM - 2 * nM[3] * UnM
     QP[_ρ] = ρM
     QP[_E] = EM
-    auxM .= auxP
+    VFP .= VFM
     # To calculate PP, uP, vP, wP, ρinvP we use the preflux function 
-    preflux(QP, auxP, t)
+    nothing
+    #preflux(QP, auxP, t)
     # Required return from this function is either nothing or preflux with plus state as arguments
   end
 end
@@ -190,7 +195,7 @@ end
 
   # Typically these sources are imported from modules
   @inbounds begin
-  source_squircle_sponge!(S,Q,aux,t)
+  #source_squircle_sponge!(S,Q,aux,t)
   source_geopot!(S, Q, aux, t)
   #source_radiation!(S,Q,aux,t)
   #source_ls_subsidence!(S,Q,aux,t)
@@ -420,8 +425,8 @@ let
     numelem = (5,5,5)
     dt = 1e-2
     timeend = 10
-    polynomialorder = 4
-    for DFloat in (Float32,) #Float32)
+    polynomialorder = 5
+    for DFloat in (Float64,) #Float32)
       for dim = 3:3
         Random.seed!(0)
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
