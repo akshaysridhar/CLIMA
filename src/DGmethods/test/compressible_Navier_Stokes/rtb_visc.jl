@@ -53,6 +53,7 @@ const yc   = ymax / 2
   u, v, w = ρinv * U, ρinv * V, ρinv * W
   e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
   qt = QT / ρ
+  # Establish the current thermodynamic state using the prognostic variables
   TS = PhaseEquil(e_int, qt, ρ)
   T = air_temperature(TS)
   P = air_pressure(TS) # Test with dry atmosphere
@@ -258,7 +259,7 @@ end
 # -------------END DEF SOURCES-------------------------------------# 
 
 # initial condition
-function initialcondition!(dim, Q, t, x, y, z, _...)
+function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   ```
   User-specified. Required. 
   This function specifies the initial conditions for the Rising Thermal
@@ -342,7 +343,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            source! = source!)
 
   # This is a actual state/function that lives on the grid
-  initialcondition(Q, x...) = initialcondition!(Val(dim), Q, DFloat(0), x...)
+  initialcondition(Q, x...) = rising_thermal_bubble!(Val(dim), Q, DFloat(0), x...)
   Q = MPIStateArray(spacedisc, initialcondition)
 
   lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
@@ -430,9 +431,8 @@ let
     dt = 1e-2
     timeend = 10
     polynomialorder = 5
-    for DFloat in (Float32,) #Float32)
+    for DFloat in (Float64,) #Float32)
       for dim = 3:3
-        Random.seed!(0)
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                         DFloat, dt)
       end
