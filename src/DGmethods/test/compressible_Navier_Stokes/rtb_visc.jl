@@ -16,10 +16,10 @@ using Logging, Printf, Dates
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
-const _nstate = 5
-const _ρ, _U, _V, _W, _E = 1:_nstate
-const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
-const statenames = ("ρ", "U", "V", "W", "E")
+const _nstate = 6
+const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
+const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
+const statenames = ("ρ", "U", "V", "W", "E", "QT")
 
 const _nviscstates = 6
 const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23 = 1:_nviscstates
@@ -47,13 +47,15 @@ const yc   = ymax / 2
   γ::eltype(Q) = γ_exact
   gravity::eltype(Q) = grav
   R_gas::eltype(Q) = R_d
-  @inbounds ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
+  @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
   ρinv = 1 / ρ
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
   u, v, w = ρinv * U, ρinv * V, ρinv * W
-  E_int = E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y
-  T = air_temperature(E_int/ρ)
-  P = ρ * R_gas * T # Test with dry atmosphere
+  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
+  qt = QT / ρ
+  TS = PhaseEquil(e_int, qt, ρ)
+  T = air_temperature(TS)
+  P = air_pressure(TS) # Test with dry atmosphere
   (P, u, v, w, ρinv)
   # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
@@ -69,7 +71,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
 
 @inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
-    ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
+    ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
     # stress tensor
     τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
     τ12 = τ21 = VF[_τ12]
@@ -81,6 +83,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[1, _V], F[2, _V], F[3, _V] = u * V      , v * V + P  , w * V
     F[1, _W], F[2, _W], F[3, _W] = u * W      , v * W      , w * W + P
     F[1, _E], F[2, _E], F[3, _E] = u * (E + P), v * (E + P), w * (E + P)
+    F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
     # viscous terms
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
     F[1, _V] -= τ21; F[2, _V] -= τ22; F[3, _V] -= τ23
@@ -151,13 +154,14 @@ end
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, wM, ρinvM)
   @inbounds begin
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
-    ρM, UM, VM, WM, EM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E]
+    ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
     QP[_U] = UM - 2 * nM[1] * UnM
     QP[_V] = VM - 2 * nM[2] * UnM
     QP[_W] = WM - 2 * nM[3] * UnM
     QP[_ρ] = ρM
     QP[_E] = EM
+    QP[_QT] = QTM
     VFP .= VFM
     # To calculate PP, uP, vP, wP, ρinvP we use the preflux function 
     nothing
@@ -195,7 +199,7 @@ end
 
   # Typically these sources are imported from modules
   @inbounds begin
-  #source_squircle_sponge!(S,Q,aux,t)
+  source_squircle_sponge!(S,Q,aux,t)
   source_geopot!(S, Q, aux, t)
   #source_radiation!(S,Q,aux,t)
   #source_ls_subsidence!(S,Q,aux,t)
@@ -209,11 +213,11 @@ end
   at the boundaries to a still atmosphere.
   ```
   gravity::eltype(Q) = grav
-  α = 0.5
+  α = 1.0
   U, V, W = Q[_U], Q[_V], Q[_W]
   x, y, z = aux[_a_x], aux[_a_y], aux[_a_z]
   rp = (x^4 + y^4 + z^4)^(1/4) 
-  rsponge = 0.90 * xmax # Sponge damper extent  
+  rsponge = 0.85 * xmax # Sponge damper extent  
   @inbounds begin
     if rp > rsponge
       S[_U] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * U
@@ -294,7 +298,7 @@ function initialcondition!(dim, Q, t, x, y, z, _...)
   e_pot                 = gravity * y
   e_int                 = c_v * (T - T_0) #internal_energy(T, q_tot, q_liq, q_ice)
   E                     = ρ * (e_int + e_kin + e_pot)  #* total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-  @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E] = ρ, U, V, W, E
+  @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
 end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
@@ -426,7 +430,7 @@ let
     dt = 1e-2
     timeend = 10
     polynomialorder = 5
-    for DFloat in (Float64,) #Float32)
+    for DFloat in (Float32,) #Float32)
       for dim = 3:3
         Random.seed!(0)
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
