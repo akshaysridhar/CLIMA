@@ -659,41 +659,11 @@ function volumerhs!(::Val{2}, ::Val{N}, ::Val{nmoist}, ::Val{ntrace},
       rhs[i, j, _U, e] -= beta * U
       rhs[i, j, _V, e] -= beta * V
 
-
-      F_rad1,   F_rad0,   F_rad2 = 0,0,0
-      F_0  = 70.0
-      F_1  = 22.0
-      κ    = 85.0
-      D_ls = 3.75e-6
-      y_i  = 840.0
-      α_z  = 1
-      ρ_i  = 1.13
       # integrate along column radiation
-      
-      function stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, altitude, local_i, local_j, element_absolute, Ne, nmoist,ntrace)
-          DFloat = eltype(Q)
-          nelem = size(Q)[end]
-          # FIXME : Remove hardcoded numbers
-          nelem_x = Ne[1]
-          nelem_y = Ne[2]
-          vgeo_stacked = reshape(Q, Nq, Nq, nvar, nelem_x, nelem_y)
-          Q_stacked = reshape(Q,Nq, Nq, nvar, nelem_x, nelem_y)
-          J = zeros(Nq,nelem)
-          (ξ,ω) = Canary.lglpoints(DFloat, N)
-          D = spectralderivative(ξ)
-          
-          @inbounds for e = 1:nelem
-            ωJ[:,e] = D * y[:, e] .* ω
-          end
-
-          return 0  
-      end
-
-      F_rad = stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, y, i, j, e, nmoist,ntrace)
-
-      #F_rad = radiation(dim, N, nmoist, ntrace, Qaux, vgeo_aux, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y)
+      #F_rad = radiation(dim, N, nmoist, ntrace, Qaux, vgeo_aux, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y) # Works with dycoms.jl
+      F_rad = radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, i, j, e, y) # Doesnt work with dycoms.jl
       Q[i, j, _rad, e] =  F_rad
-      rhs[i,j,_E,e] += F_rad
+      rhs[i, j, _E, e] += F_rad
 
       # Store velocity
       l_u[i, j], l_v[i, j] = u, v

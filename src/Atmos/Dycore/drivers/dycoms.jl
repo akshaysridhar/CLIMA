@@ -146,140 +146,95 @@ function main(mpicomm, DFloat, ArrayType, brickrange, nmoist, ntrace, N,
                                             )
 
 
-    function stacked_rad(dim, N, Q, vgeo, sgeo, vmapM, vmapP, altitude, local_i, local_j, element_absolute, nmoist,ntrace)
-        DFloat = eltype(Q)
-        @show(size(vgeo), size(Q))
-        vgeo_stacked = reshape(Q, Nq, Nq, nvar, nelem_x, nelem_y)
-    end
-
-    function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, local_i, local_j, global_elem, y_coord)
-
-        DFloat        = eltype(Q)
-        # Number of elements along bottom plane (required for 1D integration stencil)
-        N_horizontal_elems = length(brickrange[1]) - 1     
-        botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
-        
-        # Radiation constants for Dycoms
-        F_0  = 70.0
-        F_1  = 22.0
-        κ    = 85.0
-        D_ls = 3.75e-6
-        y_i  = 840.0
-        α_z  = 1
-        ρ_i  = 1.13
-        Nq = N + 1        
-        if dim == 1
-            Np = (N+1)
-            Nfp = 1
-            nface = 2
-        elseif dim == 2
-            Np = (N+1) * (N+1)
-            Nfp = (N+1)
-            nface = 4
-        elseif dim == 3
-            Np = (N+1) * (N+1) * (N+1)
-            Nfp = (N+1) * (N+1)
-            nface = 6
-        end
-        
-        #nvgeo = size(vgeo,2)
-        f        = 1
-        
-        nelem    = size(Q)[end]
-        F_rad    = 0 #zeros(N, nelem)
-        qm_local = zeros(DFloat, max(3, nmoist))               
-        Ne_vert  = Int64(length(elems) / N_horizontal_elems)
-        vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
-        F_rad0,  F_rad1 = 0, 0
-
-      #
-      # Extract bottom elements:
-      # botelems is an array that contains the element numbers for all elements 
-      # that support the bottom boundary condition
+function radiation(dim, N, nmoist, ntrace, Q, vgeo, sgeo, vmapM, vmapP, elemtoelem, elems, local_i, local_j, global_elem, y_coord)
+      DFloat        = eltype(Q)
+      N_horizontal_elems = length(brickrange[1]) - 1     
+      botelems           = zeros(eltype(N_horizontal_elems), N_horizontal_elems)
+      
+      # Radiation constants for Dycoms
+      F_0  = 70.0
+      F_1  = 22.0
+      κ    = 85.0
+      D_ls = 3.75e-6
+      y_i  = 840.0
+      α_z  = 1
+      ρ_i  = 1.13
+      Nq = N + 1        
+      Np = (N+1) * (N+1)
+      Nfp = (N+1)
+      nface = 4
+      f        = 1
+      nelem    = size(Q)[end]
+      F_rad    = 0 #zeros(N, nelem)
+      qm_local = zeros(DFloat, max(3, nmoist))               
+      Ne_vert  = Int64(length(elems) / N_horizontal_elems)
+      vert_col = zeros(eltype(botelems), N_horizontal_elems, Ne_vert)
+      F_rad0,  F_rad1 = 0, 0
+      
       ibot     = 0
       @inbounds for global_elem in elems
-          if (global_elem == elemtoelem[3,global_elem])
-              ibot += 1
-              botelems[ibot] = global_elem
-          end
+        if (global_elem == elemtoelem[3,global_elem])
+          ibot += 1
+          botelems[ibot] = global_elem
+        end
       end
-      #
       # Extract element columns from the structured grid:
-      #
       ibot     = 0 
       @inbounds for ebot in botelems
-          ibot += 1
-          # Assuming non-periodic conditions for the top, bottom
-          # We use the list of bottom elements to then find the 
-          # elements `stacked` vertically
-          local_e = ebot
-          elemind = 1 
-          vert_col[ibot, elemind] = ebot
-          while (local_e != elemtoelem[4,local_e] ) 
-              elemind += 1
-              vert_col[ibot, elemind] = elemtoelem[4,local_e] 
-              local_e = elemtoelem[4, local_e]
-          end
+        ibot += 1
+        # Assuming non-periodic conditions for the top, bottom
+        # We use the list of bottom elements to then find the 
+        # elements `stacked` vertically
+        local_e = ebot
+        elemind = 1 
+        vert_col[ibot, elemind] = ebot
+        while (local_e != elemtoelem[4,local_e] ) 
+            elemind += 1
+            vert_col[ibot, elemind] = elemtoelem[4,local_e] 
+            local_e = elemtoelem[4, local_e]
+        end
       end
-        
       # Build equivalent column map to carry out DG integration
       @inbounds for ibot = 1:length(botelems)
-          current_stack = vert_col[ibot,:]
-          if global_elem in(current_stack) == true
-            ibot = current_stack[1]
-            break
-          end
+        current_stack = vert_col[ibot,:]
+        if global_elem in(current_stack) == true
+          ibot = current_stack[1]
+          break
+        end
       end
-        
       # Integrate column-wise
       y_i = 840.0
-        
-      # @inbounds for ibot = 1:length(botelems)
       vert_elem_list = vert_col[ibot,:]
-      # WARNING: this assumes a structured grid 
-      # Parallel sides (vertical / horizontal) so that the surface metrics can 
-      # be assumed constant across all element nodes
-      Q_int   = 0.0
       coeff_rad = 0
-      Q02z   = 0
-      Qz2inf = 0
-      Q02inf = 0
-      #=
-      @show(size(vgeo))
-      #vgeo_stacked = reshape(vgeo, Nq, Nq, 9, 2, 2)
-      @show(vert_col)
-      @show(size(Q))
-      =#
-      @inbounds for global_elem in vert_elem_list
-          e = global_elem
-          faceid = elemtoelem[4,e]
-          f = 1
-          for n = 1:Nfp
-              # We need an index with the number of the vertical pt 
-              sMJ  = sgeo[_sMJ, n, f, e]
-              idM  = vmapM[n, f, e]
-              vidM = ((idM - 1) % Np) + 1
-              y_local = vgeo[vidM, _y, e] 
-              ρ_local = Q[vidM, _ρ, e]
-              for m = 1:nmoist
-                  s = _nstate + m 
-                  qm_local[m] = Q[vidM, s, e] / ρ_local
-              end
-              if( y_local <= y_coord)
-                Q02z += sMJ * κ * ρ_local * qm_local[2]
-              end
-              Q02inf += sMJ * κ * ρ_local * qm_local[2]
-              coeff_rad =  ρ_i * α_z * D_ls * cp_d 
-              Qz2inf = Q02inf - Q02z
+      (ξ,ω) = Canary.lglpoints(DFloat, N)
+      D = Canary.spectralderivative(ξ)
+      QI0, QI1, QI2 = 0, 0, 0
+      @inbounds for e in vert_elem_list
+        i = local_i
+        y = vgeo[i, :, _y, e]
+        J = D * y
+        @inbounds for j = 1:Nq
+          y_local = vgeo[i, j, _y, e] 
+          ρ_local = Q[i, j, _ρ, e]
+          for m = 1:nmoist
+            s = _nstate + m 
+            qm_local[m] = Q[i, j, s, e] / ρ_local
           end
+          if( y_local <= y_coord)
+            QI0 += ω[j] * J[j] * κ * ρ_local * qm_local[2]
+          end
+          QI1 += ω[j] * J[j] * κ * ρ_local * qm_local[2]
+          coeff_rad =  ρ_i * α_z * D_ls * cp_d 
+          QI2 += QI1 - QI0
+        end 
       end
       (y_coord - y_i) >=0 ? Δy_i = (y_coord - y_i) : Δy_i = 0 
-      return F_0 * exp(-Qz2inf) + F_1 * exp(-Q02z) + coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
-
-    end
-          # reproduces the profile in Stevens et al 2005)
-   # end
-
+      term1 = F_0 * exp(-QI2) 
+      term2 = F_1 * exp(-QI0)
+      term3 = coeff_rad * (0.25 * (cbrt(Δy_i))^4 + y_i * cbrt(Δy_i))
+      F_rad = term1 + term2 + term3  
+      return F_rad 
+end
 
 
 #{{{
@@ -411,10 +366,9 @@ let
     viscosity = 100
     nmoist    = 3
     ntrace    = 0
-    Ne        = (2, 2)
-    N         = 3
-    Ne_x      = Ne[1]
-    timeend   = 0.02
+    Ne        = (10, 10)
+    N         = 5
+    timeend   = 1.0
     
     xmin_domain = -600.0
     xmax_domain =  600.0
