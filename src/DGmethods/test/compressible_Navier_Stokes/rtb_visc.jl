@@ -1,4 +1,12 @@
+# Load modules that are used in the CliMA project.
+# These are general modules not necessarily specific
+# to CliMA
 using MPI
+using LinearAlgebra
+using StaticArrays
+using Logging, Printf, Dates
+
+# Load modules specific to CliMA project
 using CLIMA.Topologies
 using CLIMA.Grids
 using CLIMA.DGBalanceLawDiscretizations
@@ -7,15 +15,15 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
-using LinearAlgebra
-using StaticArrays
-using Logging, Printf, Dates
 
-
-# Currently optional : dependence on moist equations to follow
+# Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
+# Even for the dry example shown here, we load the moist thermodynamics module 
+# and consider the dry equation set to be the same as the moist equations but
+# with total specific humidity = 0. 
 using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 
+# For a three dimensional problem 
 const _nstate = 6
 const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
@@ -42,7 +50,17 @@ const ymax = 1500
 const xc   = xmax / 2
 const yc   = ymax / 2
 
-# preflux computation
+# -------------------------------------------------------------------------
+# Preflux calculation: This function computes parameters required for the 
+# DG RHS (but not explicitly solved for as a prognostic variable)
+# In the case of the rising_thermal_bubble example: the saturation
+# adjusted temperature and pressure are such examples. Since we define
+# the equation and its arguments here the user is afforded a lot of freedom
+# around its behaviour. 
+# The preflux function interacts with the following  
+# Modules: NumericalFluxes.jl 
+# functions: wavespeed, cns_flux!, bcstate!
+# -------------------------------------------------------------------------
 @inline function preflux(Q,VF, aux, _...)
   γ::eltype(Q) = γ_exact
   gravity::eltype(Q) = grav
@@ -61,41 +79,56 @@ const yc   = ymax / 2
   # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
 
+# -------------------------------------------------------------------------
 # max eigenvalue
 @inline function wavespeed(n, Q, aux, t, P, u, v, w, ρinv)
   γ::eltype(Q) = γ_exact
   @inbounds abs(n[1] * u + n[2] * v + n[3] * w) + sqrt(ρinv * γ * P)
 end
 
-# flux function
+# -------------------------------------------------------------------------
+# ### Physical Flux (Required)
+#md # Here, we define the physical flux function, i.e. the conservative form
+#md # of the equations of motion for the prognostic variables ρ, U, V, W, E, QT
+#md # $\frac{\partial Q}{\partial t} + \nabla \cdot \boldsymbol{F} = \boldsymbol {S}$
+#md # $\boldsymbol{F}$ contains both the viscous and inviscid flux components
+#md # and $\boldsymbol{S}$ contains source terms.
+#md # Note that the preflux calculation is splatted at the end of the function call
+#md # to cns_flux!
+# -------------------------------------------------------------------------
 cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
-
 @inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv)
   @inbounds begin
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-    # stress tensor
-    τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
-    τ12 = τ21 = VF[_τ12]
-    τ13 = τ31 = VF[_τ13]
-    τ23 = τ32 = VF[_τ23]
-    # inviscid terms
+    # Inviscid contributions 
     F[1, _ρ], F[2, _ρ], F[3, _ρ] = U          , V          , W
     F[1, _U], F[2, _U], F[3, _U] = u * U  + P , v * U      , w * U
     F[1, _V], F[2, _V], F[3, _V] = u * V      , v * V + P  , w * V
     F[1, _W], F[2, _W], F[3, _W] = u * W      , v * W      , w * W + P
     F[1, _E], F[2, _E], F[3, _E] = u * (E + P), v * (E + P), w * (E + P)
     F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
-    # viscous terms
+    # Stress tensor
+    τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
+    τ12 = τ21 = VF[_τ12]
+    τ13 = τ31 = VF[_τ13]
+    τ23 = τ32 = VF[_τ23]
+    # Viscous contributions
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
     F[1, _V] -= τ21; F[2, _V] -= τ22; F[3, _V] -= τ23
     F[1, _W] -= τ31; F[2, _W] -= τ32; F[3, _W] -= τ33
-    # dissipation
+    # Energy dissipation
     F[1, _E] -= u * τ11 + v * τ12 + w * τ13
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33
   end
 end
 
+# -------------------------------------------------------------------------
+#md # Here we define a function to extract the velocity components from the 
+#md # prognostic equations (i.e. the momentum and density variables). This 
+#md # function is not required in general, but provides useful functionality 
+#md # in some cases. 
+# -------------------------------------------------------------------------
 # Compute the velocity from the state
 @inline function velocities!(vel, Q, _...)
   @inbounds begin
@@ -106,6 +139,14 @@ end
   end
 end
 
+# -------------------------------------------------------------------------
+#md ### Auxiliary Function (Not required)
+#md # In this example the auxiliary function is used to store the spatial
+#md # coordinates. This may also be used to store variables for which gradients
+#md # are needed, but are not available through teh prognostic variable 
+#md # calculations. (An example of this will follow - in the Smagorinsky model, 
+#md # where a local Richardson number via potential temperature gradient is required)
+# -------------------------------------------------------------------------
 const _nauxstate = 3
 const _a_x, _a_y, _a_z, = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z)
@@ -116,7 +157,13 @@ const _a_x, _a_y, _a_z, = 1:_nauxstate
   end
 end
 
-# Viscous fluxes. Contains the strain rate tensor required for the smagorinsky calculations 
+# -------------------------------------------------------------------------
+#md ### Viscous fluxes. 
+#md # The viscous flux function compute_stresses computes the components of 
+#md # the velocity gradient tensor, and the corresponding strain rates to
+#md # populate the viscous flux array VF. SijSij is calculated in addition
+#md # to facilitate implementation of the constant coefficient Smagorinsky model
+#md # (pending)
 @inline function compute_stresses!(VF, grad_vel, _...)
   μ::eltype(VF) = μ_exact
   @inbounds begin
@@ -130,7 +177,6 @@ end
     ϵ12 = (dudy + dvdx) / 2
     ϵ13 = (dudz + dwdx) / 2
     ϵ23 = (dvdz + dwdy) / 2
-
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
@@ -139,7 +185,6 @@ end
               + 2.0 * ϵ13 
               + 2.0 * ϵ23) 
     # mod strain rate ϵ ---------------------------
-
     # deviatoric stresses
     VF[_τ11] = 2μ * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ22] = 2μ * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
@@ -150,7 +195,9 @@ end
 
   end
 end
+# -------------------------------------------------------------------------
 
+# -------------------------------------------------------------------------
 # generic bc for 2d , 3d
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, wM, ρinvM)
   @inbounds begin
@@ -170,6 +217,7 @@ end
     # Required return from this function is either nothing or preflux with plus state as arguments
   end
 end
+# -------------------------------------------------------------------------
 
 @inline stresses_boundary_penalty!(VF, _...) = VF.=0
 
@@ -182,6 +230,7 @@ end
     compute_stresses!(VF, n_Δvel)
   end
 end
+# -------------------------------------------------------------------------
 
 # --------------DEFINE SOURCES HERE -------------------------------#
 #  TODO: Make sure that the source values are not being over-written
