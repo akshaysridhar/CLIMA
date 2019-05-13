@@ -70,12 +70,43 @@ const yc   = ymax / 2
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
   u, v, w = ρinv * U, ρinv * V, ρinv * W
   e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
-  qt = QT / ρ
+  q_tot = QT / ρ
   # Establish the current thermodynamic state using the prognostic variables
-  TS = PhaseEquil(e_int, qt, ρ)
+  TS = PhaseEquil(e_int, q_tot, ρ)
   T = air_temperature(TS)
   P = air_pressure(TS) # Test with dry atmosphere
+  
+  # Includes Charlie's thermodynamics test functions as well 
+  # State relevant to the physical problem is TS, but we define
+  # an additional dummy state ts to test MoistThermodynamics 
+  # GPUificiation
+  ts = PhaseEquil(e_int, q_tot, ρ)
+  dummy = soundspeed_air(ts)
+  dummy = gas_constant_air(ts)
+  dummy = air_pressure(ts)
+  dummy = air_density(ts)
+  dummy = cp_m(ts)
+  dummy = cv_m(ts)
+  dummy = moist_gas_constants(ts)
+  dummy = air_temperature(ts)
+  dummy = internal_energy_sat(ts)
+  dummy = latent_heat_vapor(ts)
+  dummy = latent_heat_sublim(ts)
+  dummy = latent_heat_fusion(ts)
+  dummy = saturation_shum(ts)
+  dummy = saturation_excess(ts)
+  dummy = liquid_fraction_equil(ts)
+  dummy = liquid_fraction_nonequil(ts)
+  dummy = PhasePartition(ts)
+  dummy = liquid_ice_pottemp(ts)
+  dummy = dry_pottemp(ts)
+  dummy = exner(ts)
+  dummy = liquid_ice_pottemp_sat(ts)
+  dummy = specific_volume(ts)
+  dummy = virtual_pottemp(ts)
+
   (P, u, v, w, ρinv)
+  
   # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
 
