@@ -2,6 +2,8 @@
 # These are general modules not necessarily specific
 # to CliMA
 using MPI
+using CUDAnative
+using CuArrays
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
@@ -267,14 +269,6 @@ end
 #  TODO: Make sure that the source values are not being over-written
 # ------------------------------------------------------------------
 @inline function source!(S,Q,aux,t)
-  ```
-  The function source! collects all the individual source terms 
-  associated with a given problem. We do not define sources here, 
-  rather we only call those source terms which are necessary based
-  on the governing equations. 
-  by terms defined elsewhere
-  ```
-
   # Initialise the final block source term 
   S .= 0
 
@@ -288,11 +282,6 @@ end
 end
 
 @inline function source_squircle_sponge!(S,Q,aux,t)
-  ```
-  Rayleigh sponge function: Linear damping / relaxation to specified
-  reference values. In the current implementation we relax velocities
-  at the boundaries to a still atmosphere.
-  ```
   gravity::eltype(Q) = grav
   α = 1.0
   U, V, W = Q[_U], Q[_V], Q[_W]
@@ -313,10 +302,6 @@ end
 end
 
 @inline function source_geopot!(S,Q,aux,t)
-  ```
-  Geopotential source term. Gravity forcing applied to the vertical
-  momentum equation
-  ```
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
@@ -325,11 +310,6 @@ end
 end
 
 @inline function source_ls_subsidence!(S,Q,aux,t)
-  ```
-  Large scale subsidence common to several atmospheric observational
-  campaigns. In the absence of a GCM to drive the flow we may need to 
-  specify a large scale forcing function. 
-  ```
   @inbounds begin
     nothing
   end
@@ -340,11 +320,6 @@ end
 
 # initial condition
 function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
-  ```
-  User-specified. Required. 
-  This function specifies the initial conditions for the Rising Thermal
-  Bubble driver. 
-  ```
   DFloat                = eltype(Q)
   γ::DFloat             = γ_exact
   # can override default gas constants 
@@ -384,8 +359,8 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = Array
-  # CuArray option (TODO merge new master)
+  #@Valentin what else do we need to get the GPUify stuff going 
+  ArrayType = CuArray
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)),
@@ -428,69 +403,70 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
 
-  eng0 = norm(Q)
-  @info @sprintf """Starting
-  norm(Q₀) = %.16e""" eng0
-
-  # Set up the information callback
-  starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(5, mpicomm) do (s=false)
-    if s
-      starttime[] = now()
-    else
-      energy = norm(Q)
-      @info @sprintf("""Update
-                     simtime = %.16e
-                     runtime = %s
-                     norm(Q) = %.16e""", ODESolvers.gettime(lsrk),
-                     Dates.format(convert(Dates.DateTime,
-                                          Dates.now()-starttime[]),
-                                  Dates.dateformat"HH:MM:SS"),
-                     energy)
-    end
-  end
-
-  step = [0]
-  mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
-    outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
-                         MPI.Comm_rank(mpicomm), step[1])
-    @debug "doing VTK output" outprefix
-    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames)
-    step[1] += 1
-    nothing
-  end
-
-  # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
-  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
-
-
-  # Print some end of the simulation information
-  engf = norm(Q)
-  if integration_testing
-    Qe = MPIStateArray(spacedisc,
-                       (Q, x...) -> initialcondition!(Val(dim), Q,
-                                                      DFloat(timeend), x...))
-    engfe = norm(Qe)
-    errf = euclidean_distance(Q, Qe)
-    @info @sprintf """Finished
-    norm(Q)                 = %.16e
-    norm(Q) / norm(Q₀)      = %.16e
-    norm(Q) - norm(Q₀)      = %.16e
-    norm(Q - Qe)            = %.16e
-    norm(Q - Qe) / norm(Qe) = %.16e
-    """ engf engf/eng0 engf-eng0 errf errf / engfe
-  else
-    @info @sprintf """Finished
-    norm(Q)            = %.16e
-    norm(Q) / norm(Q₀) = %.16e
-    norm(Q) - norm(Q₀) = %.16e""" engf engf/eng0 engf-eng0
-  end
-  integration_testing ? errf : (engf / eng0)
+#   eng0 = norm(Q)
+#   @info @sprintf """Starting
+#   norm(Q₀) = %.16e""" eng0
+# 
+#   # Set up the information callback
+#   starttime = Ref(now())
+#   cbinfo = GenericCallbacks.EveryXWallTimeSeconds(5, mpicomm) do (s=false)
+#     if s
+#       starttime[] = now()
+#     else
+#       energy = norm(Q)
+#       @info @sprintf("""Update
+#                      simtime = %.16e
+#                      runtime = %s
+#                      norm(Q) = %.16e""", ODESolvers.gettime(lsrk),
+#                      Dates.format(convert(Dates.DateTime,
+#                                           Dates.now()-starttime[]),
+#                                   Dates.dateformat"HH:MM:SS"),
+#                      energy)
+#     end
+#   end
+# 
+#   step = [0]
+#   mkpath("vtk")
+#   cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+#     outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
+#                          MPI.Comm_rank(mpicomm), step[1])
+#     @debug "doing VTK output" outprefix
+#     DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames)
+#     step[1] += 1
+#     nothing
+#   end
+# 
+#   # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
+#   lsrk.rhs!(lsrk.dQ, Q, 0.0)
+      solve!(Q, lsrk; timeend=timeend) 
+# 
+# 
+#   # Print some end of the simulation information
+#   engf = norm(Q)
+#   if integration_testing
+#     Qe = MPIStateArray(spacedisc,
+#                        (Q, x...) -> initialcondition!(Val(dim), Q,
+#                                                       DFloat(timeend), x...))
+#     engfe = norm(Qe)
+#     errf = euclidean_distance(Q, Qe)
+#     @info @sprintf """Finished
+#     norm(Q)                 = %.16e
+#     norm(Q) / norm(Q₀)      = %.16e
+#     norm(Q) - norm(Q₀)      = %.16e
+#     norm(Q - Qe)            = %.16e
+#     norm(Q - Qe) / norm(Qe) = %.16e
+#     """ engf engf/eng0 engf-eng0 errf errf / engfe
+#   else
+#     @info @sprintf """Finished
+#     norm(Q)            = %.16e
+#     norm(Q) / norm(Q₀) = %.16e
+#     norm(Q) - norm(Q₀) = %.16e""" engf engf/eng0 engf-eng0
+#   end
+#   integration_testing ? errf : (engf / eng0)
 end
 
 using Test
-let
+function test()
   MPI.Initialized() || MPI.Init()
   Sys.iswindows() || (isinteractive() && MPI.finalize_atexit())
   mpicomm = MPI.COMM_WORLD
@@ -513,12 +489,26 @@ let
     polynomialorder = 5
     for DFloat in (Float64,) #Float32)
       for dim = 3:3
-        engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
+        engdiff= run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                         DFloat, dt)
       end
     end
-  end
+end
+#=
+using GPUifyLoops
+using CUDAnative
+using CLIMA.DGBalanceLawDiscretizations
+using CLIMA.DGBalanceLawDiscretizations: volumerhs!
+function test2(flux!, source!, dQ, Q, Qvisc, auxstate, vgeo, t, Dmat, realelems)
+  @launch(CUDA(), threads=1, blocks=1, volumerhs!(Val(3), Val(5), Val(6), Val(6), Val(3), flux!, source!, dQ, Q, Qvisc, auxstate, vgeo, t, Dmat, realelems))
+end
+const A = CuArray{Float64, 3}
+const cA = CuDeviceArray{Float64, 3, CUDAnative.AS.Global}
+sig = Tuple{typeof(cns_flux!), typeof(source!), A, A, A, A, A, Float64, A, Int}
+cusig = Tuple{Val{3}, Val{5}, Val{6} ,Val{6}, Val{3}, typeof(cns_flux!), typeof(source!), cA, cA, cA, cA, cA, Float64, A, Int}
+f = GPUifyLoops.contextualize(volumerhs!)
 
-isinteractive() || MPI.Finalize()
+=#
+# isinteractive() || MPI.Finalize()
 
 nothing
