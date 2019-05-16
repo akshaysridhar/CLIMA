@@ -75,36 +75,7 @@ const yc   = ymax / 2
   TS = PhaseEquil(e_int, q_tot, ρ)
   T = air_temperature(TS)
   P = air_pressure(TS) # Test with dry atmosphere
-  
-  # Includes Charlie's thermodynamics test functions as well 
-  # State relevant to the physical problem is TS, but we define
-  # an additional dummy state ts to test MoistThermodynamics 
-  # GPUificiation
-  ts = PhaseEquil(e_int, q_tot, ρ)
-  dummy = soundspeed_air(ts)
-  dummy = gas_constant_air(ts)
-  dummy = air_pressure(ts)
-  dummy = air_density(ts)
-  dummy = cp_m(ts)
-  dummy = cv_m(ts)
-  dummy = moist_gas_constants(ts)
-  dummy = air_temperature(ts)
-  dummy = internal_energy_sat(ts)
-  dummy = latent_heat_vapor(ts)
-  dummy = latent_heat_sublim(ts)
-  dummy = latent_heat_fusion(ts)
-  dummy = saturation_shum(ts)
-  dummy = saturation_excess(ts)
-  dummy = liquid_fraction_equil(ts)
-  dummy = liquid_fraction_nonequil(ts)
-  dummy = PhasePartition(ts)
-  dummy = liquid_ice_pottemp(ts)
-  dummy = dry_pottemp(ts)
-  dummy = exner(ts)
-  dummy = liquid_ice_pottemp_sat(ts)
-  dummy = specific_volume(ts)
-  dummy = virtual_pottemp(ts)
-
+  q_liq = PhasePartition(TS).liq
   (P, u, v, w, ρinv)
   
   # Preflux returns pressure, 3 velocity components, and 1/ρ
@@ -274,40 +245,65 @@ end
 end
 # -------------------------------------------------------------------------
 
-# --------------DEFINE SOURCES HERE -------------------------------#
-#  TODO: Make sure that the source values are not being over-written
-# ------------------------------------------------------------------
 @inline function source!(S,Q,aux,t)
   # Initialise the final block source term 
   S .= 0
 
   # Typically these sources are imported from modules
   @inbounds begin
-  source_squircle_sponge!(S,Q,aux,t)
+  source_sponge!(S,Q,aux,t)
   source_geopot!(S, Q, aux, t)
-  #source_radiation!(S,Q,aux,t)
-  #source_ls_subsidence!(S,Q,aux,t)
+  #source_sample_int!(S,Q,aux,t)
   end
 end
 
-@inline function source_squircle_sponge!(S,Q,aux,t)
-  gravity::eltype(Q) = grav
-  α = 1.0
-  U, V, W = Q[_U], Q[_V], Q[_W]
-  x, y, z = aux[_a_x], aux[_a_y], aux[_a_z]
-  rp = (x^4 + y^4 + z^4)^(1/4) 
-  rsponge = 0.85 * xmax # Sponge damper extent  
+@inline function source_sample_int!(S,Q,aux,t)
   @inbounds begin
-    if rp > rsponge
-      S[_U] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * U
-      S[_V] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * V
-      S[_W] += -α * sinpi(1/2 * (rp-rsponge)/rsponge) ^ 4 * W
-    elseif rp > 2 * rsponge
-      S[_U] -= U
-      S[_V] -= V
-      S[_W] -= W
-    end
+  ρ, U, V, W, QT, E  = Q[_ρ],Q[_U], Q[_V], Q[_W], Q[_QT], Q[_E]
+  q_tot = QT / ρ
+  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
+  TS = PhaseEquil(e_int, q_tot, ρ)
+  q_liq = PhasePartition(TS).liq
+  z_i =  # Top down search for first instance of q_tot > value
+  # Vertical Integral (called from driver(?))
+  Q₀(x,y,z,t) = ∫ (ρ * q_l) dz [0..z], 
+  Q₁(x,y,z,t) = ∫ (ρ * q_l) dz [z..zmax] # Domain maximum 
+  # Passed to driver from DGBalanceLawDiscretizations_kernels.jl (?)
+  S[_E] += #integral at current (x,y,z) location
   end
+end
+
+@inline function source_sponge!(S, Q, aux, t)
+    y = aux[_a_y]
+    x = aux[_a_x]
+    V = Q[_V]
+    # Define Sponge Boundaries      
+    xc       = (xmax + xmin)/2
+    ysponge  = 0.85 * ymax
+    xsponger = xmax - 0.15*abs(xmax - xc)
+    xspongel = xmin + 0.15*abs(xmin - xc)
+    csxl  = 0.0
+    csxr  = 0.0
+    ctop  = 0.0
+    csx   = 0.0 #1.0
+    ct    = 1.0 
+    #x left and right
+    #xsl
+    if (x <= xspongel)
+        csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+    end
+    #xsr
+    if (x >= xsponger)
+        csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+    end
+    #Vertical sponge:         
+    if (y >= ysponge)
+        ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+    end
+    beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
+    beta  = min(beta, 1.0)
+    alpha = 1.0 - beta
+    S[_V] -= beta * V  
 end
 
 @inline function source_geopot!(S,Q,aux,t)
@@ -318,11 +314,6 @@ end
   end
 end
 
-@inline function source_ls_subsidence!(S,Q,aux,t)
-  @inbounds begin
-    nothing
-  end
-end
 
 # ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 

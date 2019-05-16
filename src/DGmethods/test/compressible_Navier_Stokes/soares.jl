@@ -383,6 +383,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
+  # boundary identifies [W S; E N] faces with a unique identifier instead of 
+  # default 0 for periodic  //  1 for nonperiodic 
   topl = BrickTopology(mpicomm, brickrange, periodicity=(true,false), boundary=[1 3; 2 4])
 
   grid = DiscontinuousSpectralElementGrid(topl,
