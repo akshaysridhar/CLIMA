@@ -110,11 +110,22 @@ const yc   = ymax / 2
   # Preflux returns pressure, 3 velocity components, and 1/ρ
 end
 
-# -------------------------------------------------------------------------
+#-------------------------------------------------------------------------
+#md # Soundspeed computed using the thermodynamic state TS
 # max eigenvalue
 @inline function wavespeed(n, Q, aux, t, P, u, v, w, ρinv)
+  gravity::eltype(Q) = grav
+  R_gas::eltype(Q) = R_d
   γ::eltype(Q) = γ_exact
-  @inbounds abs(n[1] * u + n[2] * v + n[3] * w) + sqrt(ρinv * γ * P)
+  @inbounds begin 
+    ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+    x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
+    u, v, w = ρinv * U, ρinv * V, ρinv * W
+    e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
+    q_tot = QT / ρ
+    TS = PhaseEquil(e_int, q_tot, ρ)
+    (n[1] * u + n[2] * v + n[3] * w) + soundspeed_air(TS)
+  end
 end
 
 # -------------------------------------------------------------------------
@@ -267,14 +278,6 @@ end
 #  TODO: Make sure that the source values are not being over-written
 # ------------------------------------------------------------------
 @inline function source!(S,Q,aux,t)
-  ```
-  The function source! collects all the individual source terms 
-  associated with a given problem. We do not define sources here, 
-  rather we only call those source terms which are necessary based
-  on the governing equations. 
-  by terms defined elsewhere
-  ```
-
   # Initialise the final block source term 
   S .= 0
 
@@ -288,11 +291,6 @@ end
 end
 
 @inline function source_squircle_sponge!(S,Q,aux,t)
-  ```
-  Rayleigh sponge function: Linear damping / relaxation to specified
-  reference values. In the current implementation we relax velocities
-  at the boundaries to a still atmosphere.
-  ```
   gravity::eltype(Q) = grav
   α = 1.0
   U, V, W = Q[_U], Q[_V], Q[_W]
@@ -313,10 +311,6 @@ end
 end
 
 @inline function source_geopot!(S,Q,aux,t)
-  ```
-  Geopotential source term. Gravity forcing applied to the vertical
-  momentum equation
-  ```
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
@@ -325,11 +319,6 @@ end
 end
 
 @inline function source_ls_subsidence!(S,Q,aux,t)
-  ```
-  Large scale subsidence common to several atmospheric observational
-  campaigns. In the absence of a GCM to drive the flow we may need to 
-  specify a large scale forcing function. 
-  ```
   @inbounds begin
     nothing
   end
@@ -340,11 +329,6 @@ end
 
 # initial condition
 function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
-  ```
-  User-specified. Required. 
-  This function specifies the initial conditions for the Rising Thermal
-  Bubble driver. 
-  ```
   DFloat                = eltype(Q)
   γ::DFloat             = γ_exact
   # can override default gas constants 
