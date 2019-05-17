@@ -46,14 +46,14 @@ const μ_exact = 10
 const xmin = 0
 const ymin = 0
 const xmax = 1500
-const ymax = 1500
+const ymax = 2500
 const xc   = xmax / 2
 const yc   = ymax / 2
 
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
 # DG RHS (but not explicitly solved for as a prognostic variable)
-# In the case of the rising_thermal_bubble example: the saturation
+# In the case of the Soares driver example: the saturation
 # adjusted temperature and pressure are such examples. Since we define
 # the equation and its arguments here the user is afforded a lot of freedom
 # around its behaviour. 
@@ -75,7 +75,14 @@ const yc   = ymax / 2
   TS = PhaseEquil(e_int, q_tot, ρ)
   T = air_temperature(TS)
   P = air_pressure(TS) # Test with dry atmosphere
-  q_liq = PhasePartition(TS).liq
+  
+  # Includes Charlie's thermodynamics test functions as well 
+  # State relevant to the physical problem is TS, but we define
+  # an additional dummy state ts to test MoistThermodynamics 
+  # GPUificiation
+  ts = PhaseEquil(e_int, q_tot, ρ)
+  q_liq = PhasePartition(ts).liq
+  q_ice = PhasePartition(ts).ice
   (P, u, v, w, ρinv)
   
   # Preflux returns pressure, 3 velocity components, and 1/ρ
@@ -221,9 +228,13 @@ end
     QP[_V] = VM - 2 * nM[2] * UnM
     QP[_W] = WM - 2 * nM[3] * UnM
     QP[_ρ] = ρM
-    QP[_E] = EM
     QP[_QT] = QTM
     VFP .= VFM
+    if bctype == 3 
+      QP[_E] = EM
+    elseif bctype == 4
+      QP[_E] = EM
+    end
     # To calculate PP, uP, vP, wP, ρinvP we use the preflux function 
     nothing
     #preflux(QP, auxP, t)
@@ -252,25 +263,22 @@ end
   # Typically these sources are imported from modules
   @inbounds begin
   source_sponge!(S,Q,aux,t)
-  source_geopot!(S, Q, aux, t)
-  #source_sample_int!(S,Q,aux,t)
+  source_geopot!(S,Q,aux,t)
+  source_friction!(S,Q,aux,t)
+  #source_radiation!(S,Q,aux,t)
+  #source_ls_subsidence!(S,Q,aux,t)
   end
 end
 
-@inline function source_sample_int!(S,Q,aux,t)
-  @inbounds begin
-  ρ, U, V, W, QT, E  = Q[_ρ],Q[_U], Q[_V], Q[_W], Q[_QT], Q[_E]
-  q_tot = QT / ρ
-  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
-  TS = PhaseEquil(e_int, q_tot, ρ)
-  q_liq = PhasePartition(TS).liq
-  z_i =  # Top down search for first instance of q_tot > value
-  # Vertical Integral (called from driver(?))
-  Q₀(x,y,z,t) = ∫ (ρ * q_l) dz [0..z], 
-  Q₁(x,y,z,t) = ∫ (ρ * q_l) dz [z..zmax] # Domain maximum 
-  # Passed to driver from DGBalanceLawDiscretizations_kernels.jl (?)
-  S[_E] += #integral at current (x,y,z) location
-  end
+@inline function source_friction!(S, Q, aux, t)
+  ρ = Q[_ρ]
+  V = Q[_V]
+  U = Q[_U]
+  y = aux[_a_y]
+  CD = 0.3 # Empirical drag coefficient
+  drag = CD * sqrt(U^2 + V^2)/ ρ
+  S[_U] -= drag * U
+  S[_V] -= drag * V
 end
 
 @inline function source_sponge!(S, Q, aux, t)
@@ -314,12 +322,17 @@ end
   end
 end
 
+@inline function source_ls_subsidence!(S,Q,aux,t)
+  @inbounds begin
+    nothing
+  end
+end
 
 # ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 
 
 # initial condition
-function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
+function soares!(dim, Q, t, x, y, z, _...)
   DFloat                = eltype(Q)
   γ::DFloat             = γ_exact
   # can override default gas constants 
@@ -333,22 +346,25 @@ function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   q_tot::DFloat         = 0 
   q_liq::DFloat         = 0
   q_ice::DFloat         = 0 
-  # perturbation parameters for rising bubble
-  r                     = sqrt((x-xc)^2 + (y-yc)^2)
-  rc::DFloat            = 300
-  θ_ref::DFloat         = 300
-  θ_c::DFloat           = 5.0
-  Δθ::DFloat            = 0.0
-  if r <= rc 
-    Δθ = θ_c * (1 + cospi(r/rc))/2
+  θ::DFloat             = 300
+  
+  u, v, w                     = 0, 0, 0
+  #Soares perturbation to base potential temperature 
+  if y < 1350
+    q_tot       = 5e-3 - 3.7e-4 * y * 1e-3
+    θ           = 300
+  else
+    q_tot       = 5e-3 -3.7e-4*1.35 - 9e-4 * (y-1350) * 1e-3
+    θ           = 300.0 + 2.0 * (y-1350) * 1e-3
+    u           = 0.01
   end
-  θ                     = θ_ref + Δθ # potential temperature
+  
   π_exner               = 1.0 - gravity / (c_p * θ) * y # exner pressure
   ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
 
   P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
   T                     = P / (ρ * R_gas) # temperature
-  U, V, W               = 0.0 , 0.0 , 0.0  # momentum components
+  U, V, W               = ρ * u , ρ * v , ρ * w # momentum components
   # energy definitions
   e_kin                 = (U^2 + V^2 + W^2) / (2*ρ)/ ρ
   e_pot                 = gravity * y
@@ -363,12 +379,13 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   # CuArray option (TODO merge new master)
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)),
-                range(DFloat(xmin), length=Ne[3]+1, DFloat(xmax)))
+                range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = BrickTopology(mpicomm, brickrange, periodicity=(false,false,false))
+  # boundary identifies [W S; E N] faces with a unique identifier instead of 
+  # default 0 for periodic  //  1 for nonperiodic 
+  topl = BrickTopology(mpicomm, brickrange, periodicity=(true,false), boundary=[1 3; 2 4])
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -398,7 +415,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            source! = source!)
 
   # This is a actual state/function that lives on the grid
-  initialcondition(Q, x...) = rising_thermal_bubble!(Val(dim), Q, DFloat(0), x...)
+  initialcondition(Q, x...) = soares!(Val(dim), Q, DFloat(0), x...)
   Q = MPIStateArray(spacedisc, initialcondition)
 
   lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
@@ -427,7 +444,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   step = [0]
   mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
     outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
@@ -482,12 +499,12 @@ let
     # User defined timestep estimate
     # User defined simulation end time
     # User defined polynomial order 
-    numelem = (5,5,5)
+    numelem = (10,10,5)
     dt = 1e-2
-    timeend = 10
+    timeend = 3600 * 4
     polynomialorder = 5
     for DFloat in (Float64,) #Float32)
-      for dim = 3:3
+      for dim = 2:2
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                         DFloat, dt)
       end
