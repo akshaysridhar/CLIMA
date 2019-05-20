@@ -366,12 +366,12 @@ let
     viscosity = 100
     nmoist    = 3
     ntrace    = 0
-    Ne        = (10, 10)
+    Ne        = (20, 20, 1)
     N         = 5
     timeend   = 1.0
     
-    xmin_domain = -600.0
-    xmax_domain =  600.0
+    xmin_domain = 0
+    xmax_domain =  3360.0
     #ymin_domain = -1600.0
     #ymax_domain =  1600.0
     zmin_domain =     0.0
