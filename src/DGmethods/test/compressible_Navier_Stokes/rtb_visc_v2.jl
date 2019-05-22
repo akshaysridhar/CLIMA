@@ -6,10 +6,6 @@ using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
 
-# GPUIFY
-using CUDAnative
-using CuArrays
-
 # Load modules specific to CliMA project
 using CLIMA.Topologies
 using CLIMA.Grids
@@ -33,8 +29,8 @@ const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("ρ", "U", "V", "W", "E", "QT")
 
-const _nviscstates = 12
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz = 1:_nviscstates
+const _nviscstates = 15
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz = 1:_nviscstates
 
 const _ngradstates = 6
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
@@ -47,7 +43,6 @@ end
 
 const Prandtl = 71 // 100
 const k_μ = cp_d / Prandtl
-const γ_exact = 7 // 5
 const μ_exact = 2.5
 const xmin = 0
 const ymin = 0
@@ -58,13 +53,13 @@ const zmax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
-const Nex = 50
-const Ney = 50
+const Nex = 100
+const Ney = 100
 const Nez = 1
 const numdims = 2
 const Npoly = 5
 # Smagorinsky model requirements
-const C_smag = 0.18
+const C_smag = 0.20
 const Δx = (xmax-xmin) / ((Nex * Npoly) + 1)
 const Δy = (ymax-ymin) / ((Ney * Npoly) + 1)
 const Δz = (zmax-zmin) / ((Nez * Npoly) + 1)
@@ -86,7 +81,6 @@ end
 # -------------------------------------------------------------------------
 @inline function preflux(Q,VF, aux, _...)
   gravity::eltype(Q) = grav
-  R_gas::eltype(Q) = R_d
   @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
   ρinv = 1 / ρ
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
@@ -99,7 +93,7 @@ end
   P = air_pressure(TS) # Test with dry atmosphere
   q_liq = PhasePartition(TS).liq
   θ = virtual_pottemp(TS)
-  (P, u, v, w, ρinv, q_liq,T,θ)
+  (P, u, v, w, ρinv, q_liq, T, θ)
 end
 
 #-------------------------------------------------------------------------
@@ -147,17 +141,15 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ23 = τ32 = VF[_τ23]
     vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
     vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
-    # 2D richardson number 
-    #dθdy = VF[_θy]
     # Viscous contributions
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
     F[1, _V] -= τ21; F[2, _V] -= τ22; F[3, _V] -= τ23
     F[1, _W] -= τ31; F[2, _W] -= τ32; F[3, _W] -= τ33
     # Energy dissipation
-    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + k_μ * vTx 
-    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
-    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
-    # Viscous contributions to mass flux terms
+    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + k_μ*vTx
+    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ*vTy
+    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ*vTz
+    # Viscous contributions to mass flux term
     F[1, _ρ] -=  vqx
     F[2, _ρ] -=  vqy
     F[3, _ρ] -=  vqz
@@ -174,35 +166,15 @@ end
 #md # in some cases. 
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
-velocities!(vel, Q, aux, t, _...) = velocities!(vel, Q, aux, t, preflux(Q,~,aux)...)
-@inline function velocities!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,~,aux)...)
+@inline function gradient_vars!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
   @inbounds begin
-    y = aux[_a_y]
     # ordering should match states_for_gradient_transform
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-    E, QT = Q[_E], Q[_QT]
     ρinv = 1 / ρ
     vel[1], vel[2], vel[3] = u, v, w
     vel[4], vel[5], vel[6] = ρinv * E, QT, T
-    vel[7] = θ
-  end
-end
-
-# -------------------------------------------------------------------------
-#md ### Auxiliary Function (Not required)
-#md # In this example the auxiliary function is used to store the spatial
-#md # coordinates. This may also be used to store variables for which gradients
-#md # are needed, but are not available through teh prognostic variable 
-#md # calculations. (An example of this will follow - in the Smagorinsky model, 
-#md # where a local Richardson number via potential temperature gradient is required)
-# -------------------------------------------------------------------------
-const _nauxstate = 3
-const _a_x, _a_y, _a_z, = 1:_nauxstate
-@inline function auxiliary_state_initialization!(aux, x, y, z)
-  @inbounds begin
-    aux[_a_x] = x
-    aux[_a_y] = y
-    aux[_a_z] = z
+    vel[7] = θ # θ assignment is O K 
   end
 end
 # -------------------------------------------------------------------------
@@ -212,7 +184,10 @@ end
 #md # populate the viscous flux array VF. SijSij is calculated in addition
 #md # to facilitate implementation of the constant coefficient Smagorinsky model
 #md # (pending)
-@inline function compute_stresses!(VF, grad_vel,_...)
+compute_stresses!(VF, grad_vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ) = compute_stresses!(VF, grad_vel, Q, aux, ~, preflux(Q,VF,aux)
+#@inline function compute_stresses!(VF, grad_vel,_...) # this method for compute_stresses! works
+@inline function compute_stresses!(VF, grad_vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+  μ::eltype(VF) = μ_exact
   gravity::eltype(VF) = grav
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
@@ -221,8 +196,8 @@ end
     # compute gradients of moist vars and temperature
     dqdx, dqdy, dqdz = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
     dTdx, dTdy, dTdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
-#   # virtual potential temperature gradient: for richardson calculation
-#   dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
+    # virtual potential temperature gradient: for richardson calculation
+    dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
     # strains
     ϵ11 = dudx
     ϵ22 = dvdy
@@ -233,27 +208,30 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    SijSij = (ϵ11^2 + ϵ22^2 + ϵ33^2
-              + 2.0 * ϵ12^2
-              + 2.0 * ϵ13^2 
-              + 2.0 * ϵ23^2) 
+    SijSij = (ϵ11 + ϵ22 + ϵ33
+              + 2.0 * ϵ12
+              + 2.0 * ϵ13 
+              + 2.0 * ϵ23) 
     modSij = sqrt(2.0 * SijSij) 
-    #Richardson = (grav/θ) * dθdy / modSij
-    #auxr = max(0.0, 1.0 - Richardson/Prandtl)
-    ν_t = C_smag * C_smag * Δ2 * modSij #* sqrt(auxr)
+    Richardson = (grav/θ) * dθdy / sqrt(2.0 * SijSij) 
+    auxr = max(0.0, 1.0 - Richardson/Prandtl)
+    Km = C_smag * C_smag * Δ2 * modSij * sqrt(auxr)
+    Kh = 3 * Km 
+    μ = Kh
+    # --------------------------------------------
+    # END SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
     # deviatoric stresses
-    # ν_t here is in the sense of a dynamic viscosity (universal: rather than purely for the subgrid scale)
-    VF[_τ11] = 2 * ν_t * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ22] = 2 * ν_t * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ33] = 2 * ν_t * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ12] = 2 * ν_t * ϵ12
-    VF[_τ13] = 2 * ν_t * ϵ13
-    VF[_τ23] = 2 * ν_t * ϵ23
+    VF[_τ11] = 2μ * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ22] = 2μ * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ33] = 2μ * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
+    VF[_τ12] = 2μ * ϵ12
+    VF[_τ13] = 2μ * ϵ13
+    VF[_τ23] = 2μ * ϵ23
     VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
     # FIXME : shouldnt need to carry the gradient of the virtualpottemp around
-#    VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
+    VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
   end
 end
 # -------------------------------------------------------------------------
@@ -374,7 +352,7 @@ function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   p0::DFloat            = MSLP
   gravity::DFloat       = grav
   # initialise with dry domain 
-  q_tot::DFloat         = 0
+  q_tot::DFloat         = 0.0
   q_liq::DFloat         = 0
   q_ice::DFloat         = 0 
   # perturbation parameters for rising bubble
@@ -386,7 +364,6 @@ function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   if r <= rc 
     Δθ = θ_c * (1 + cospi(r/rc))/2
   end
-  qvar                  = PhasePartition(q_tot)
   θ                     = θ_ref + Δθ # potential temperature
   π_exner               = 1.0 - gravity / (c_p * θ) * y # exner pressure
   ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
@@ -397,14 +374,14 @@ function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   # energy definitions
   e_kin                 = (U^2 + V^2 + W^2) / (2*ρ)/ ρ
   e_pot                 = gravity * y
-  e_int                 = internal_energy(T, qvar)
+  e_int                 = c_v * (T - T_0) #internal_energy(T, q_tot, q_liq, q_ice)
   E                     = ρ * (e_int + e_kin + e_pot)  #* total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
   @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
 end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = CuArray
+  ArrayType = Array
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
@@ -432,7 +409,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            states_for_gradient_transform =
                             _states_for_gradient_transform,
                            number_viscous_states = _nviscstates,
-                           gradient_transform! = velocities!,
+                           gradient_transform! = gradient_vars!,
                            viscous_transform! = compute_stresses!,
                            viscous_penalty! = stresses_penalty!,
                            viscous_boundary_penalty! = stresses_boundary_penalty!,
@@ -470,9 +447,9 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   end
 
   step = [0]
-  mkpath("vtk-lr")
+  mkpath("vtk")
   cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
-    outprefix = @sprintf("vtk-lr/cns_%dD_mpirank%04d_step%04d", dim,
+    outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames)
