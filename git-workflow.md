@@ -51,4 +51,4 @@ To merge changes from existing branchA into existing branchB
 
 
 ### Things to learn
-`rebase`, `reset HEAD`, `stash`, `stash apply` 
+`rebase`, `reset HEAD`, `stash apply` 
