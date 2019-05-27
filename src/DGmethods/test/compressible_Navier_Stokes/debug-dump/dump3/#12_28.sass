@@ -1,0 +1,918 @@
+	.headerflags	@"EF_CUDA_TEXMODE_UNIFIED EF_CUDA_64BIT_ADDRESS EF_CUDA_SW_1729687 EF_CUDA_SM60 EF_CUDA_VIRTUAL_SM(EF_CUDA_SM60)"
+
+
+//--------------------- .text.ptxcall_anonymous12_31 --------------------------
+	.section	.text.ptxcall_anonymous12_31,"ax",@progbits
+	.sectionflags	@"SHF_BARRIERS=1"
+	.sectioninfo	@"SHI_REGISTERS=64"
+	.align	32
+        .global         ptxcall_anonymous12_31
+        .type           ptxcall_anonymous12_31,@function
+        .size           ptxcall_anonymous12_31,(.L_55 - ptxcall_anonymous12_31)
+        .other          ptxcall_anonymous12_31,@"STO_CUDA_ENTRY STV_DEFAULT"
+ptxcall_anonymous12_31:
+
+.text.ptxcall_anonymous12_31:
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV R1, c[0x0][0x20];
+        S2R R52, SR_TID.Z;
+        SSY `(.L_1);
+        ISETP.NE.AND P0, PT, R52, RZ, PT;
+    @P0 SYNC                                                             (*"TARGET= .L_1 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        S2R R0, SR_TID.Y;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P0, PT, R0, 0x5, PT;
+    @P0 SYNC                                                             (*"TARGET= .L_1 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        S2R R5, SR_TID.X;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P0, PT, R5, 0x5, PT;
+    @P0 SYNC                                                             (*"TARGET= .L_1 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        MOV R3, c[0x0][0x1cc];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        IMNMX.XHI R3.CC, R3, RZ, !PT;
+        MOV R2, c[0x0][0x1c8];
+        IMNMX.U32.XLO R2, R2, RZ, !PT;
+        XMAD R9, R0, R3, RZ;
+        XMAD R7, R2, R0, RZ;
+        XMAD.MRG R10, R0, R3.H1, RZ;
+        XMAD R3, R0, R2, RZ;
+        XMAD.MRG R6, R0, R2.H1, RZ;
+        XMAD R8, R2, R0.H1, RZ;
+        XMAD.CHI R7, R2.H1, R0, R7;
+        XMAD R2, R2.H1, R0.H1, RZ;
+        XMAD.PSL.CBCC R4, R0.H1, R10.H1, R9;
+        XMAD.PSL.CBCC R3, R0.H1, R6.H1, R3;
+        IADD3.RS R2, R7, R8, R2;
+        IADD R3.CC, R5, R3;
+        IADD R4, R2, R4;
+        IADD.X R4, RZ, R4;
+        LEA R2.CC, R3.reuse, c[0x0][0x1d8], 0x3;
+        LEA.HI.X R3, R3, c[0x0][0x1dc], R4, 0x3;
+        LDG.E.64 R2, [R2];
+        XMAD R5, R0, 0x6, R5;
+        XMAD.PSL R0, R0.H1, 0x6, R5;
+        SHL R0, R0, 0x3;
+        STS.64 [R0+0x1440], R2;
+        SYNC                                                             (*"TARGET= .L_1 "*);
+
+.L_1:
+        S2R R0, SR_CTAID.X;
+        IADD32I R2, R0, 0x1;
+        IADD RZ.CC, R2, -c[0x0][0x1e8];
+        ISETP.LE.X.AND P0, PT, RZ, c[0x0][0x1ec], PT;
+        IADD RZ.CC, R2, -c[0x0][0x1e0];
+        ISETP.GE.X.AND P0, PT, RZ, c[0x0][0x1e4], P0;
+   @!P0 EXIT;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+                         {         ISETP.GT.U32.AND P1, PT, R52, 0x5, PT;
+        SSY `(.L_2);        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         PSETP.AND.AND P0, PT, !PT, PT, PT;
+    @P1 SYNC                                                             (*"TARGET= .L_2 "*);        }
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        PSETP.AND.AND P0, PT, PT, PT, PT;
+        S2R R2, SR_TID.Y;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P1, PT, R2, 0x5, PT;
+    @P1 SYNC                                                             (*"TARGET= .L_2 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        S2R R3, SR_TID.X;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P1, PT, R3, 0x5, PT;
+    @P1 SYNC                                                             (*"TARGET= .L_2 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+                         {         MOV R6, c[0x0][0x14c];
+        SSY `(.L_3);        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV32I R10, 0x6;
+        MOV32I R11, 0x6;
+        XMAD R9, R52.reuse, 0x6, RZ;
+        XMAD R7, R52, 0x6, RZ;
+        IMNMX.XHI R6.CC, R6, RZ, !PT;
+        MOV R5, c[0x0][0x148];
+        XMAD R8, R52.reuse, R10.H1, RZ;
+        XMAD R10, R52.H1.reuse, R11.H1, RZ;
+        XMAD.CHI R9, R52.H1.reuse, 0x6, R9;
+        XMAD.PSL R4, R52.H1, 0x6, R7;
+        IADD3.RS R8, R9, R8, R10;
+        IMNMX.U32.XLO R5, R5, RZ, !PT;
+        XMAD R11, R0.reuse, R6.reuse, RZ;
+        XMAD.MRG R14, R0.reuse, R6.H1, RZ;
+        IADD R6.CC, R2, R4;
+        MOV R4, c[0x0][0x144];
+        XMAD.PSL.CBCC R10, R0.H1, R14.H1, R11;
+        IADD.X R8, RZ, R8;
+        IMNMX.XHI R4.CC, R4, RZ, !PT;
+        XMAD R14, R5, R0, RZ;
+        XMAD R7, R0.reuse, R5.reuse, RZ;
+        XMAD.MRG R13, R0, R5.H1, RZ;
+        MOV R11, c[0x0][0x140];
+        XMAD R9, R5.reuse, R0.H1.reuse, RZ;
+        XMAD R12, R5.H1.reuse, R0.H1.reuse, RZ;
+        XMAD.CHI R14, R5.H1, R0, R14;
+        MOV32I R16, 0x6;
+        MOV32I R17, 0x6;
+        XMAD R15, R6, 0x6, RZ;
+        XMAD.PSL.CBCC R7, R0.H1, R13.H1, R7;
+        IADD3.RS R9, R14, R9, R12;
+        IMNMX.U32.XLO R5, R11, RZ, !PT;
+        XMAD R13, R6.reuse, 0x6, RZ;
+        XMAD R18, R8, 0x6, RZ;
+        XMAD R16, R6, R16.H1, RZ;
+        XMAD R17, R6.H1.reuse, R17.H1, RZ;
+        XMAD.CHI R15, R6.H1.reuse, 0x6, R15;
+        IADD R10, R9, R10;
+        XMAD R14, R7, R5, RZ;
+        XMAD.PSL R12, R6.H1, 0x6, R13;
+        XMAD.PSL R8, R8.H1, 0x6, R18;
+        XMAD R6, R7.reuse, R5.reuse, RZ;
+        XMAD.MRG R9, R7.reuse, R5.H1.reuse, RZ;
+        XMAD R18, R7.reuse, R4.reuse, RZ;
+        XMAD.MRG R20, R7.reuse, R4.H1, RZ;
+        IADD3.RS R11, R15, R16, R17;
+        XMAD R13, R7, R5.H1, RZ;
+        XMAD R16, R7.H1.reuse, R5.H1.reuse, RZ;
+        XMAD.CHI R14, R7.H1.reuse, R5.reuse, R14;
+        XMAD R17, R10.reuse, R5.reuse, RZ;
+        XMAD.MRG R19, R10, R5.H1, RZ;
+        XMAD.PSL.CBCC R6, R7.H1.reuse, R9.H1, R6;
+        XMAD.PSL.CBCC R15, R7.H1, R20.H1, R18;
+        IADD R9, R11, R8;
+        IADD R7.CC, R3, R12;
+        IADD3.RS R8, R14, R13, R16;
+        XMAD.PSL.CBCC R10, R10.H1, R19.H1, R17;
+        IADD.X R9, RZ, R9;
+        IADD R13.CC, R6, R7;
+        IADD3 R8, R15, R8, R10;
+        IADD.X R10, R8, R9;
+        LEA R12.CC, R13.reuse, c[0x0][0x158], 0x3;
+        LEA.HI.X R13, R13, c[0x0][0x15c], R10, 0x3;
+        LDG.E.64 R12, [R12];
+        MUFU.RCP64H R11, R13;
+        IADD32I R18, R13, 0x300402;
+        MOV R10, R18;
+        DFMA R14, R12, -R10, c[0x2][0x0];
+        DFMA R16, R14, R14, R14;
+        FSETP.GEU.AND P1, PT, |R18|, c[0x2][0x8], PT;
+        DFMA R10, R10, R16, R10;
+        DFMA R16, R12, -R10, c[0x2][0x0];
+        DFMA R10, R10, R16, R10;
+    @P1 SYNC                                                             (*"TARGET= .L_3 "*);
+        LOP32I.AND R10, R13, 0x7fffffff;
+        IADD32I R14, R10, -0x100000;
+        CAL `($ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3);
+        SYNC                                                             (*"TARGET= .L_3 "*);
+
+.L_3:
+        MOV32I R15, 0x3;
+        MOV32I R16, 0x3;
+        XMAD R14, R5, 0x3, RZ;
+        XMAD R12, R5, 0x3, RZ;
+        XMAD R17, R4, 0x3, RZ;
+        XMAD R13, R5, R15.H1, RZ;
+        XMAD R15, R5.H1, R16.H1, RZ;
+        XMAD.CHI R16, R5.H1, 0x3, R14;
+        XMAD.PSL R12, R5.H1, 0x3, R12;
+        XMAD.PSL R14, R4.H1, 0x3, R17;
+        IADD3.RS R13, R16, R13, R15;
+        IADD R6.CC, R6, R12;
+        IADD R14, R13, R14;
+        IADD.X R14, R8, R14;
+        IADD R8.CC, R6, R7;
+        IADD.X R13, R14, R9;
+        IADD R6.CC, R6, -R5;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        IADD.X R14, R14, -R4;
+        IADD3 R5.CC, R7, R6, -R5;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        IADD3.X R4, R9, R14, -R4;
+        IADD R7.CC, R6, R7;
+        IADD.X R9, R14, R9;
+        LEA R6.CC, R8.reuse, c[0x0][0x158], 0x3;
+        LEA.HI.X R8, R8, c[0x0][0x15c], R13, 0x3;
+        LEA R14.CC, R7.reuse, c[0x0][0x158], 0x3;
+        LEA.HI.X R15, R7, c[0x0][0x15c], R9, 0x3;
+        LEA R12.CC, R5, c[0x0][0x158], 0x3;
+                         {         MOV R7, R8  SLOT 0;
+        LDG.E.64 R8, [R14]  SLOT 1;        }
+                         {         LEA.HI.X R13, R5, c[0x0][0x15c], R4, 0x3  SLOT 0;
+        LDG.E.64 R4, [R6]  SLOT 1;        }
+                         {         XMAD R16, R2, 0x6, RZ;
+        LDG.E.64 R12, [R12];        }
+        XMAD R17, R52, 0x24, RZ;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        XMAD.PSL R2, R2.H1, 0x6, R16;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        XMAD.PSL R16, R52.H1, 0x24, R17;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        IADD3 R3, R3, R2, R16;
+        SHL R3, R3, 0x3;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DMUL R8, R10.reuse, R8;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         DMUL R4, R10.reuse, R4;
+        STS.64 [R3+0x6c0], R8;        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DMUL R10, R10, R12;
+        STS.64 [R3+0xd80], R4;        }
+        STS.64 [R3], R10;
+        SYNC                                                             (*"TARGET= .L_2 "*);
+
+.L_2:
+; Location /home/asridhar/.julia/dev/CUDAnative/src/device/cuda/synchronization.jl:14
+        NOP;
+        NOP;
+        BAR.SYNC 0x0;
+        SSY `(.L_4);
+   @!P0 SYNC                                                             (*"TARGET= .L_4 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        S2R R37, SR_TID.Y;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P0, PT, R37, 0x5, PT;
+    @P0 SYNC                                                             (*"TARGET= .L_4 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+        S2R R51, SR_TID.X;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        ISETP.GT.U32.AND P0, PT, R51, 0x5, PT;
+    @P0 SYNC                                                             (*"TARGET= .L_4 "*);
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/GPUifyLoops.jl:198
+                         {         MOV R43, c[0x0][0x1a4];
+        SSY `(.L_5);        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV32I R5, 0x6;
+        MOV32I R6, 0x6;
+        XMAD R3, R52.reuse, 0x6, RZ;
+        XMAD R2, R52, 0x6, RZ;
+        IMNMX.XHI R43.CC, R43, RZ, !PT;
+        XMAD R4, R52.reuse, R5.H1, RZ;
+        MOV R10, c[0x0][0x1a0];
+        XMAD R5, R52.H1.reuse, R6.H1, RZ;
+        XMAD.CHI R3, R52.H1.reuse, 0x6, R3;
+        XMAD.PSL R2, R52.H1, 0x6, R2;
+        IADD3.RS R4, R3, R4, R5;
+        MOV R3, c[0x0][0x1ac];
+        IMNMX.U32.XLO R10, R10, RZ, !PT;
+        IADD R2.CC, R37, R2;
+        IADD.X R8, RZ, R4;
+        IMNMX.XHI R3.CC, R3, RZ, !PT;
+        XMAD R7, R0.reuse, R3.reuse, RZ;
+        XMAD.MRG R5, R0, R3.H1, RZ;
+        XMAD.PSL.CBCC R7, R0.H1, R5.H1, R7;
+        MOV R5, c[0x0][0x1a8];
+        XMAD R6, R3.reuse, R10.reuse, RZ;
+        XMAD.MRG R4, R3, R10.H1, RZ;
+        IMNMX.U32.XLO R5, R5, RZ, !PT;
+        MOV32I R16, 0x6;
+        MOV32I R17, 0x6;
+        XMAD R9, R2.reuse, 0x6, RZ;
+        XMAD R11, R2, 0x6, RZ;
+        XMAD.PSL.CBCC R6, R3.H1, R4.H1, R6;
+        XMAD R4, R10, R5, RZ;
+        XMAD R14, R5.reuse, R43.reuse, RZ;
+        XMAD.MRG R15, R5, R43.H1, RZ;
+        XMAD R16, R2.reuse, R16.H1, RZ;
+        XMAD R17, R2.H1.reuse, R17.H1, RZ;
+        XMAD.PSL R26, R2.H1.reuse, 0x6, R9;
+        XMAD.CHI R18, R2.H1, 0x6, R11;
+        XMAD R2, R5.reuse, R10.reuse, RZ;
+        XMAD.MRG R3, R5, R10.H1, RZ;
+        XMAD.CHI R13, R10.H1.reuse, R5.reuse, R4;
+        XMAD R11, R10.reuse, R5.H1.reuse, RZ;
+        XMAD R12, R10.H1, R5.H1, RZ;
+        XMAD.PSL.CBCC R4, R5.H1.reuse, R15.H1, R14;
+        XMAD R14, R5.reuse, R0, RZ;
+        XMAD.PSL.CBCC R2, R5.H1, R3.H1, R2;
+        XMAD R45, R0.reuse, R5.reuse, RZ;
+        XMAD.MRG R19, R0, R5.H1, RZ;
+        IADD3.RS R3, R13, R11, R12;
+        XMAD R12, R5.reuse, R0.H1.reuse, RZ;
+        XMAD.CHI R14, R5.H1.reuse, R0.reuse, R14;
+        XMAD R5, R5.H1, R0.H1, RZ;
+        XMAD R13, R2.reuse, R0.reuse, RZ;
+        IADD3 R3, R6, R3, R4;
+        XMAD.PSL.CBCC R45, R0.H1, R19.H1, R45;
+        XMAD R11, R8, 0x6, RZ;
+        IADD3.RS R5, R14, R12, R5;
+        XMAD R12, R2, R0.H1, RZ;
+        XMAD R14, R2.H1.reuse, R0.H1.reuse, RZ;
+        XMAD.CHI R13, R2.H1, R0, R13;
+        XMAD R49, R0.reuse, R2.reuse, RZ;
+        XMAD.MRG R6, R0.reuse, R2.H1, RZ;
+        XMAD R2, R0.reuse, R3.reuse, RZ;
+        XMAD.MRG R3, R0, R3.H1, RZ;
+        IADD3.RS R9, R18, R16, R17;
+        IADD32I R45.CC, R45, 0x3;
+        IADD R5, R5, R7;
+        MOV32I R16, 0x3;
+        MOV32I R17, 0x3;
+        XMAD R15, R10, 0x3, RZ;
+        XMAD.PSL R11, R8.H1, 0x6, R11;
+        XMAD.PSL.CBCC R2, R0.H1, R3.H1, R2;
+        XMAD R7, R45, R10, RZ;
+        IADD.X R3, RZ, R5;
+        XMAD R16, R10.reuse, R16.H1, RZ;
+        XMAD R17, R10.H1, R17.H1, RZ;
+        XMAD.CHI R15, R10.H1, 0x3, R15;
+        IADD R9, R9, R11;
+        IADD R26.CC, R51, R26;
+        IADD3.RS R4, R13, R12, R14;
+        XMAD.PSL.CBCC R49, R0.H1, R6.H1, R49;
+        XMAD R22, R45, R10.H1, RZ;
+        XMAD R11, R45.H1.reuse, R10.H1.reuse, RZ;
+        XMAD.CHI R12, R45.H1.reuse, R10, R7;
+        IADD3.RS R8, R15, R16, R17;
+        IADD.X R27, RZ, R9;
+        XMAD R14, R45.reuse, R43.reuse, RZ;
+        XMAD.MRG R15, R45, R43.H1, RZ;
+        IADD R2, R4, R2;
+        IADD R49.CC, R26, R49;
+        XMAD R4, R45.reuse, R10.reuse, RZ;
+        XMAD.MRG R7, R45, R10.H1, RZ;
+        XMAD R9, R10, 0x3, RZ;
+        IADD3.RS R22, R12, R22, R11;
+        XMAD R6, R3.reuse, R10.reuse, RZ;
+        XMAD.MRG R12, R3, R10.H1, RZ;
+        XMAD.PSL.CBCC R5, R45.H1, R15.H1, R14;
+        XMAD R13, R43, 0x3, RZ;
+        IADD.X R2, R27, R2;
+        LEA R36.CC, R49, c[0x0][0x1b8], 0x3;
+        XMAD.PSL.CBCC R45, R45.H1, R7.H1, R4;
+        XMAD.PSL R4, R10.H1, 0x3, R9;
+        XMAD.PSL.CBCC R3, R3.H1, R12.H1, R6;
+        XMAD.PSL R6, R43.H1, 0x3, R13;
+        LEA.HI.X R49, R49, c[0x0][0x1bc], R2, 0x3;
+        IADD R53.CC, R45, R4;
+        MOV32I R4, 0xffffffd8;
+        IADD R8, R8, R6;
+        IADD3 R22, R5, R22, R3;
+        SHL R47, R10, 0x1;
+        MOV32I R7, 0x18;
+        XMAD R12, R43, R4, RZ;
+        XMAD.MRG R6, R43, R4.H1, RZ;
+        MOV32I R5, 0x18;
+        XMAD R3, R10.reuse, 0x18, RZ;
+        IADD.X R56, R22, R8;
+        SHF.L.U64 R2, R10, 0x1, R43;
+        IADD3 R47.CC, R26, R53, -R47;
+        XMAD R4, R10.H1.reuse, R7.H1, RZ;
+        XMAD.PSL.CBCC R12, R43.H1, R6.H1, R12;
+        XMAD R7, R37, 0x6, RZ;
+        XMAD R6, R52, 0x24, RZ;
+        XMAD R34, R10.reuse, R5.H1, RZ;
+        XMAD.CHI R3, R10.H1, 0x18, R3;
+        IADD3.X R2, R27, R56, -R2;
+        MOV32I R5, 0xffffffd8;
+        LEA R38.CC, R47, c[0x0][0x1b8], 0x3;
+        XMAD.PSL R57, R37.H1, 0x6, R7;
+        XMAD.PSL R40, R52.H1, 0x24, R6;
+        IADD3.RS R34, R3, R34, R4;
+        XMAD R3, R10.reuse, R5, RZ;
+        LEA.HI.X R47, R47, c[0x0][0x1bc], R2, 0x3;
+        IADD R45.CC, R45, R26;
+        IADD R41, R57, R40;
+        XMAD R2, R43, 0x18, RZ;
+        XMAD R39, R10, 0x18, RZ;
+        MOV32I R4, 0xffffffd8;
+        XMAD R13, R10.reuse, R5.H1.reuse, RZ;
+        XMAD.CHI R7, R10.H1.reuse, R5.reuse, R3;
+        XMAD R6, R10.H1, R5.H1, RZ;
+        IADD.X R22, R22, R27;
+        SHL R42, R51, 0x3;
+                         {         SHL R41, R41, 0x3;
+        LDS.U.64 R54, [R42+0x1440];        }
+                         {         LEA R48.CC, R10.reuse, R36, 0x3;
+        LDS.U.64 R16, [R42+0x1470];        }
+        XMAD.PSL R3, R43.H1, 0x18, R2;
+        XMAD.PSL R39, R10.H1.reuse, 0x18, R39;
+        XMAD R8, R10.reuse, R4.reuse, RZ;
+        XMAD.MRG R9, R10, R4.H1, RZ;
+                         {         IADD3.RS R13, R7, R13, R6  SLOT 0;
+        LDS.U.128 R4, [R41]  SLOT 1;        }
+        LEA.HI.X R43, R10.reuse, R49, R43, 0x3;
+        IADD R34, R34, R3;
+        IADD R44.CC, R38, R39;
+        IADD R14, -R10.reuse, RZ;
+                         {         XMAD.PSL.CBCC R30, R10.H1, R9.H1, R8  SLOT 0;
+        LDS.U.128 R8, [R41+0x6c0]  SLOT 1;        }
+        IADD.X R31, R47, R34;
+                         {         IADD3 R20, R14, R13, R12  SLOT 0;
+        LDS.U.128 R12, [R41+0xd80]  SLOT 1;        }
+        IADD R30.CC, R44, R30;
+        IADD R40, R51, R40;
+        IADD.X R35, R31, R20;
+        LEA R46.CC, R45, c[0x0][0x1b8], 0x3;
+        SHL R37, R37, 0x3;
+                         {         SHL R40, R40, 0x3;
+        LDS.U.64 R2, [R37+0x1440];        }
+                         {         LEA.HI.X R45, R45, c[0x0][0x1bc], R22, 0x3;
+        LDS.U.64 R32, [R40];        }
+                         {         DFMA R22, R54.reuse, R4, RZ;
+        LDS.U.64 R28, [R40+0x6c0];        }
+                         {         IADD R53.CC, R53, R26;
+        LDS.U.64 R4, [R40+0xd80];        }
+                         {         IADD.X R56, R56, R27;
+        LDS.U.64 R18, [R37+0x1470];        }
+                         {         LEA R50.CC, R53.reuse, c[0x0][0x1b8], 0x3;
+        LDS.U.64 R20, [R40+0x30];        }
+                         {         DFMA R12, R54, R12, RZ;
+        LDS.U.64 R24, [R40+0x6f0];        }
+                         {         LEA.HI.X R53, R53, c[0x0][0x1bc], R56, 0x3;
+        LDS.U.64 R58, [R37+0x14a0];        }
+        DFMA R32, R2, R32, RZ;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        IADD R51, R51, R57;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R6, R6, R16, R22;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        MOV R22, R48;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV R23, R43;
+                         {         IADD R48.CC, R30, R39;
+        LDG.E.64 R22, [R22];        }
+        DFMA R12, R16, R14, R12;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        MOV R14, R38;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV R15, R47;
+        LDG.E.64 R14, [R14];
+        DFMA R28, R2.reuse, R28, RZ;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R4, R2, R4, RZ;
+        MOV R47, R45;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         MOV R38, R44  SLOT 0;
+        LDG.E.64 R44, [R46]  SLOT 1;        }
+        DFMA R20, R18, R20, R32;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        MOV R62, R30;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        SHL R32, R51, 0x3;
+                         {         MOV R3, R49;
+        LDS.U.64 R60, [R32+0x6c0];        }
+                         {         MOV R2, R36;
+        LDS.U.64 R56, [R32+0x120];        }
+                         {         IADD.X R49, R35, R34;
+        LDG.E.64 R2, [R2];        }
+        IADD R36.CC, R48, R39;
+                         {         MOV R39, R31  SLOT 0;
+        LDS.U.64 R30, [R32+0xd80]  SLOT 1;        }
+                         {         MOV R51, R53;
+        LDG.E.64 R38, [R38];        }
+        MOV R63, R35;
+                         {         IADD.X R33, R49, R34  SLOT 0;
+        LDG.E.64 R34, [R48]  SLOT 1;        }
+                         {         DFMA R8, R54, R8, RZ;
+        LDG.E.64 R46, [R62];        }
+                         {         DFMA R8, R16, R10, R8;
+        LDG.E.64 R48, [R50];        }
+                         {         SHL R52, R52, 0x3;
+        LDS.U.64 R16, [R40+0xdb0];        }
+                         {         MOV R50, R36;
+        LDS.U.64 R10, [R52+0x1440];        }
+                         {         MOV R51, R33;
+        LDS.U.64 R54, [R52+0x1470];        }
+                         {         DFMA R24, R18.reuse, R24, R28;
+        LDG.E.64 R50, [R50];        }
+                         {         DFMA R4, R18, R16, R4;
+        LDS.U.64 R28, [R32];        }
+                         {         MOV32I R33, 0x40080000;
+        LDS.U.64 R16, [R32+0x7e0];        }
+        LDS.U.64 R18, [R32+0xea0];
+                         {         DFMA R28, R10.reuse, R28, RZ;
+        LDS.U.64 R62, [R40+0x60];        }
+        DFMA R60, R10, R60, RZ;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R10, R10, R30, RZ;
+        LDS.U.64 R30, [R32+0x240];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R28, R54.reuse, R56, R28;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         DFMA R60, R54.reuse, R16, R60;
+        LDS.U.64 R56, [R40+0x720];        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R16, R54, R18, R10;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.64 R54, [R40+0xde0];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        LDS.U.64 R18, [R52+0x14a0];
+        DFMA R10, R58, R62, R20;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         DFMA R56, R58.reuse, R56, R24;
+        LDS.U.64 R20, [R32+0x900];        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DFMA R54, R58, R54, R4;
+        LDS.U.64 R24, [R32+0xfc0];        }
+                         {         DFMA R58, R18, R30, R28;
+        LDS.U.64 R62, [R42+0x14a0];        }
+                         {         DFMA R20, R18.reuse, R20, R60;
+        LDS.U.128 R28, [R41+0x10];        }
+        DFMA R24, R18, R24, R16;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.64 R60, [R42+0x14d0];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        LDS.U.128 R16, [R41+0x6d0];
+        DFMA R28, R62, R28, R6;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.128 R4, [R41+0xd90];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R16, R62, R16, R8;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R30, R30, R60, R28;
+                         {         DFMA R12, R62, R4, R12;
+        LDS.U.64 R8, [R37+0x14d0];        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DFMA R62, R60.reuse, R18, R16;
+        LDS.U.64 R28, [R40+0x90];        }
+        DFMA R12, R60, R6, R12;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.64 R16, [R40+0x750];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        LDS.U.64 R60, [R40+0xe10];
+        LDS.U.64 R6, [R52+0x14d0];
+        LDS.U.64 R18, [R32+0x360];
+        LDS.U.64 R4, [R32+0xa20];
+        DFMA R28, R8, R28, R10;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R56, R8, R16, R56;
+                         {         DFMA R54, R8, R60, R54;
+        LDS.U.64 R16, [R32+0x10e0];        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DFMA R58, R6, R18, R58;
+        LDS.U.64 R60, [R42+0x1500];        }
+                         {         DFMA R24, R6.reuse, R16, R24;
+        LDS.U.128 R8, [R41+0x20];        }
+        DFMA R20, R6, R4, R20;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.128 R4, [R41+0x6e0];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DFMA R8, R60, R8, R30;
+        LDS.U.128 R16, [R41+0xda0];        }
+                         {         DFMA R4, R60.reuse, R4, R62;
+        LDS.U.64 R30, [R42+0x1530];        }
+                         {         DFMA R12, R60, R16, R12;
+        LDS.U.64 R42, [R40+0xf0];        }
+                         {         DFMA R60, R10, R30, R8;
+        LDS.U.64 R16, [R37+0x1500];        }
+                         {         DFMA R6, R30, R6, R4;
+        LDS.U.64 R62, [R40+0xc0];        }
+        LDS.U.64 R10, [R40+0x780];
+        LDS.U.64 R8, [R40+0xe40];
+        LDS.U.64 R4, [R37+0x1530];
+                         {         DFMA R18, R30, R18, R12;
+        LDS.U.64 R36, [R40+0xe70];        }
+                         {         DFMA R28, R16.reuse, R62, R28;
+        LDS.U.64 R30, [R40+0x7b0];        }
+                         {         DFMA R10, R16.reuse, R10, R56;
+        LDS.U.64 R62, [R52+0x1500];        }
+                         {         DFMA R54, R16, R8, R54;
+        LDS.U.64 R12, [R52+0x1530];        }
+        LDS.U.64 R16, [R32+0x480];
+        LDS.U.64 R8, [R32+0xb40];
+        DFMA R56, R4, R42, R28;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         DFMA R10, R4, R30, R10;
+        LDS.U.64 R28, [R32+0x1200];        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        LDS.U.64 R42, [R32+0x5a0];
+        LDS.U.64 R30, [R32+0xc60];
+        DFMA R16, R62.reuse, R16, R58;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        LDS.U.64 R58, [R32+0x1320];
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R4, R4, R36, R54;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R8, R62, R8, R20;
+                         {         DMUL R40, R14, R10;
+        MUFU.RCP64H R21, R33;        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DEPBAR.LE SB5, 0x5;
+        DMUL R36, R22, R56;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R24, R62, R28, R24;
+        MOV32I R20, 0x1;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R40, R44, R6, R40;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R36, R2, R60, R36;
+        DFMA R16, R12.reuse, R42, R16;
+        DFMA R8, R12, R30, R8;
+        DEPBAR.LE SB5, 0x1, {0};
+        DMUL R28, R38, R4;
+        MOV32I R30, 0x0;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        MOV32I R31, 0x3ff00000;
+        DFMA R12, R12, R58, R24;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R24, R34, R8, R40;
+        DFMA R32, R20, -3, R30;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R28, R48, R18, R28;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R30, R46, R16, R36;
+        DFMA R54, R32, R32, R32;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R28, R50, R12, R28;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DADD R42, R30, R24;
+        DFMA R54, R20, R54, R20;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DADD R32, R28, R42;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DMUL R42, R32, R54;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R20, R42, -3, R32;
+        DFMA R42, R54, R20, R42;
+        FSET.LE.AND R37, |R33|, c[0x2][0xc], PT;
+        DMUL R54, R14, R56.reuse;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        FFMA R36, RZ, 2.125, R43;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DMUL R58, R38, R56;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        FSET.GT.AND R36, |R36|, c[0x2][0x10], PT;
+        DFMA R20, R44, R60.reuse, R54;
+        DFMA R58, R48, R60, R58;
+        LOP.AND.NZ P0, RZ, ~R37, R36;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R20, R34, R16.reuse, R20;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R16, R50, R16, R58;
+    @P0 SYNC                                                             (*"TARGET= .L_5 "*);
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        CAL `($ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2);
+        SYNC                                                             (*"TARGET= .L_5 "*);
+
+.L_5:
+        MOV R41, c[0x0][0x16c];
+        IMNMX.XHI R41.CC, R41, RZ, !PT;
+        MOV R37, c[0x0][0x168];
+        MOV R33, c[0x0][0x164];
+        IMNMX.U32.XLO R37, R37, RZ, !PT;
+        IMNMX.XHI R33.CC, R33, RZ, !PT;
+        XMAD R57, R0.reuse, R41.reuse, RZ;
+        XMAD R55, R37, R0, RZ;
+        XMAD.MRG R58, R0.reuse, R41.H1, RZ;
+        XMAD R54, R0.reuse, R37.reuse, RZ;
+        XMAD.MRG R41, R0, R37.H1, RZ;
+        MOV R32, c[0x0][0x160];
+        XMAD R36, R37.reuse, R0.H1.reuse, RZ;
+        XMAD.CHI R55, R37.H1.reuse, R0.reuse, R55;
+        XMAD R53, R37.H1, R0.H1, RZ;
+        XMAD.PSL.CBCC R37, R0.H1.reuse, R58.H1, R57;
+        XMAD.PSL.CBCC R54, R0.H1, R41.H1, R54;
+        IMNMX.U32.XLO R32, R32, RZ, !PT;
+        IADD3.RS R0, R55, R36, R53;
+        XMAD R53, R54.reuse, R32.reuse, RZ;
+        IADD R37, R0, R37;
+        XMAD R0, R54.reuse, R32.reuse, RZ;
+        XMAD.MRG R41, R54.reuse, R32.H1.reuse, RZ;
+        XMAD R36, R54, R32.H1, RZ;
+        XMAD R55, R54.H1.reuse, R32.H1.reuse, RZ;
+        XMAD R52, R54.reuse, R33.reuse, RZ;
+        XMAD.MRG R57, R54.reuse, R33.H1, RZ;
+        XMAD.CHI R53, R54.H1, R32.reuse, R53;
+        XMAD R40, R37.reuse, R32.reuse, RZ;
+        XMAD.MRG R58, R37, R32.H1, RZ;
+        XMAD.PSL.CBCC R0, R54.H1.reuse, R41.H1, R0;
+        XMAD.PSL.CBCC R54, R54.H1, R57.H1, R52;
+        IADD3.RS R36, R53, R36, R55;
+        XMAD.PSL.CBCC R37, R37.H1, R58.H1, R40;
+        IADD R26.CC, R26, R0;
+        DMUL R14, R14, R4;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        IADD3 R0, R54, R36, R37;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DMUL R36, R22.reuse, R4;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DMUL R38, R38, R10.reuse;
+        DMUL R4, R22, R10;
+        IADD.X R11, R27, R0;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        LEA R10.CC, R26, c[0x0][0x178], 0x3;
+        SHL R0, R32, 0x3;
+        DFMA R44, R44, R18.reuse, R14;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R18, R2.reuse, R18, R36;
+        DFMA R4, R2, R6.reuse, R4;
+        LEA.HI.X R11, R26, c[0x0][0x17c], R11, 0x3;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DFMA R38, R48, R6, R38;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        SHF.L.U64 R32, R32, 0x3, R33;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        IADD R14.CC, R0, R10;
+        DFMA R18, R46.reuse, R12, R18;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R46, R46, R8, R4;
+        IADD.X R15, R32, R11;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        IADD R2.CC, R14, R0;
+        DFMA R38, R50, R8, R38;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DFMA R44, R34, R12, R44;
+        DADD R16, R16, R18;
+        IADD.X R3, R15, R32;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        IADD R6.CC, R2, R0;
+        DADD R20, R20, R46;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        DADD R38, R38, R44;
+        DADD R30, R30, -R42.reuse;
+        DADD R24, R24, -R42.reuse;
+        IADD.X R7, R3, R32;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DADD R28, R28, -R42;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+        IADD R18.CC, R6, R0;
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DMUL R16, R16, 0.5;
+        DMUL R38, R38, 0.5;
+        DMUL R20, R20, 0.5;
+        IADD.X R19, R7, R32;
+        DMUL R30, R30, 20;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         IADD R4.CC, R18, R0;
+        STG.E.64 [R10], R30;        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+        DMUL R24, R24, 20;
+; Location /home/asridhar/.julia/packages/GPUifyLoops/fn7x4/src/context.jl:103
+                         {         DMUL R28, R28, 20;
+        STG.E.64 [R14], R24;        }
+; Location /home/asridhar/.julia/packages/Cassette/xggAf/src/context.jl:447
+                         {         DMUL R20, R20, 20;
+        STG.E.64 [R2], R28;        }
+                         {         DMUL R16, R16, 20;
+        STG.E.64 [R6], R20;        }
+                         {         DMUL R38, R38, 20;
+        STG.E.64 [R18], R16;        }
+        IADD.X R5, R19, R32;
+        STG.E.64 [R4], R38;
+        SYNC                                                             (*"TARGET= .L_4 "*);
+
+.L_4:
+; Location /home/asridhar/.julia/dev/CUDAnative/src/device/cuda/synchronization.jl:14
+        NOP;
+        NOP;
+        NOP;
+        BAR.SYNC 0x0;
+        NOP;
+        NOP;
+        NOP;
+        NOP;
+        EXIT;
+        .weak           $ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3
+        .type           $ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3,@function
+        .size           $ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3,($ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2 - $ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3)
+$ptxcall_anonymous12_31$__cuda_sm20_dblrcp_rn_slowpath_v3:
+                         {         MOV R10, R12;
+        PBK `(.L_6);        }
+                         {         MOV R11, R13;
+        SSY `(.L_7);        }
+        DSETP.GTU.AND P1, PT, |R10|, +INF , PT;
+    @P1 BRA `(.L_8);
+        LOP32I.AND R15, R13, 0x7fffffff;
+        IADD32I R12, R15, -0x1;
+        ISETP.LT.U32.AND P1, PT, R12, c[0x2][0x14], PT;
+   @!P1 LOP32I.XOR R13, R11, 0x7ff00000;
+                         {    @!P1 MOV R12, RZ;
+   @!P1 BRK                                                              (*"TARGET= .L_6 "*);        }
+        SYNC                                                             (*"TARGET= .L_7 "*);
+
+.L_7:
+        ISETP.LT.U32.AND P1, PT, R15, c[0x2][0x18], PT;
+    @P1 BRA `(.L_9);
+        IADD32I R19, R11, -0x3fe00000;
+        MUFU.RCP64H R15, R19;
+        MOV R12, R10;
+        MOV R13, R19;
+        DFMA R16, R12, -R14, c[0x2][0x0];
+        DFMA R16, R16, R16, R16;
+        DFMA R14, R14, R16, R14;
+        DFMA R12, R12, -R14, c[0x2][0x0];
+        DFMA R12, R14, R12, R14;
+        DMUL R12, R12, 2.2250738585072013831e-308;
+        DFMA R10, R10, -R12, c[0x2][0x0];
+        DFMA R10, R10, R10, R10;
+        DFMA R12, R12, R10, R12;
+        BRK                                                              (*"TARGET= .L_6 "*);
+
+.L_9:
+        DMUL R10, R10, 8.11296384146066816958e+31;
+                         {         MOV R12, R14;
+        MUFU.RCP64H R13, R11;        }
+        DFMA R14, R10, -R12, c[0x2][0x0];
+        DFMA R14, R14, R14, R14;
+        DFMA R12, R12, R14, R12;
+        DFMA R14, R10, -R12, c[0x2][0x0];
+        DFMA R12, R12, R14, R12;
+        DMUL R12, R12, 8.11296384146066816958e+31;
+        BRK                                                              (*"TARGET= .L_6 "*);
+
+.L_8:
+        LOP32I.OR R13, R11, 0x80000;
+                         {         MOV R12, R10;
+        BRK                                                              (*"TARGET= .L_6 "*);        }
+
+.L_6:
+        MOV R10, R12;
+                         {         MOV R11, R13;
+        RET;        }
+        .weak           $ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2
+        .type           $ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2,@function
+        .size           $ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2,(.L_55 - $ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2)
+$ptxcall_anonymous12_31$__cuda_sm20_div_f64_slowpath_v2:
+                         {         MOV32I R53, 0x20080000;
+        PBK `(.L_10);        }
+                         {         LOP32I.AND R37, R33, 0x7f800000;
+        MUFU.RCP64H R41, R53;        }
+        MOV32I R42, 0x0;
+        MOV32I R43, 0x3ff00000;
+        MOV32I R40, 0x1;
+        ISETP.LT.U32.AND P0, PT, R37, c[0x2][0x1c], PT;
+        MOV32I R36, 0x5ff00000;
+        DFMA R42, R40, -2.237502219360062023e-154, R42;
+        SEL R52, R36, c[0x2][0x20], P0;
+        DFMA R54, R42, R42, R42;
+        MOV R42, RZ;
+        MOV R43, R52;
+        DFMA R40, R40, R54, R40;
+        DMUL R42, R32, R42;
+        DMUL R52, R42, R40;
+        DFMA R42, R52, -2.237502219360062023e-154, R42;
+        DFMA R40, R40, R42, R52;
+        DSETP.LEU.AND P0, PT, |R40|, RZ, PT;
+    @P0 BRA `(.L_11);
+        ISETP.GT.U32.AND P0, PT, R37, c[0x2][0x24], PT;
+        MOV R42, RZ;
+        SEL R43, R36, c[0x2][0x20], P0;
+        DMUL R36, R40.reuse, 7.4583407312002067433e-155;
+        DMUL R40, R40, R42;
+        DMUL R42, R42, R36;
+        DMUL R40, R40, 7.4583407312002067433e-155;
+        DFMA R36, R42, 3, -R32;
+        DFMA R54, R40, 3, -R32;
+        DSETP.GT.AND P0, PT, |R36|, |R54|, PT;
+        SEL R37, R41, R43, P0;
+        FSETP.GTU.AND P1, PT, |R37|, 1.469367938527859385e-39, PT;
+        SEL R40, R40, R42, P0;
+                         {         MOV R41, R37;
+    @P1 BRK                                                              (*"TARGET= .L_10 "*);        }
+        FSETP.LT.AND P0, PT, |R33|, 1.5046327690525280102e-36, PT;
+        MOV32I R55, 0x58500000;
+        MOV R54, RZ;
+        LOP32I.AND R58, R40, 0xfffffffe;
+        LOP32I.OR R36, R40, 0x1;
+        SEL R55, R55, c[0x2][0x4], P0;
+        MOV R40, R58;
+        MOV R41, R37;
+        DMUL R42, R32, R54;
+        DMUL R32, R54, 3;
+        DFMA R54, R36, R32.reuse, -R42.reuse;
+        DFMA R40, R40, R32, -R42;
+        DSETP.GT.AND P0, PT, |R40|, |R54|, PT;
+        SEL R58, R36, R58, P0;
+        LOP32I.AND R36, R58, 0x1;
+        IADD32I R52.CC, R58, 0x1;
+        ISETP.EQ.U32.AND P0, PT, R36, 0x1, PT;
+        IADD.X R54, RZ, R37;
+        IADD32I R36.CC, R58, -0x1;
+        IADD32I.X R40, R37.reuse, -0x1;
+        SEL R52, R58, R52, !P0;
+        SEL R53, R37, R54, !P0;
+        SEL R36, R36, R58, !P0;
+        SEL R37, R40, R37, !P0;
+        DFMA R40, R32, R52, -R42;
+        DFMA R42, R32, R36, -R42;
+        DSETP.GT.AND P0, PT, |R40|, |R42|, PT;
+        SEL R40, R36, R52, P0;
+                         {         SEL R41, R37, R53, P0;
+        BRK                                                              (*"TARGET= .L_10 "*);        }
+
+.L_11:
+        DSETP.EQ.AND P0, PT, R40, RZ, PT;
+    @P0 BRA `(.L_12);
+        MOV32I R42, 0x40080000;
+        MUFU.RCP64H R37, R42;
+        MOV R36, RZ;
+        DSETP.GT.AND P0, PT, |R36|, RZ, PT;
+   @!P0 MOV32I R36, 0x0;
+   @!P0 MOV32I R37, 0x40080000;
+        DMUL R40, R32, R36;
+        BRK                                                              (*"TARGET= .L_10 "*);
+
+.L_12:
+        DMUL R40, R32, 3;
+        BRK                                                              (*"TARGET= .L_10 "*);
+
+.L_10:
+        MOV R42, R40;
+                         {         MOV R43, R41;
+        RET;        }
+
+.L_13:
+        BRA `(.L_13);
+
+.L_55:
