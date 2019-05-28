@@ -24,10 +24,10 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
+using CLIMA.Vtk
+using CLIMA.SubgridScaleTurbulence
 
 # TEMP MODULE TESTING
-include("./SGSTurbulence.jl")
-using .SGSTurbulence
 # END TEMP MODULE TESTING
 
 # Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
@@ -41,7 +41,7 @@ using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0
 const _nstate = 6
 const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
-const statenames = ("ρ", "U", "V", "W", "E", "QT")
+const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 const _nviscstates = 16
 const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _modSij = 1:_nviscstates
@@ -464,18 +464,38 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
   end
 
-  step = [0]
-  mkpath("vtk-lr-smag")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
-    outprefix = @sprintf("vtk-lr-smag/cns_%dD_mpirank%04d_step%04d", dim,
-                         MPI.Comm_rank(mpicomm), step[1])
-      @debug "doing VTK output" outprefix
-      DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames)
-      step[1] += 1
-      nothing
-  end
+  npoststates = 8
+  _P, _u, _v, _w, _ρinv, _q_liq, _T, _θ = 1:npoststates
+  postnames = ("P", "u", "v", "w", "rhoinv", "_q_liq", "T", "THETA")
+  postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
-  # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
+  step = [0]
+  mkpath("vtk")
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
+                                               Q) do R, Q, QV, aux
+      @inbounds let
+        (R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = preflux(Q, QV, aux)
+      end
+    end
+
+    outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
+                         MPI.Comm_rank(mpicomm), step[1])
+    @debug "doing VTK output" outprefix
+    writevtk(outprefix, Q, spacedisc, statenames,
+                                         postprocessarray, postnames)
+    #= 
+    pvtuprefix = @sprintf("vtk/cns_%dD_step%04d", dim, step[1])
+    prefixes = ntuple(i->
+                      @sprintf("vtk/cns_%dD_mpirank%04d_step%04d",
+                               dim, i-1, step[1]),
+                      MPI.Comm_size(mpicomm))
+    writepvtu(pvtuprefix, prefixes, postnames)
+    =# 
+    step[1] += 1
+    nothing
+  end
+  
   solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 

@@ -359,7 +359,6 @@ using Requires
 
 include("VanillaAtmosDiscretizations_kernels.jl")
 
-include("../../../Mesh/vtk.jl")
 function writevtk(prefix, Q::MPIStateArray, disc::VanillaAtmosDiscretization)
   vgeo = disc.grid.vgeo
   host_array = Array ∈ typeof(Q).parameters

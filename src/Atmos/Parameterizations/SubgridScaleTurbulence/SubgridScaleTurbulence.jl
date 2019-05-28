@@ -1,4 +1,4 @@
-module SGSTurbulence
+module SubgridScaleTurbulence
 
 # Module dependencies
 using CLIMA.MoistThermodynamics
