@@ -25,6 +25,11 @@ using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 
+# TEMP MODULE TESTING
+include("./SGSTurbulence.jl")
+using .SGSTurbulence
+# END TEMP MODULE TESTING
+
 # Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
 # Even for the dry example shown here, we load the moist thermodynamics module 
 # and consider the dry equation set to be the same as the moist equations but
@@ -64,8 +69,8 @@ const zmax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
-const Nex = 30
-const Ney = 30
+const Nex = 20
+const Ney = 20
 const Nez = 1
 const numdims = 2
 const Npoly = 5
@@ -149,15 +154,15 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     
     vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
     vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
-    # Stress tensor
+    # Stress tensor : FIXME: use Julia Tensors.jl (?)
     τ11, τ22, τ33 = VF[_τ11] , VF[_τ22], VF[_τ33]
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13]
     τ23 = τ32 = VF[_τ23] 
+    # Buoyancy correction 
     dθdy = VF[_θy]
     modSij = VF[_modSij]
-    Ri = gravity / θ * dθdy / (modSij + eps(modSij)) / (modSij + eps(modSij))
-    f_R = sqrt(max(0.0, 1 - 3*Ri))
+    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -220,7 +225,6 @@ end
 #md # (pending)
 @inline function compute_stresses!(VF, grad_vel, _...)
   gravity::eltype(VF) = grav
-  Prandltl::eltype(VF) = Prandtl
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
     dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
@@ -231,32 +235,23 @@ end
     dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
     # virtual potential temperature gradient: for richardson calculation
     # strains
-    ϵ11 = dudx
-    ϵ22 = dvdy
-    ϵ33 = dwdz
-    ϵ12 = (dudy + dvdx) / 2
-    ϵ13 = (dudz + dwdx) / 2
-    ϵ23 = (dvdz + dwdy) / 2
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    SijSij = (ϵ11^2 + ϵ22^2 + ϵ33^2
-              + 2.0 * ϵ12^2
-              + 2.0 * ϵ13^2 
-              + 2.0 * ϵ23^2) 
-    ν_t = C_smag * C_smag * Δ2 * sqrt(2.0 * SijSij)
+    (Sij, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
     # --------------------------------------------
     # deviatoric stresses
-    VF[_τ11] = 2 * ν_t * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ22] = 2 * ν_t * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ33] = 2 * ν_t * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ12] = 2 * ν_t * ϵ12
-    VF[_τ13] = 2 * ν_t * ϵ13
-    VF[_τ23] = 2 * ν_t * ϵ23
+    # Fix up index magic numbers
+    VF[_τ11] = 2 * ν_e * (Sij[1,1] - tr(Sij) / 3)
+    VF[_τ22] = 2 * ν_e * (Sij[2,2] - tr(Sij) / 3)
+    VF[_τ33] = 2 * ν_e * (Sij[3,3] - tr(Sij) / 3)
+    VF[_τ12] = 2 * ν_e * Sij[1,2]
+    VF[_τ13] = 2 * ν_e * Sij[1,3]
+    VF[_τ23] = 2 * ν_e * Sij[2,3]
     VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
     VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
-    VF[_modSij] = sqrt(2.0 * SijSij)
+    VF[_modSij] = modulus_Sij
   end
 end
 # -------------------------------------------------------------------------
