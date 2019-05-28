@@ -40,8 +40,8 @@ const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("ρ", "U", "V", "W", "E", "QT")
 
-const _nviscstates = 12
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz= 1:_nviscstates
+const _nviscstates = 16
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz , _θx, _θy, _θz, _modSij = 1:_nviscstates
 
 const _ngradstates = 6
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
@@ -64,8 +64,8 @@ const zmax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
-const Nex = 5
-const Ney = 20
+const Nex = 30
+const Ney = 30
 const Nez = 1
 const numdims = 2
 const Npoly = 5
@@ -88,7 +88,7 @@ end
 # around its behaviour. 
 # The preflux function interacts with the following  
 # Modules: NumericalFluxes.jl 
-# functions: wavespeed, cns_flux!, bcstate!
+# functions: wavespeed, physical_flux!, bcstate!
 # -------------------------------------------------------------------------
 @inline function preflux(Q,VF, aux, _...)
   gravity::eltype(Q) = grav
@@ -132,10 +132,10 @@ end
 #md # $\boldsymbol{F}$ contains both the viscous and inviscid flux components
 #md # and $\boldsymbol{S}$ contains source terms.
 #md # Note that the preflux calculation is splatted at the end of the function call
-#md # to cns_flux! #TODO add Richardson number correction 
+#md # to physical_flux! #TODO add Richardson number correction 
 # -------------------------------------------------------------------------
-cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
-@inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+physical_flux!(F, Q, VF, aux, t) = physical_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
+@inline function physical_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
@@ -156,6 +156,11 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13] 
     τ23 = τ32 = VF[_τ23] 
+    dθdy = VF[_θy]
+    modSij = VF[_modSij]
+    # Richardson calculation 
+    Ri = gravity / θ * dθdy / (modSij + eps(modSij)) / (modSij + eps(modSij))
+    auxr = sqrt(max(0.0, 1 - 3*Ri))
     # Viscous contributions
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
     F[1, _V] -= τ21; F[2, _V] -= τ22; F[3, _V] -= τ23
@@ -208,6 +213,7 @@ end
     dqdx, dqdy, dqdz = grad_vel[1, 4], grad_vel[2, 4], grad_vel[3, 4]
     dTdx, dTdy, dTdz = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
     dρdx, dρdy, dρdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
+    dθdy = grad_vel[2, 7]
     # strains
     ϵ11 = dudx
     ϵ22 = dvdy
@@ -224,8 +230,7 @@ end
               + 2.0 * ϵ12^2
               + 2.0 * ϵ13^2 
               + 2.0 * ϵ23^2) 
-    modSij = sqrt(2.0 * SijSij) 
-    @show(2 * SijSij)
+    modSij = sqrt(2.0 * SijSij)
     ν_t = C_smag * C_smag * Δ2 * modSij 
     # --------------------------------------------
     # END SMAGORINSKY COEFFICIENT COMPONENTS
@@ -237,8 +242,11 @@ end
     VF[_τ12] = 2 * ν_t * ϵ12
     VF[_τ13] = 2 * ν_t * ϵ13
     VF[_τ23] = 2 * ν_t * ϵ23
+    # Dirichlet U_boundary == 1.0 
     VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
+    VF[_θy] = dθdy
+    VF[_modSij] = modSij
   end
 end
 # -------------------------------------------------------------------------
@@ -262,6 +270,7 @@ end
   @inbounds begin
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
+    # specify incoming characteristics 
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
     QP[_U] = UM - 2 * nM[1] * UnM
     QP[_V] = VM - 2 * nM[2] * UnM
@@ -404,13 +413,13 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                           DeviceArray = ArrayType,
                                           polynomialorder = N)
   
-  numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed, preflux)
-  numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed, preflux)
+  numflux!(x...) = NumericalFluxes.rusanov!(x..., physical_flux!, wavespeed, preflux)
+  numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., physical_flux!, bcstate!, wavespeed, preflux)
 
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
                            length_state_vector = _nstate,
-                           flux! = cns_flux!,
+                           flux! = physical_flux!,
                            numerical_flux! = numflux!,
                            numerical_boundary_flux! = numbcflux!, 
                            number_gradient_states = _ngradstates,
@@ -512,7 +521,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney, Nez)
-    dt = 0.005
+    dt = 0.01
     timeend = 1000
     polynomialorder = Npoly
     DFloat = Float64
