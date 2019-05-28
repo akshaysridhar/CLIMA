@@ -11,6 +11,9 @@ using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
 
+using CUDAnative
+using CuArrays
+
 const _nstate = 5
 const _ρ, _U, _V, _W, _E = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E)
@@ -161,7 +164,7 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = Array
+  ArrayType = CuArray
 
   brickrange = ntuple(j->range(DFloat(-1); length=Ne[j]+1, stop=1), dim)
 
@@ -172,7 +175,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                           DeviceArray = ArrayType,
                                           polynomialorder = N,
                                          )
-
+  cdim = Val(dim)
   # spacedisc = data needed for evaluating the right-hand side function
   spacedisc = DGBalanceLaw(grid = grid,
                            length_state_vector = _nstate,
@@ -190,7 +193,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            auxiliary_state_length = _nauxstate,
                            auxiliary_state_initialization! =
                            auxiliary_state_initialization!,
-                           source! = (x...) -> source!(Val(dim), x...))
+                           source! = (x...) -> source!(cdim, x...))
 
   # This is a actual state/function that lives on the grid
   initialcondition(Q, x...) = initialcondition!(Val(dim), Q, DFloat(0), x...)

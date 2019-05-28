@@ -5,6 +5,8 @@ using MPI
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
+using Dierckx
+using DelimitedFiles
 
 # GPUIFY
 using CUDAnative
@@ -19,7 +21,6 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
-
 # Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
 # Even for the dry example shown here, we load the moist thermodynamics module 
 # and consider the dry equation set to be the same as the moist equations but
@@ -33,8 +34,8 @@ const _ρ, _U, _V, _W, _E, _QT = 1:_nstate
 const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("ρ", "U", "V", "W", "E", "QT")
 
-const _nviscstates = 12
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz = 1:_nviscstates
+const _nviscstates = 16
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _modSij = 1:_nviscstates
 
 const _ngradstates = 6
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
@@ -47,14 +48,13 @@ end
 
 const Prandtl = 71 // 100
 const k_μ = cp_d / Prandtl
-const γ_exact = 7 // 5
-const μ_exact = 2.5
+const μ_exact = 25
 const xmin = 0
 const ymin = 0
 const zmin = 0
 const xmax = 3000
 const ymax = 3000
-const zmax = 3000
+const zmax = 5000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
@@ -86,7 +86,6 @@ end
 # -------------------------------------------------------------------------
 @inline function preflux(Q,VF, aux, _...)
   gravity::eltype(Q) = grav
-  R_gas::eltype(Q) = R_d
   @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
   ρinv = 1 / ρ
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
@@ -140,30 +139,30 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[1, _W], F[2, _W], F[3, _W] = u * W      , v * W      , w * W + P
     F[1, _E], F[2, _E], F[3, _E] = u * (E + P), v * (E + P), w * (E + P)
     F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
-    # Stress tensor
-    τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
-    τ12 = τ21 = VF[_τ12]
-    τ13 = τ31 = VF[_τ13]
-    τ23 = τ32 = VF[_τ23]
+    
     vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
     vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
-    # 2D richardson number 
-    #dθdy = VF[_θy]
+    # Stress tensor
+    τ11, τ22, τ33 = VF[_τ11] , VF[_τ22], VF[_τ33]
+    τ12 = τ21 = VF[_τ12] 
+    τ13 = τ31 = VF[_τ13]
+    τ23 = τ32 = VF[_τ23] 
+    dθdy = VF[_θy]
+    modSij = VF[_modSij]
+    Ri = gravity / θ * dθdy / (modSij + 1e-12) / (modSij + 1e-12)
+    f_R = sqrt(max(0.0, 1 - 3*Ri))
     # Viscous contributions
-    F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
-    F[1, _V] -= τ21; F[2, _V] -= τ22; F[3, _V] -= τ23
-    F[1, _W] -= τ31; F[2, _W] -= τ32; F[3, _W] -= τ33
+    F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
+    F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
+    F[1, _W] -= τ31 * f_R ; F[2, _W] -= τ32 * f_R ; F[3, _W] -= τ33 * f_R
     # Energy dissipation
     F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + k_μ * vTx 
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
     # Viscous contributions to mass flux terms
-    F[1, _ρ] -=  vqx
-    F[2, _ρ] -=  vqy
-    F[3, _ρ] -=  vqz
-    F[1, _QT] -=  vqx
-    F[2, _QT] -=  vqy
-    F[3, _QT] -=  vqz
+    F[1, _QT] -= vqx
+    F[2, _QT] -= vqy
+    F[3, _QT] -= vqz
   end
 end
 
@@ -177,7 +176,6 @@ end
 velocities!(vel, Q, aux, t, _...) = velocities!(vel, Q, aux, t, preflux(Q,~,aux)...)
 @inline function velocities!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
   @inbounds begin
-    y = aux[_a_y]
     # ordering should match states_for_gradient_transform
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
     E, QT = Q[_E], Q[_QT]
@@ -185,24 +183,6 @@ velocities!(vel, Q, aux, t, _...) = velocities!(vel, Q, aux, t, preflux(Q,~,aux)
     vel[1], vel[2], vel[3] = u, v, w
     vel[4], vel[5], vel[6] = ρinv * E, QT, T
     vel[7] = θ
-  end
-end
-
-# -------------------------------------------------------------------------
-#md ### Auxiliary Function (Not required)
-#md # In this example the auxiliary function is used to store the spatial
-#md # coordinates. This may also be used to store variables for which gradients
-#md # are needed, but are not available through teh prognostic variable 
-#md # calculations. (An example of this will follow - in the Smagorinsky model, 
-#md # where a local Richardson number via potential temperature gradient is required)
-# -------------------------------------------------------------------------
-const _nauxstate = 3
-const _a_x, _a_y, _a_z, = 1:_nauxstate
-@inline function auxiliary_state_initialization!(aux, x, y, z)
-  @inbounds begin
-    aux[_a_x] = x
-    aux[_a_y] = y
-    aux[_a_z] = z
   end
 end
 # -------------------------------------------------------------------------
@@ -213,6 +193,7 @@ end
 #md # to facilitate implementation of the constant coefficient Smagorinsky model
 #md # (pending)
 @inline function compute_stresses!(VF, grad_vel,_...)
+  μ::eltype(VF) = μ_exact
   gravity::eltype(VF) = grav
   @inbounds begin
     dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
@@ -221,8 +202,7 @@ end
     # compute gradients of moist vars and temperature
     dqdx, dqdy, dqdz = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
     dTdx, dTdy, dTdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
-#   # virtual potential temperature gradient: for richardson calculation
-#   dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
+    dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
     # strains
     ϵ11 = dudx
     ϵ22 = dvdy
@@ -237,13 +217,9 @@ end
               + 2.0 * ϵ12^2
               + 2.0 * ϵ13^2 
               + 2.0 * ϵ23^2) 
-    modSij = sqrt(2.0 * SijSij) 
-    #Richardson = (grav/θ) * dθdy / modSij
-    #auxr = max(0.0, 1.0 - Richardson/Prandtl)
-    ν_t = C_smag * C_smag * Δ2 * modSij #* sqrt(auxr)
+    ν_t = C_smag * C_smag * Δ2 * sqrt(2.0 * SijSij)
     # --------------------------------------------
     # deviatoric stresses
-    # ν_t here is in the sense of a dynamic viscosity (universal: rather than purely for the subgrid scale)
     VF[_τ11] = 2 * ν_t * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ22] = 2 * ν_t * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
     VF[_τ33] = 2 * ν_t * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
@@ -252,18 +228,14 @@ end
     VF[_τ23] = 2 * ν_t * ϵ23
     VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
-    # FIXME : shouldnt need to carry the gradient of the virtualpottemp around
-#    VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
+    VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
+    VF[_modSij] = sqrt(2.0 * SijSij)
   end
 end
 # -------------------------------------------------------------------------
 # -------------------------------------------------------------------------
-#md ### Auxiliary Function (Not required)
-#md # In this example the auxiliary function is used to store the spatial
-#md # coordinates. This may also be used to store variables for which gradients
-#md # are needed, but are not available through teh prognostic variable 
-#md # calculations. (An example of this will follow - in the Smagorinsky model, 
-#md # where a local Richardson number via potential temperature gradient is required)
+#md ### Auyliary Function (Not required)
+#md # In this example the auxiliary function is used to store the spatial coords
 # -------------------------------------------------------------------------
 const _nauxstate = 3
 const _a_x, _a_y, _a_z, = 1:_nauxstate
@@ -282,21 +254,14 @@ end
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-    if bctype == 4
-      QP[_U] = 5.0
-    else
-      QP[_U] = UM - 2 * nM[1] * UnM
-    end
+    QP[_U] = UM - 2 * nM[1] * UnM
     QP[_V] = VM - 2 * nM[2] * UnM
     QP[_W] = WM - 2 * nM[3] * UnM
     QP[_ρ] = ρM
     QP[_E] = EM
     QP[_QT] = QTM
     VFP .= VFM
-    # To calculate PP, uP, vP, wP, ρinvP we use the preflux function 
     nothing
-    #preflux(QP, auxP, t)
-    # Required return from this function is either nothing or preflux with plus state as arguments
   end
 end
 # -------------------------------------------------------------------------
@@ -320,13 +285,15 @@ end
 
   # Typically these sources are imported from modules
   @inbounds begin
-    #source_geopot!(S, Q, aux, t)
+    source_sponge!(S, Q, aux, t)
+    source_geopot!(S, Q, aux, t)
   end
 end
 
 @inline function source_sponge!(S, Q, aux, t)
     y = aux[_a_y]
     x = aux[_a_x]
+    U = Q[_U]
     V = Q[_V]
     # Define Sponge Boundaries      
     xc       = (xmax + xmin)/2
@@ -336,32 +303,44 @@ end
     csxl  = 0.0
     csxr  = 0.0
     ctop  = 0.0
-    csx   = 0.0 #1.0
+    csx   = 1.0
     ct    = 1.0 
+    coeff = 0.0
+    coeff2 = 0.0
+    coeff4 = 0.0
     #x left and right
     #xsl
     if (x <= xspongel)
-        csxl = csx * sinpi(1/2 * (x - xspongel)/(xmin - xspongel))^4
+        coeff = sinpi(1/2 * (x - xspongel)/(xmin - xspongel))
+        coeff2 = coeff * coeff
+        coeff4 = coeff2 * coeff2
+        csxl = csx * coeff4
     end
     #xsr
     if (x >= xsponger)
-        csxr = csx * sinpi(1/2 * (x - xsponger)/(xmax - xsponger))^4
+        csxr = sinpi(1/2 * (x - xsponger)/(xmax - xsponger))
+        coeff2 = coeff * coeff
+        coeff4 = coeff2 * coeff2
+        csxr = csx * coeff4
     end
     #Vertical sponge:         
     if (y >= ysponge)
-        ctop = ct * sinpi(1/2 * (y - ysponge)/(ymax - ysponge))^4
+        ctop = sinpi(1/2 * (y - ysponge)/(ymax - ysponge))
+        coeff2 = coeff * coeff
+        coeff4 = coeff2 * coeff2
+        ctop = ct * coeff4
     end
     beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
     beta  = min(beta, 1.0)
-    alpha = 1.0 - beta
-    S[_V] -= beta * V  
+    S[_V] -= beta * V
+    S[_U] -= beta * U
 end
 
 @inline function source_geopot!(S,Q,aux,t)
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    S[_V] += - ρ * gravity
+    S[_V] -= ρ * gravity
   end
 end
 
@@ -371,39 +350,106 @@ end
 
 # initial condition
 function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
-  DFloat                = eltype(Q)
-  R_gas::DFloat         = R_d
-  c_p::DFloat           = cp_d
-  c_v::DFloat           = cv_d
-  p0::DFloat            = MSLP
-  gravity::DFloat       = grav
-  # initialise with dry domain 
-  q_tot::DFloat         = 0
-  q_liq::DFloat         = 0
-  q_ice::DFloat         = 0 
-  # perturbation parameters for rising bubble
-  r                     = sqrt((x-xc)^2 + (y-500)^2)
-  rc::DFloat            = 300
-  θ_ref::DFloat         = 300
-  θ_c::DFloat           = 0.0
-  Δθ::DFloat            = 0.0
-  if r <= rc 
-    Δθ = θ_c * (1 + cospi(r/rc))/2
+  DFloat = eltype(Q)
+  
+  function read_sounding()
+      #read in the original squal sounding
+      fsounding  = open(joinpath(@__DIR__, "./soundings/sounding_GC1991.dat"))
+      sounding = readdlm(fsounding)
+      close(fsounding)
+      (nzmax, ncols) = size(sounding)
+      if nzmax == 0
+          error("SOUNDING ERROR: The Sounding file is empty!")
+      end
+      return (sounding, nzmax, ncols)
   end
-  qvar                  = PhasePartition(q_tot)
-  θ                     = θ_ref + Δθ # potential temperature
-  π_exner               = 1.0 - gravity / (c_p * θ) * y # exner pressure
-  ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
+  # ----------------------------------------------------
+  # GET DATA FROM INTERPOLATED ARRAY ONTO VECTORS
+  # This driver accepts data in 6 column format
+  # ----------------------------------------------------
+  (sounding, _, ncols) = read_sounding()
+  
+  # WARNING: Not all sounding data is formatted/scaled 
+  # the same. Care required in assigning array values
+  # height theta qv    u     v     pressure
+  zinit, tinit, qinit, uinit, vinit, pinit  = sounding[:, 1],
+                                              sounding[:, 2],
+                                              sounding[:, 3],
+                                              sounding[:, 4],
+                                              sounding[:, 5],
+                                              sounding[:, 6]
 
-  P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
-  T                     = P / (ρ * R_gas) # temperature
-  U, V, W               = 0.0 , 0.0 , 0.0  # momentum components
-  # energy definitions
-  e_kin                 = (U^2 + V^2 + W^2) / (2*ρ)/ ρ
-  e_pot                 = gravity * y
-  e_int                 = internal_energy(T, qvar)
-  E                     = ρ * (e_int + e_kin + e_pot)  #* total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
-  @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
+  #------------------------------------------------------
+  # GET SPLINE FUNCTION
+  #------------------------------------------------------
+  spl_tinit    = Spline1D(zinit, tinit; k=1)
+  spl_qinit    = Spline1D(zinit, qinit; k=1)
+  spl_uinit    = Spline1D(zinit, uinit; k=1)
+  spl_vinit    = Spline1D(zinit, vinit; k=1)
+  spl_pinit    = Spline1D(zinit, pinit; k=1)
+  # --------------------------------------------------
+  # INITIALISE ARRAYS FOR INTERPOLATED VALUES
+  # --------------------------------------------------
+  datat          = spl_tinit(y)
+  dataq          = spl_qinit(y)
+  dataq          = dataq * 1e-3
+  datau          = spl_uinit(y)
+  datav          = spl_vinit(y)
+  datap          = spl_pinit(y)
+  # --------------------------------------------------
+  c2            = R_d / cp_d
+  c1            = 1.0 / c2
+  datapi        = (datap ./ MSLP) .^ (c2)                       # Exner pressure from sounding data
+  # --------------------------------------------------
+  rvapor        = 461.0
+  levap         = 2.5e6
+  es0           = 6.11e2
+  pi0           = 1.0
+  p0            = 85000.0
+  theta0        = 283.0
+  sigma         = 6.0
+  p0::DFloat 	= 85000.0
+  q_tot 	= 0.014
+  thetac        = 5.0
+  rc		= 300.0
+  RH_0          = 20.0                                          # Relative humidity
+  # --------------------------------------------------
+  thetav        = datat * (1.0 + 0.608 * dataq)                 # Liquid potential temperature
+  r		= sqrt((x-xc)^2+(y-500)^2)
+  P		= datap                                         # Assumed known from sounding
+  ρ             = P/(R_d * datapi * thetav)                   # Density calculated from sounding data
+  T		= P / ρ / R_d
+  es            = es0 * exp(levap/rvapor*(1.0/T_0 - 1.0/T))
+  qvs           = 287.04/rvapor * es/(P - es) 
+  qv_k          = qvs * RH_0/100.0
+  dRH		= 80.0 * exp(-(r/rc)^sigma)
+  dqv		= dRH * qvs / 100.0
+  q_tot         = qv_k + dqv
+  qvar          = PhasePartition(q_tot)
+  R_gas::DFloat = gas_constant_air(qvar)
+  c_p::DFloat   = cp_m(qvar)
+  c_v::DFloat   = cv_m(qvar)
+  cvoverR       = c_v/R_gas
+  DFloat 	= eltype(x)
+  cvoverR       = c_v/R_gas
+  gravity::DFloat = grav
+  # --------------------------------------------------
+  #TODO Dangling constants need references and/or need to be moved into external modules
+  pi0           = 1.0                                           # Reference exner pressure = 1
+  rho0		= p0/(R_gas * theta0) * (pi0)^cvoverR           # Reference density
+  # Circle centered at x = 0 and y = 900 m 
+  dtheta	= thetac * exp(-(r/rc)^sigma)
+  u, v, w       = 0.0, 0.0, 0.0
+  U      	= ρ * u
+  V      	= ρ * v
+  W      	= ρ * w
+  # Calculation of energy per unit mass
+  e_kin = (u^2 + v^2 + w^2) / 2  
+  e_pot = gravity * y
+  e_int = internal_energy(T,qvar)
+  # Total energy 
+  E = ρ * total_energy(e_kin, e_pot, T, qvar)
+  @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT] = ρ, U, V, W, E, q_tot * ρ
 end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
@@ -411,12 +457,12 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   ArrayType = CuArray
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
+                range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
                 
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(false,false),boundary = [1 3; 2 4])
+  topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true, false))
 
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DFloat,
@@ -473,18 +519,31 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
   end
 
+
+  npoststates = 8
+  _P, _u, _v, _w, _ρinv, _q_liq, _T, _θ = 1:npoststates
+  postnames = ("P","u", "v", "w", "ρinv", "QL", "T", "THETA")
+  postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
+  
   step = [0]
-  mkpath("vtk-cavity")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
-    outprefix = @sprintf("vtk-cavity/cns_%dD_mpirank%04d_step%04d", dim,
+  mkpath("vtk-moist")
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
+                                               Q) do R, Q, QV, aux
+      @inbounds let
+        (R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = preflux(Q, QV, aux)
+      end
+    end
+
+    outprefix = @sprintf("vtk-moist/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
-    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames)
+    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames,
+                                         postprocessarray, postnames)
     step[1] += 1
     nothing
   end
-
-  # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
+  
   solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 
@@ -531,8 +590,8 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney, Nez)
-    dt = 0.0001
-    timeend = 4000
+    dt = 0.005
+    timeend = 1500
     polynomialorder = Npoly
     DFloat = Float64
     dim = numdims
