@@ -659,6 +659,55 @@ function grad_auxiliary_state!(disc::DGBalanceLaw, id, (idx, idy, idz))
                            Dmat, topology.elems, id, idx, idy, idz))
 end
 
+
+"""
+    indefinite_stack_integral!(disc, f, Q, aux_states_out)
+
+Computes the indefinite integral along an element stack using state `Q`
+```math
+∫_{ζ_{0}}^{ζ} f(q; aux, t)
+```
+and stores the result of the integral in the auxiliary state fields indicated by
+`aux_states_out`
+
+Requires the `isstacked(disc.grid.topology) == true`
+
+!!! note
+
+    When the topology has one two dimensions the integral is computed along the
+    `η` direction.
+"""
+function indefinite_stack_integral!(disc::DGBalanceLaw, f, Q, aux_states_out)
+  grid = disc.grid
+  topology = grid.topology
+  @assert isstacked(topology)
+
+  dim = dimensionality(grid)
+  N = polynomialorder(grid)
+
+  auxstate = disc.auxstate
+  nauxstate = size(auxstate, 2)
+  nstate = size(Q, 2)
+
+  Imat = grid.Imat
+  vgeo = grid.vgeo
+  device = typeof(Q.Q) <: Array ? CPU() : CUDA()
+
+  nelem = length(topology.elems)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+
+  nvertelem = topology.stacksize
+  nhorzelem = div(nelem, nvertelem)
+  @assert nelem == nvertelem * nhorzelem
+
+  @launch(device, threads=(Nq, Nqk, 1), blocks=nhorzelem,
+          knl_indefinite_stack_integral!(Val(dim), Val(N), Val(nstate),
+                                         Val(nauxstate), Val(nvertelem), f, Q.Q,
+                                         auxstate.Q, vgeo, Imat, 1:nhorzelem,
+                                         Val(aux_states_out)))
+end
+
 """
     dof_iteration!(dof_fun!::Function, R::MPIStateArray, disc::DGBalanceLaw,
                    Q::MPIStateArray)
