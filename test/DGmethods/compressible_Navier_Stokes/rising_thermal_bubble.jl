@@ -5,7 +5,10 @@ using MPI
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
-
+using CUDAnative
+using CuArrays
+using CUDAdrv
+#=
 @static if Base.find_package("CuArrays") !== nothing
   using CUDAdrv
   using CUDAnative
@@ -14,7 +17,7 @@ using Logging, Printf, Dates
 else
   const ArrayType = Array
 end
-
+=#
 # Load modules specific to CliMA project
 using CLIMA.Topologies
 using CLIMA.Grids
@@ -69,8 +72,8 @@ const zmax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
-const Nex = 20
-const Ney = 20
+const Nex = 50
+const Ney = 50
 const Nez = 1
 const numdims = 2
 const Npoly = 5
@@ -160,9 +163,10 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ13 = τ31 = VF[_τ13]
     τ23 = τ32 = VF[_τ23] 
     # Buoyancy correction 
-    dθdy = VF[_θy]
-    modSij = VF[_modSij]
-    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
+#    dθdy = VF[_θy]
+#    modSij = VF[_modSij]
+#    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
+    f_R = 1.0
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -172,6 +176,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
     # Viscous contributions to mass flux terms
+    F[1, _ρ] -= vqx
+    F[2, _ρ] -= vqy
+    F[3, _ρ] -= vqz
     F[1, _QT] -= vqx
     F[2, _QT] -= vqy
     F[3, _QT] -= vqz
@@ -238,19 +245,31 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    (Sij, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
+    #(Sij, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
+    (S11, S22, S33, S12, S13, S23) = compute_strainrate_tensor(dudx, dudy, dudz,
+                                                               dvdx, dvdy, dvdz,
+                                                               dwdx, dwdy, dwdz)
+    ν_e = anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, 
+                                                    dvdx, dvdy, dvdz, 
+                                                    dwdx, dwdy, dwdz, 
+                                                    Δx, Δy, Δz) 
+    D_e = anisotropic_minimum_dissipation_diffusivity(dqdx, dqdy, dqdz,
+                                                      dudx, dudy, dudz, 
+                                                      dvdx, dvdy, dvdz, 
+                                                      dwdx, dwdy, dwdz, 
+                                                      Δx, Δy, Δz) 
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
-    VF[_τ11] = 2 * ν_e * (Sij[1,1] - tr(Sij) / 3)
-    VF[_τ22] = 2 * ν_e * (Sij[2,2] - tr(Sij) / 3)
-    VF[_τ33] = 2 * ν_e * (Sij[3,3] - tr(Sij) / 3)
-    VF[_τ12] = 2 * ν_e * Sij[1,2]
-    VF[_τ13] = 2 * ν_e * Sij[1,3]
-    VF[_τ23] = 2 * ν_e * Sij[2,3]
-    VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
+    VF[_τ11] = 2 * ν_e * (S11 - (S11 + S22 + S33) / 3)
+    VF[_τ22] = 2 * ν_e * (S22 - (S11 + S22 + S33) / 3)
+    VF[_τ33] = 2 * ν_e * (S33 - (S11 + S22 + S33) / 3)
+    VF[_τ12] = 2 * ν_e * S12
+    VF[_τ13] = 2 * ν_e * S13
+    VF[_τ23] = 2 * ν_e * S23
+    VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx,D_e * dqdy,D_e * dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
-    VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
+    VF[_θx], VF[_θy], VF[_θz]  = D_e * dθdx, D_e *dθdy,D_e * dθdz
     VF[_modSij] = modulus_Sij
   end
 end
@@ -399,7 +418,7 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = Array
+  ArrayType = CuArray
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
@@ -470,8 +489,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
   step = [0]
-  mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
+  mkpath("vtk-amd")
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
     DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                Q) do R, Q, QV, aux
       @inbounds let
@@ -479,10 +498,10 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
       end
     end
 
-    outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
+    outprefix = @sprintf("vtk-amd/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
-    writevtk(outprefix, Q, spacedisc, statenames,
+    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames,
                                          postprocessarray, postnames)
     #= 
     pvtuprefix = @sprintf("vtk/cns_%dD_step%04d", dim, step[1])

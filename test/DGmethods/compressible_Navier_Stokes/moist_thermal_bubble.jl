@@ -8,9 +8,18 @@ using Logging, Printf, Dates
 using Dierckx
 using DelimitedFiles
 
-# GPUIFY
+using CUDAdrv
 using CUDAnative
 using CuArrays
+
+#@static if Base.find_package("CuArrays") !== nothing
+#  using CUDAdrv
+#  using CUDAnative
+#  using CuArrays
+#  const ArrayType = VERSION >= v"1.2-pre.25" ? CuArray : Array
+#else
+#  const ArrayType = Array
+#end
 
 # Load modules specific to CliMA project
 using CLIMA.Topologies
@@ -21,6 +30,8 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
+using CLIMA.SubgridScaleTurbulence
+using CLIMA.Vtk
 # Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
 # Even for the dry example shown here, we load the moist thermodynamics module 
 # and consider the dry equation set to be the same as the moist equations but
@@ -147,10 +158,10 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13]
     τ23 = τ32 = VF[_τ23] 
+    # Buoyancy correction 
     dθdy = VF[_θy]
     modSij = VF[_modSij]
-    Ri = gravity / θ * dθdy / (modSij + 1e-12) / (modSij + 1e-12)
-    f_R = sqrt(max(0.0, 1 - 3*Ri))
+    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -160,6 +171,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
     # Viscous contributions to mass flux terms
+    F[1, _ρ]  -= vqx
+    F[2, _ρ]  -= vqy
+    F[3, _ρ]  -= vqz
     F[1, _QT] -= vqx
     F[2, _QT] -= vqy
     F[3, _QT] -= vqz
@@ -173,8 +187,8 @@ end
 #md # in some cases. 
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
-velocities!(vel, Q, aux, t, _...) = velocities!(vel, Q, aux, t, preflux(Q,~,aux)...)
-@inline function velocities!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,~,aux)...)
+@inline function gradient_vars!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
   @inbounds begin
     # ordering should match states_for_gradient_transform
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
@@ -203,33 +217,22 @@ end
     dqdx, dqdy, dqdz = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
     dTdx, dTdy, dTdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
     dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
-    # strains
-    ϵ11 = dudx
-    ϵ22 = dvdy
-    ϵ33 = dwdz
-    ϵ12 = (dudy + dvdx) / 2
-    ϵ13 = (dudz + dwdx) / 2
-    ϵ23 = (dvdz + dwdy) / 2
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    SijSij = (ϵ11^2 + ϵ22^2 + ϵ33^2
-              + 2.0 * ϵ12^2
-              + 2.0 * ϵ13^2 
-              + 2.0 * ϵ23^2) 
-    ν_t = C_smag * C_smag * Δ2 * sqrt(2.0 * SijSij)
+    (S11, S22, S33, S12, S13, S23, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
     # --------------------------------------------
     # deviatoric stresses
-    VF[_τ11] = 2 * ν_t * (ϵ11 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ22] = 2 * ν_t * (ϵ22 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ33] = 2 * ν_t * (ϵ33 - (ϵ11 + ϵ22 + ϵ33) / 3)
-    VF[_τ12] = 2 * ν_t * ϵ12
-    VF[_τ13] = 2 * ν_t * ϵ13
-    VF[_τ23] = 2 * ν_t * ϵ23
-    VF[_qx], VF[_qy], VF[_qz]  = dqdx, dqdy, dqdz
+    VF[_τ11] = 2 * ν_e * (S11 - (S11 + S22 + S33) / 3)
+    VF[_τ22] = 2 * ν_e * (S22 - (S11 + S22 + S33) / 3)
+    VF[_τ33] = 2 * ν_e * (S33 - (S11 + S22 + S33) / 3)
+    VF[_τ12] = 2 * ν_e * S12
+    VF[_τ13] = 2 * ν_e * S13
+    VF[_τ23] = 2 * ν_e * S23
+    VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx, D_e * dqdy, D_e * dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
     VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
-    VF[_modSij] = sqrt(2.0 * SijSij)
+    VF[_modSij] = modulus_Sij
   end
 end
 # -------------------------------------------------------------------------
@@ -482,7 +485,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            states_for_gradient_transform =
                             _states_for_gradient_transform,
                            number_viscous_states = _nviscstates,
-                           gradient_transform! = velocities!,
+                           gradient_transform! = gradient_vars!,
                            viscous_transform! = compute_stresses!,
                            viscous_penalty! = stresses_penalty!,
                            viscous_boundary_penalty! = stresses_boundary_penalty!,
@@ -538,7 +541,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     outprefix = @sprintf("vtk-moist/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
-    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames,
+    writevtk(outprefix, Q, spacedisc, statenames,
                                          postprocessarray, postnames)
     step[1] += 1
     nothing
@@ -590,7 +593,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney, Nez)
-    dt = 0.005
+    dt = 0.001
     timeend = 1500
     polynomialorder = Npoly
     DFloat = Float64
