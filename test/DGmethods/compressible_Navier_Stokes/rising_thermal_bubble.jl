@@ -5,9 +5,9 @@ using MPI
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
-using CUDAnative
-using CuArrays
-using CUDAdrv
+#using CUDAnative
+#using CuArrays
+#using CUDAdrv
 #=
 @static if Base.find_package("CuArrays") !== nothing
   using CUDAdrv
@@ -246,7 +246,7 @@ end
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
     #(Sij, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
-    (S11, S22, S33, S12, S13, S23) = compute_strainrate_tensor(dudx, dudy, dudz,
+    (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(dudx, dudy, dudz,
                                                                dvdx, dvdy, dvdz,
                                                                dwdx, dwdy, dwdz)
     ν_e = anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, 
@@ -258,6 +258,7 @@ end
                                                       dvdx, dvdy, dvdz, 
                                                       dwdx, dwdy, dwdz, 
                                                       Δx, Δy, Δz) 
+    @show(ν_e, D_e)
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
@@ -267,9 +268,9 @@ end
     VF[_τ12] = 2 * ν_e * S12
     VF[_τ13] = 2 * ν_e * S13
     VF[_τ23] = 2 * ν_e * S23
-    VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx,D_e * dqdy,D_e * dqdz
+    VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx, D_e * dqdy, D_e * dqdz
     VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
-    VF[_θx], VF[_θy], VF[_θz]  = D_e * dθdx, D_e *dθdy,D_e * dθdz
+    VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
     VF[_modSij] = modulus_Sij
   end
 end
@@ -418,7 +419,7 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = CuArray
+  ArrayType = Array
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
