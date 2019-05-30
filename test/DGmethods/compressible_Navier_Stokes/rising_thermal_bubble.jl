@@ -245,20 +245,24 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    #(Sij, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δ2)
+    (S11, S22, S33, S12, S13, S23, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, 
+                                                                        dvdx, dvdy, dvdz, 
+                                                                        dwdx, dwdy, dwdz, 
+                                                                        Δ2)
+    
     (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(dudx, dudy, dudz,
-                                                               dvdx, dvdy, dvdz,
-                                                               dwdx, dwdy, dwdz)
+                                                                            dvdx, dvdy, dvdz,
+                                                                            dwdx, dwdy, dwdz)
     ν_e = anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, 
                                                     dvdx, dvdy, dvdz, 
                                                     dwdx, dwdy, dwdz, 
                                                     Δx, Δy, Δz) 
+
     D_e = anisotropic_minimum_dissipation_diffusivity(dqdx, dqdy, dqdz,
                                                       dudx, dudy, dudz, 
                                                       dvdx, dvdy, dvdz, 
                                                       dwdx, dwdy, dwdz, 
                                                       Δx, Δy, Δz) 
-    @show(ν_e, D_e)
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers

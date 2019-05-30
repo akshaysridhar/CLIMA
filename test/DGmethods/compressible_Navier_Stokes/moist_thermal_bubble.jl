@@ -161,7 +161,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     # Buoyancy correction 
     dθdy = VF[_θy]
     modSij = VF[_modSij]
-    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
+    f_R = 1.0 #buoyancy_correction_smag(modSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -171,9 +171,6 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
     # Viscous contributions to mass flux terms
-    F[1, _ρ]  -= vqx
-    F[2, _ρ]  -= vqy
-    F[3, _ρ]  -= vqz
     F[1, _QT] -= vqx
     F[2, _QT] -= vqy
     F[3, _QT] -= vqz
@@ -230,7 +227,7 @@ end
     VF[_τ13] = 2 * ν_e * S13
     VF[_τ23] = 2 * ν_e * S23
     VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx, D_e * dqdy, D_e * dqdz
-    VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
+    VF[_Tx], VF[_Ty], VF[_Tz]  = D_e * dTdx, D_e * dTdy, D_e * dTdz
     VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
     VF[_modSij] = modulus_Sij
   end
