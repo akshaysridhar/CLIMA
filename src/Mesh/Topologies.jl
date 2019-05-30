@@ -3,7 +3,7 @@ module Topologies
 using DocStringExtensions
 
 export AbstractTopology, BrickTopology, StackedBrickTopology,
-       CubedShellTopology, StackedCubedSphereTopology
+       CubedShellTopology, StackedCubedSphereTopology, isstacked
 
 """
     AbstractTopology{dim}
@@ -122,6 +122,8 @@ periodic)
 """
 hasboundary(topology::AbstractTopology) = topology.hasboundary
 
+isstacked(::T) where {T<:AbstractTopology} = hasfield(T, :stacksize)
+
 """
     BrickTopology{dim, T} <: AbstractTopology{dim}
 
@@ -159,7 +161,7 @@ struct StackedBrickTopology{dim, T} <: AbstractTopology{dim}
   stacksize::Int64
 end
 function Base.getproperty(a::StackedBrickTopology, p::Symbol)
-  return p == :stacksize ? getproperty(a, p) :
+  return p == :stacksize ? getfield(a, p) :
                            getproperty(getfield(a, :topology), p)
 end
 
@@ -175,7 +177,7 @@ struct StackedCubedSphereTopology{T} <: AbstractTopology{3}
   stacksize::Int64
 end
 function Base.getproperty(a::StackedCubedSphereTopology, p::Symbol)
-  return p == :stacksize ? getproperty(a, p) :
+  return p == :stacksize ? getfield(a, p) :
                            getproperty(getfield(a, :topology), p)
 end
 
