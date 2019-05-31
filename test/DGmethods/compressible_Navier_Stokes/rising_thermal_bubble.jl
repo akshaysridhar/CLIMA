@@ -5,9 +5,9 @@ using MPI
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
-#using CUDAnative
-#using CuArrays
-#using CUDAdrv
+using CUDAnative
+using CuArrays
+using CUDAdrv
 #=
 @static if Base.find_package("CuArrays") !== nothing
   using CUDAdrv
@@ -47,7 +47,7 @@ const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 const _nviscstates = 16
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _modSij = 1:_nviscstates
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij = 1:_nviscstates
 
 const _ngradstates = 6
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
@@ -60,9 +60,9 @@ end
 
 const Prandtl = 71 // 100
 const Prandtl_t = 1 // 3
-const k_μ = cp_d / Prandtl
-const γ_exact = 7 // 5
+const k_μ = cv_d / Prandtl_t
 const μ_exact = 75
+const γ_exact = 7 // 5
 const xmin = 0
 const ymin = 0
 const zmin = 0
@@ -163,22 +163,18 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ13 = τ31 = VF[_τ13]
     τ23 = τ32 = VF[_τ23] 
     # Buoyancy correction 
-#    dθdy = VF[_θy]
-#    modSij = VF[_modSij]
-#    f_R = buoyancy_correction_smag(modSij, θ, dθdy)
-    f_R = 1.0
+    dθdy = VF[_θy]
+    SijSij = VF[_SijSij]
+    f_R = buoyancy_correction_smag(SijSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
     F[1, _W] -= τ31 * f_R ; F[2, _W] -= τ32 * f_R ; F[3, _W] -= τ33 * f_R
     # Energy dissipation
-    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + k_μ * vTx 
-    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + k_μ * vTy
-    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + k_μ * vTz 
+    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + vTx 
+    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + vTy
+    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + vTz 
     # Viscous contributions to mass flux terms
-    F[1, _ρ] -= vqx
-    F[2, _ρ] -= vqy
-    F[3, _ρ] -= vqz
     F[1, _QT] -= vqx
     F[2, _QT] -= vqy
     F[3, _QT] -= vqz
@@ -245,10 +241,14 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    (S11, S22, S33, S12, S13, S23, ν_e, D_e, modulus_Sij) = static_smag(dudx, dudy, dudz, 
+    (S11, S22, S33, S12, S13, S23, ν_e, D_e, SijSij) = static_smag(dudx, dudy, dudz, 
                                                                         dvdx, dvdy, dvdz, 
                                                                         dwdx, dwdy, dwdz, 
                                                                         Δ2)
+    # --------------------------------------------
+    # ANISOTROPIC MINIMUM DISSIPATION
+    # --------------------------------------------
+    #=
     
     (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(dudx, dudy, dudz,
                                                                             dvdx, dvdy, dvdz,
@@ -263,6 +263,7 @@ end
                                                       dvdx, dvdy, dvdz, 
                                                       dwdx, dwdy, dwdz, 
                                                       Δx, Δy, Δz) 
+    =#
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
@@ -272,10 +273,10 @@ end
     VF[_τ12] = 2 * ν_e * S12
     VF[_τ13] = 2 * ν_e * S13
     VF[_τ23] = 2 * ν_e * S23
-    VF[_qx], VF[_qy], VF[_qz]  = D_e * dqdx, D_e * dqdy, D_e * dqdz
-    VF[_Tx], VF[_Ty], VF[_Tz]  = dTdx, dTdy, dTdz
+    VF[_qx], VF[_qy], VF[_qz]  = D_e .* (dqdx, dqdy, dqdz)
+    VF[_Tx], VF[_Ty], VF[_Tz]  = ν_e .* k_μ .* (dTdx, dTdy, dTdz)
     VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
-    VF[_modSij] = modulus_Sij
+    VF[_SijSij] = SijSij
   end
 end
 # -------------------------------------------------------------------------
@@ -336,13 +337,16 @@ end
   # Typically these sources are imported from modules
   @inbounds begin
     source_geopot!(S, Q, aux, t)
+    source_sponge!(S, Q, aux, t)
   end
 end
 
 @inline function source_sponge!(S, Q, aux, t)
     y = aux[_a_y]
     x = aux[_a_x]
+    U = Q[_U]
     V = Q[_V]
+    W = Q[_W]
     # Define Sponge Boundaries      
     xc       = (xmax + xmin)/2
     ysponge  = 0.85 * ymax
@@ -351,7 +355,7 @@ end
     csxl  = 0.0
     csxr  = 0.0
     ctop  = 0.0
-    csx   = 0.0 #1.0
+    csx   = 1.0
     ct    = 1.0 
     #x left and right
     #xsl
@@ -368,8 +372,9 @@ end
     end
     beta  = 1.0 - (1.0 - ctop)*(1.0 - csxl)*(1.0 - csxr)
     beta  = min(beta, 1.0)
-    alpha = 1.0 - beta
+    S[_U] -= beta * U  
     S[_V] -= beta * V  
+    S[_W] -= beta * W
 end
 
 @inline function source_geopot!(S,Q,aux,t)
@@ -423,7 +428,7 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = Array
+  ArrayType = CuArray
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
@@ -494,8 +499,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
   step = [0]
-  mkpath("vtk-amd")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
+  mkpath("vtk-ssm-sponge")
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
     DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                Q) do R, Q, QV, aux
       @inbounds let
@@ -503,10 +508,10 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
       end
     end
 
-    outprefix = @sprintf("vtk-amd/cns_%dD_mpirank%04d_step%04d", dim,
+    outprefix = @sprintf("vtk-ssm-sponge/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
-    DGBalanceLawDiscretizations.writevtk(outprefix, Q, spacedisc, statenames,
+    writevtk(outprefix, Q, spacedisc, statenames,
                                          postprocessarray, postnames)
     #= 
     pvtuprefix = @sprintf("vtk/cns_%dD_step%04d", dim, step[1])
