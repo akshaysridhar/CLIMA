@@ -47,7 +47,7 @@ const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 const _nviscstates = 16
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij = 1:_nviscstates
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _ρx, _ρy, _ρz, _SijSij = 1:_nviscstates
 
 const _ngradstates = 6
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
@@ -60,23 +60,23 @@ end
 
 const Prandtl = 71 // 100
 const Prandtl_t = 1 // 3
-const k_μ = cv_d / Prandtl_t
+const k_μ = cp_d / Prandtl_t
 const μ_exact = 75
 const γ_exact = 7 // 5
-const xmin = 0
+const xmin = -25600
 const ymin = 0
 const zmin = 0
-const xmax = 3000
-const ymax = 3000
+const xmax = 25600
+const ymax = 6400
 const zmax = 3000
 const xc   = xmax / 2
 const yc   = ymax / 2
 const zc   = zmax / 2
-const Nex = 50
-const Ney = 50
+const Nex = 256
+const Ney = 64
 const Nez = 1
 const numdims = 2
-const Npoly = 5
+const Npoly = 4
 # Smagorinsky model requirements
 const C_smag = 0.18
 const Δx = (xmax-xmin) / ((Nex * Npoly) + 1)
@@ -162,10 +162,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13]
     τ23 = τ32 = VF[_τ23] 
-    # Buoyancy correction 
-    dθdy = VF[_θy]
-    SijSij = VF[_SijSij]
-    f_R = buoyancy_correction_smag(SijSij, θ, dθdy)
+    
+    # Disable Buoyancy correction f_R = 1.0
+    f_R = 1.0
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -197,8 +196,8 @@ gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,
     E, QT = Q[_E], Q[_QT]
     ρinv = 1 / ρ
     vel[1], vel[2], vel[3] = u, v, w
-    vel[4], vel[5], vel[6] = ρinv * E, QT, T
-    vel[7] = θ
+    vel[4], vel[5], vel[6] = E, QT, T
+    vel[8] = ρ
   end
 end
 
@@ -371,7 +370,7 @@ end
 # -------------END DEF SOURCES-------------------------------------# 
 
 # initial condition
-function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
+function density_current!(dim, Q, t, x, y, z, _...)
   DFloat                = eltype(Q)
   R_gas::DFloat         = R_d
   c_p::DFloat           = cp_d
@@ -383,13 +382,14 @@ function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
   q_liq::DFloat         = 0
   q_ice::DFloat         = 0 
   # perturbation parameters for rising bubble
-  r                     = sqrt((x-xc)^2 + (y-500)^2)
-  rc::DFloat            = 300
+  rx                    = 4000
+  ry                    = 2000
+  r                     = sqrt(x^2/rx^2 + (y-3000)^2/ry^2)
   θ_ref::DFloat         = 300
-  θ_c::DFloat           = 5.0
+  θ_c::DFloat           = -15.0
   Δθ::DFloat            = 0.0
-  if r <= rc 
-    Δθ = θ_c * (1 + cospi(r/rc))/2
+  if r <= 1
+    Δθ = θ_c * (1 + cospi(r))/2
   end
   qvar                  = PhasePartition(q_tot)
   θ                     = θ_ref + Δθ # potential temperature
@@ -412,7 +412,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   ArrayType = CuArray
 
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                range(DFloat(xmin), length=Ne[2]+1, DFloat(xmax)))
+                range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
                 
   
   # User defined periodicity in the topl assignment
@@ -447,7 +447,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            source! = source!)
 
   # This is a actual state/function that lives on the grid
-  initialcondition(Q, x...) = rising_thermal_bubble!(Val(dim), Q, DFloat(0), x...)
+  initialcondition(Q, x...) = density_current!(Val(dim), Q, DFloat(0), x...)
   Q = MPIStateArray(spacedisc, initialcondition)
 
   lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
@@ -458,7 +458,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(5, mpicomm) do (s=false)
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else
@@ -480,8 +480,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
   postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
   step = [0]
-  mkpath("vtk-ssm-sponge")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
+  mkpath("vtk-density-current")
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
     DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                Q) do R, Q, QV, aux
       @inbounds let
@@ -489,7 +489,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
       end
     end
 
-    outprefix = @sprintf("vtk-ssm-sponge/cns_%dD_mpirank%04d_step%04d", dim,
+    outprefix = @sprintf("vtk-density-current/cns_%dD_mpirank%04d_step%04d", dim,
                          MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, spacedisc, statenames,
@@ -552,8 +552,8 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney, Nez)
-    dt = 0.01
-    timeend = 1000
+    dt = 0.02
+    timeend = 5400
     polynomialorder = Npoly
     DFloat = Float64
     dim = numdims

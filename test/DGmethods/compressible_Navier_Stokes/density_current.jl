@@ -60,7 +60,7 @@ end
 
 const Prandtl = 71 // 100
 const Prandtl_t = 1 // 3
-const k_μ = cv_d / Prandtl_t
+const k_μ = cp_d / Prandtl_t
 const μ_exact = 75
 const γ_exact = 7 // 5
 const xmin = -25600
@@ -197,7 +197,7 @@ gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,
     E, QT = Q[_E], Q[_QT]
     ρinv = 1 / ρ
     vel[1], vel[2], vel[3] = u, v, w
-    vel[4], vel[5], vel[6] = ρinv * E, QT, T
+    vel[4], vel[5], vel[6] = E, QT, T
     vel[7] = θ
   end
 end
@@ -242,28 +242,9 @@ end
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
     (S11, S22, S33, S12, S13, S23, ν_e, D_e, SijSij) = static_smag(dudx, dudy, dudz, 
-                                                                        dvdx, dvdy, dvdz, 
-                                                                        dwdx, dwdy, dwdz, 
-                                                                        Δ2)
-    # --------------------------------------------
-    # ANISOTROPIC MINIMUM DISSIPATION
-    # --------------------------------------------
-    #=
-    
-    (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(dudx, dudy, dudz,
-                                                                            dvdx, dvdy, dvdz,
-                                                                            dwdx, dwdy, dwdz)
-    ν_e = anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, 
-                                                    dvdx, dvdy, dvdz, 
-                                                    dwdx, dwdy, dwdz, 
-                                                    Δx, Δy, Δz) 
-
-    D_e = anisotropic_minimum_dissipation_diffusivity(dqdx, dqdy, dqdz,
-                                                      dudx, dudy, dudz, 
-                                                      dvdx, dvdy, dvdz, 
-                                                      dwdx, dwdy, dwdz, 
-                                                      Δx, Δy, Δz) 
-    =#
+                                                                   dvdx, dvdy, dvdz, 
+                                                                   dwdx, dwdy, dwdz, 
+                                                                   Δ2)
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
