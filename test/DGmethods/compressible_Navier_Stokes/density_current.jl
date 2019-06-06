@@ -1,24 +1,9 @@
-# Load modu that are used in the CliMA project.
+# Load modules that are used in the CliMA project.
 # These are general modules not necessarily specific
 # to CliMA
+#
 using MPI
-using LinearAlgebra
-using StaticArrays
-using Logging, Printf, Dates
-using CUDAnative
-using CuArrays
-using CUDAdrv
-#=
-@static if Base.find_package("CuArrays") !== nothing
-  using CUDAdrv
-  using CUDAnative
-  using CuArrays
-  const ArrayType = VERSION >= v"1.2-pre.25" ? CuArray : Array
-else
-  const ArrayType = Array
-end
-=#
-# Load modules specific to CliMA project
+using CLIMA
 using CLIMA.Topologies
 using CLIMA.Grids
 using CLIMA.DGBalanceLawDiscretizations
@@ -27,10 +12,27 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
+using LinearAlgebra
+using StaticArrays
+using Logging, Printf, Dates
 using CLIMA.Vtk
-using CLIMA.SubgridScaleTurbulence
 
+  using CUDAdrv
+  using CUDAnative
+  using CuArrays
+#=
+@static if haspkg("CuArrays")
+  using CUDAdrv
+  using CUDAnative
+  using CuArrays
+  CuArrays.allowscalar(false)
+  const ArrayType = Array
+else
+  const ArrayType = Array
+end
+=# 
 # TEMP MODULE TESTING
+using CLIMA.SubgridScaleTurbulence
 # END TEMP MODULE TESTING
 
 # Prognostic equations: ρ, (ρu), (ρv), (ρw), (ρe_tot), (ρq_tot)
@@ -63,28 +65,26 @@ const Prandtl_t = 1 // 3
 const k_μ = cp_d / Prandtl_t
 const μ_exact = 75
 const γ_exact = 7 // 5
-const xmin = -25600
-const ymin = 0
-const zmin = 0
-const xmax = 25600
-const ymax = 6400
-const zmax = 3000
-const xc   = xmax / 2
-const yc   = ymax / 2
-const zc   = zmax / 2
+xmin = -25600
+ymin = 0
+zmin = 0
+xmax = 25600
+ymax = 6400
+zmax = 3000
+xc   = xmax / 2
+yc   = ymax / 2
+zc   = zmax / 2
 const Nex = 256
-const Ney = 64
+const Ney = 32
 const Nez = 1
-const numdims = 2
 const Npoly = 4
 # Smagorinsky model requirements
+const C_smag = 0.23
 const Δx = (xmax-xmin) / ((Nex * Npoly) + 1)
 const Δy = (ymax-ymin) / ((Ney * Npoly) + 1)
 const Δz = (zmax-zmin) / ((Nez * Npoly) + 1)
-  
-if numdims == 2
-  Δ = sqrt(Δx * Δy)
-  const Δ2 = Δ * Δ
+Δ = sqrt(Δx * Δy)
+const Δ2 = Δ * Δ
 end
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
@@ -156,6 +156,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     
     vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
     vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
+    # Stress tensor : FIXME: use Julia Tensors.jl (?)
     τ11, τ22, τ33 = VF[_τ11] , VF[_τ22], VF[_τ33]
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13]
@@ -163,7 +164,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     # Buoyancy correction 
     dθdy = VF[_θy]
     SijSij = VF[_SijSij]
-    f_R = 1.0 # buoyancy_correction_smag(SijSij, θ, dθdy)
+    f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -173,9 +174,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + vTz 
     # Viscous contributions to mass flux terms
-    #F[1, _QT] -= vqx
-    #F[2, _QT] -= vqy 
-    #F[3, _QT] -= vqz
+    F[1, _QT] -= vqx
+    F[2, _QT] -= vqy
+    F[3, _QT] -= vqz
   end
 end
 
@@ -239,24 +240,39 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    (S11, S22, S33, S12, S13, S23, _, _, SijSij) = static_smag(dudx, dudy, dudz, 
-                                                                   dvdx, dvdy, dvdz, 
-                                                                   dwdx, dwdy, dwdz, 
-                                                                   Δ2)
-    μ_e = 75
-    D_e = μ_e 
+    S11 = dudx
+    S22 = dvdy
+    S33 = dwdz
+    S12 = (dudy + dvdx) / 2
+    S13 = (dudz + dwdx) / 2
+    S23 = (dvdz + dwdy) / 2
     # --------------------------------------------
+    # SMAGORINSKY COEFFICIENT COMPONENTS
+    # --------------------------------------------
+    SijSij = (S11^2 + S22^2 + S33^2
+                          + 2.0 * S12^2
+                          + 2.0 * S13^2 
+                          + 2.0 * S23^2) 
+    modSij = sqrt(2.0 * SijSij) 
+    # FIXME: Grab functions from module SubgridScaleTurbulence 
+    
+    ν_e = DFloat(75.0) 
+    D_e= ν_e / Prandtl_t
+    #--------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
-    VF[_τ11] = 2 * μ_e * (S11 - (S11 + S22 + S33) / 3)
-    VF[_τ22] = 2 * μ_e * (S22 - (S11 + S22 + S33) / 3)
-    VF[_τ33] = 2 * μ_e * (S33 - (S11 + S22 + S33) / 3)
-    VF[_τ12] = 2 * μ_e * S12
-    VF[_τ13] = 2 * μ_e * S13
-    VF[_τ23] = 2 * μ_e * S23
-    VF[_qx], VF[_qy], VF[_qz]  = D_e .* (dqdx, dqdy, dqdz)
-    VF[_Tx], VF[_Ty], VF[_Tz]  = μ_e .* k_μ .* (dTdx, dTdy, dTdz)
-    VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
+    VF[_τ11] = 2 * ν_e * (S11 - (S11 + S22 + S33) / 3)
+    VF[_τ22] = 2 * ν_e * (S22 - (S11 + S22 + S33) / 3)
+    VF[_τ33] = 2 * ν_e * (S33 - (S11 + S22 + S33) / 3)
+    VF[_τ12] = 2 * ν_e * S12
+    VF[_τ13] = 2 * ν_e * S13
+    VF[_τ23] = 2 * ν_e * S23
+
+    k_e::eltype(VF) = k_μ * ν_e 
+
+    VF[_qx], VF[_qy], VF[_qz] = D_e*dqdx, D_e*dqdy, D_e*dqdz
+    VF[_Tx], VF[_Ty], VF[_Tz] = k_e*dTdx, k_e*dTdy, k_e*dTdz
+    VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
     VF[_SijSij] = SijSij
   end
 end
@@ -286,10 +302,10 @@ end
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-    QP[_ρ] = ρM
     QP[_U] = UM - 2 * nM[1] * UnM
     QP[_V] = VM - 2 * nM[2] * UnM
     QP[_W] = WM - 2 * nM[3] * UnM
+    QP[_ρ] = ρM
     QP[_E] = EM
     QP[_QT] = QTM
     VFP .= VFM
@@ -362,7 +378,7 @@ end
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    S[_V] -= ρ * gravity
+    S[_V] += - ρ * gravity
   end
 end
 
@@ -410,11 +426,10 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  ArrayType = CuArray
-
   brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                 range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
                 
+  ArrayType = CuArray
   
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
@@ -552,12 +567,12 @@ let
     # User defined timestep estimate
     # User defined simulation end time
     # User defined polynomial order 
-    numelem = (Nex,Ney, Nez)
-    dt = 0.01
-    timeend = 5400 
+    numelem = (Nex,Ney)
+    dt = 0.05
+    timeend = 5400
     polynomialorder = Npoly
     DFloat = Float64
-    dim = numdims
+    dim = 2
     engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                     DFloat, dt)
 end
