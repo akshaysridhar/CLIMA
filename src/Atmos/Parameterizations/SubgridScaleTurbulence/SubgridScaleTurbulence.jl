@@ -96,7 +96,7 @@ function static_smag(dudx, dudy, dudz,
   #SijSij = dcontract(Sij,Sij)
   (S11, S22, S33, S12, S13, S23, SijSij) = compute_strainrate_tensor(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz)
   ν_e = C_ss * C_ss * Δ2 * sqrt(2 * SijSij)
-  D_e = Pr * ν_e / (γ - 1) 
+  D_e = ν_e / Pr_t 
   return (S11, S22, S33, S12, S13, S23, ν_e, D_e, SijSij)
 end
 

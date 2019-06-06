@@ -292,7 +292,7 @@ let
     expected_error[2,3] = 3.9795539800718972e-03
     lvls = size(expected_error, 2)
 
-    for DFloat in (Float64,) #Float32)
+    for DFloat in (Float32,)
       err = zeros(DFloat, lvls)
       for dim = 2:3
         for l = 1:lvls

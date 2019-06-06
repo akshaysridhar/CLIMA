@@ -1,4 +1,4 @@
-# Load modules that are used in the CliMA project.
+# Load modu that are used in the CliMA project.
 # These are general modules not necessarily specific
 # to CliMA
 using MPI
@@ -78,7 +78,6 @@ const Nez = 1
 const numdims = 2
 const Npoly = 4
 # Smagorinsky model requirements
-const C_smag = 0.18
 const Δx = (xmax-xmin) / ((Nex * Npoly) + 1)
 const Δy = (ymax-ymin) / ((Ney * Npoly) + 1)
 const Δz = (zmax-zmin) / ((Nez * Npoly) + 1)
@@ -157,7 +156,6 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     
     vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
     vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
-    # Stress tensor : FIXME: use Julia Tensors.jl (?)
     τ11, τ22, τ33 = VF[_τ11] , VF[_τ22], VF[_τ33]
     τ12 = τ21 = VF[_τ12] 
     τ13 = τ31 = VF[_τ13]
@@ -165,7 +163,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     # Buoyancy correction 
     dθdy = VF[_θy]
     SijSij = VF[_SijSij]
-    f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
+    f_R = 1.0 # buoyancy_correction_smag(SijSij, θ, dθdy)
     # Viscous contributions
     F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
     F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
@@ -175,9 +173,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + vTy
     F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + vTz 
     # Viscous contributions to mass flux terms
-    F[1, _QT] -= vqx
-    F[2, _QT] -= vqy
-    F[3, _QT] -= vqz
+    #F[1, _QT] -= vqx
+    #F[2, _QT] -= vqy 
+    #F[3, _QT] -= vqz
   end
 end
 
@@ -241,21 +239,23 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    (S11, S22, S33, S12, S13, S23, ν_e, D_e, SijSij) = static_smag(dudx, dudy, dudz, 
+    (S11, S22, S33, S12, S13, S23, _, _, SijSij) = static_smag(dudx, dudy, dudz, 
                                                                    dvdx, dvdy, dvdz, 
                                                                    dwdx, dwdy, dwdz, 
                                                                    Δ2)
+    μ_e = 75
+    D_e = μ_e 
     # --------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
-    VF[_τ11] = 2 * ν_e * (S11 - (S11 + S22 + S33) / 3)
-    VF[_τ22] = 2 * ν_e * (S22 - (S11 + S22 + S33) / 3)
-    VF[_τ33] = 2 * ν_e * (S33 - (S11 + S22 + S33) / 3)
-    VF[_τ12] = 2 * ν_e * S12
-    VF[_τ13] = 2 * ν_e * S13
-    VF[_τ23] = 2 * ν_e * S23
+    VF[_τ11] = 2 * μ_e * (S11 - (S11 + S22 + S33) / 3)
+    VF[_τ22] = 2 * μ_e * (S22 - (S11 + S22 + S33) / 3)
+    VF[_τ33] = 2 * μ_e * (S33 - (S11 + S22 + S33) / 3)
+    VF[_τ12] = 2 * μ_e * S12
+    VF[_τ13] = 2 * μ_e * S13
+    VF[_τ23] = 2 * μ_e * S23
     VF[_qx], VF[_qy], VF[_qz]  = D_e .* (dqdx, dqdy, dqdz)
-    VF[_Tx], VF[_Ty], VF[_Tz]  = ν_e .* k_μ .* (dTdx, dTdy, dTdz)
+    VF[_Tx], VF[_Ty], VF[_Tz]  = μ_e .* k_μ .* (dTdx, dTdy, dTdz)
     VF[_θx], VF[_θy], VF[_θz]  = dθdx, dθdy, dθdz
     VF[_SijSij] = SijSij
   end
@@ -286,10 +286,10 @@ end
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
+    QP[_ρ] = ρM
     QP[_U] = UM - 2 * nM[1] * UnM
     QP[_V] = VM - 2 * nM[2] * UnM
     QP[_W] = WM - 2 * nM[3] * UnM
-    QP[_ρ] = ρM
     QP[_E] = EM
     QP[_QT] = QTM
     VFP .= VFM
@@ -362,7 +362,7 @@ end
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    S[_V] += - ρ * gravity
+    S[_V] -= ρ * gravity
   end
 end
 
@@ -553,8 +553,8 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney, Nez)
-    dt = 0.02
-    timeend = 5400
+    dt = 0.01
+    timeend = 5400 
     polynomialorder = Npoly
     DFloat = Float64
     dim = numdims
