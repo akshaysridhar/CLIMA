@@ -1,9 +1,10 @@
 module MPIStateArrays
 using LinearAlgebra
+using DoubleFloats
 
 using MPI
 
-export MPIStateArray, euclidean_distance
+export MPIStateArray, euclidean_distance, weightedsum
 
 """
     MPIStateArray{S <: Tuple, T, DeviceArray, N,
@@ -54,28 +55,13 @@ struct MPIStateArray{S <: Tuple, T, DeviceArray, N,
     N = length(S.parameters)+1
     numsendelem = length(sendelems)
     numrecvelem = length(ghostelems)
-    (Q, device_sendQ, device_recvQ) = try
+    (Q, device_sendQ, device_recvQ) =
       (DA{T, N}(undef, S.parameters..., numelem),
        DA{T, N}(undef, S.parameters..., numsendelem),
        DA{T, N}(undef, S.parameters..., numrecvelem))
-    catch
-      try
-        # TODO: Remove me after CUDA upgrade...
-        (DA{T, N}(S.parameters..., numelem),
-         DA{T, N}(S.parameters..., numsendelem),
-         DA{T, N}(S.parameters..., numrecvelem))
-      catch
-        error("MPIStateArray:Cannot construct array")
-      end
-    end
 
     host_sendQ = zeros(T, S.parameters..., numsendelem)
     host_recvQ = zeros(T, S.parameters..., numrecvelem)
-
-    # Length check is to work around a CuArrays bug.
-    length(Q) > 0 && fill!(Q, 0)
-    length(device_sendQ) > 0 && fill!(device_sendQ, 0)
-    length(device_recvQ) > 0 && fill!(device_recvQ, 0)
 
     nnabr = length(nabrtorank)
     sendreq = fill(MPI.REQUEST_NULL, nnabr)
@@ -90,9 +76,9 @@ struct MPIStateArray{S <: Tuple, T, DeviceArray, N,
                                            device_sendQ, device_recvQ, weights,
                                            commtag)
   end
-
-
 end
+
+Base.fill!(Q::MPIStateArray, x) = fill!(Q.Q, x)
 
 """
    MPIStateArray{S, T, DA}(mpicomm, numelem; realelems=1:numelem,
@@ -181,13 +167,13 @@ end
 
 posts the `MPI.Irecv!` for `Q`
 """
-function post_Irecvs!(Q::MPIStateArray)
+function post_Irecvs!(Q::MPIStateArray, D)
   nnabr = length(Q.nabrtorank)
   for n = 1:nnabr
     # If this fails we haven't waited on previous recv!
     @assert Q.recvreq[n].buffer == nothing
 
-    Q.recvreq[n] = MPI.Irecv!((@view Q.host_recvQ[:, :, Q.nabrtorecv[n]]),
+    Q.recvreq[n] = MPI.Irecv!((@view Q.host_recvQ[D..., Q.nabrtorecv[n]]),
                               Q.nabrtorank[n], Q.commtag, Q.mpicomm)
   end
 end
@@ -202,19 +188,21 @@ This function will fill the send buffer (on the device), copies the data from
 the device to the host, and then issues the send. Previous sends are waited on
 to ensure that they are complete.
 """
-function start_ghost_exchange!(Q::MPIStateArray; dorecvs=true)
-  dorecvs && post_Irecvs!(Q)
+function start_ghost_exchange!(Q::MPIStateArray, D = ntuple(i->:, ndims(Q)-1);
+                               dorecvs=true)
+
+  dorecvs && post_Irecvs!(Q, D)
 
   # wait on (prior) MPI sends
-  MPI.Waitall!(Q.sendreq)
+  finish_ghost_send!(Q)
 
   # pack data in send buffer
-  fillsendbuf!(Q.host_sendQ, Q.device_sendQ, Q.Q, Q.sendelems)
+  fillsendbuf!(Q.host_sendQ, Q.device_sendQ, Q.Q, Q.sendelems, D)
 
   # post MPI sends
   nnabr = length(Q.nabrtorank)
   for n = 1:nnabr
-    Q.sendreq[n] = MPI.Isend((@view Q.host_sendQ[:, :, Q.nabrtosend[n]]),
+    Q.sendreq[n] = MPI.Isend((@view Q.host_sendQ[D..., Q.nabrtosend[n]]),
                            Q.nabrtorank[n], Q.commtag, Q.mpicomm)
   end
 end
@@ -222,31 +210,53 @@ end
 """
     finish_ghost_exchange!(Q::MPIStateArray)
 
-Complete the exchange of data and fill the data array on the device
+Complete the exchange of data and fill the data array on the device. Note this
+completes both the send and the receive communication. For more fine level
+control see [finish_ghost_recv!](@ref) and
+[finish_ghost_send!](@ref)
 """
 function finish_ghost_exchange!(Q::MPIStateArray)
+  finish_ghost_recv!(Q::MPIStateArray)
+  finish_ghost_send!(Q::MPIStateArray)
+end
+
+"""
+    finish_ghost_recv!(Q::MPIStateArray)
+
+Complete the receive of data and fill the data array on the device
+"""
+function finish_ghost_recv!(Q::MPIStateArray, D = ntuple(i->:, ndims(Q)-1))
   # wait on MPI receives
   MPI.Waitall!(Q.recvreq)
 
   # copy data to state vectors
-  transferrecvbuf!(Q.device_recvQ, Q.host_recvQ, Q, length(Q.realelems))
+  transferrecvbuf!(Q.device_recvQ, Q.host_recvQ, Q.Q, length(Q.realelems), D)
 end
+
+"""
+    finish_ghost_send!(Q::MPIStateArray)
+
+Waits on the send of data to be complete
+"""
+finish_ghost_send!(Q::MPIStateArray) = MPI.Waitall!(Q.sendreq)
 
 # {{{ MPI Buffer handling
-fillsendbuf!(h, d, b::MPIStateArray, e) = fillsendbuf!(h, d, b.Q, e)
-transferrecvbuf!(h, d, b::MPIStateArray, e) = transferrecvbuf!(h, d, b.Q, e)
-
-function fillsendbuf!(host_sendbuf, device_sendbuf::Array, buf::Array, sendelems)
-  host_sendbuf[:, :, :] .= buf[:, :, sendelems]
+function fillsendbuf!(host_sendbuf, device_sendbuf::Array, buf::Array,
+                      sendelems::Array, D)
+  # TODO: Revisit when not D ≠ (:, :), may want to pack data perhaps
+  # differently for the GPU?
+  copyto!(@view(host_sendbuf[D..., :]), @view(buf[D..., sendelems]))
 end
 
-function transferrecvbuf!(device_recvbuf::Array, host_recvbuf, buf::Array,
-                          nrealelem)
-  buf[:, :, nrealelem+1:end] .= host_recvbuf[:, :, :]
+function transferrecvbuf!(device_recvbuf, host_recvbuf, buf::Array, nrealelem,
+                          D)
+  # TODO: Revisit when not D ≠ (:, :), may want to pack data perhaps
+  # differently for the GPU?
+  copyto!(@view(buf[D..., nrealelem+1:end]), @view(host_recvbuf[D..., :]))
 end
 # }}}
 
-# {{{ L2 Energy (for all dimensions)
+# Integral based metrics
 function LinearAlgebra.norm(Q::MPIStateArray; p::Real=2)
 
   @assert p == 2
@@ -268,26 +278,26 @@ function knl_norm2(::Val{Np}, Q, elems) where {Np}
   DFloat = eltype(Q)
   (_, nstate, nelem) = size(Q)
 
-  energy = zero(DFloat)
+  nrm = zero(DFloat)
 
   @inbounds for e = elems, q = 1:nstate, i = 1:Np
-    energy += Q[i, q, e]^2
+    nrm += Q[i, q, e]^2
   end
 
-  energy
+  nrm
 end
 
 function knl_L2norm(::Val{Np}, Q, weights, elems) where {Np}
   DFloat = eltype(Q)
   (_, nstate, nelem) = size(Q)
 
-  energy = zero(DFloat)
+  nrm = zero(DFloat)
 
   @inbounds for e = elems, q = 1:nstate, i = 1:Np
-    energy += weights[i, e] * Q[i, q, e]^2
+    nrm += weights[i, e] * Q[i, q, e]^2
   end
 
-  energy
+  nrm
 end
 
 function euclidean_distance(A::MPIStateArray, B::MPIStateArray)
@@ -335,7 +345,48 @@ function knl_L2dist(::Val{Np}, A, B, weights, elems) where {Np}
   dist
 end
 
-# }}}
+"""
+    weightedsum(A[, states])
+
+Compute the weighted sum of the `MPIStateArray` `A`. If `states` is specified on
+the listed states are summed, otherwise all the states in `A` are used.
+
+A typical use case for this is when the weights have been initialized with
+quadrature weights from a grid, thus this becomes an integral approximation.
+
+!!! note
+
+    This implementation is not optimal and should be revisited when we work out
+    the GPUify version!
+
+"""
+function weightedsum(A::MPIStateArray, states=1:size(A, 2))
+
+  host_array = Array ∈ typeof(A).parameters
+  h_A = host_array ? A : Array(A)
+  Np = size(A, 1)
+
+  isempty(A.weights) && error("`weightedsum` requires weights")
+  locwsum = knl_weightedsum(Val(Np), h_A, A.weights, A.realelems, states)
+
+  DFloat = eltype(A)
+  # Need to use anomous function version of sum else MPI.jl using MPI_SUM
+  DFloat(MPI.Allreduce([locwsum], (x,y)->x+y, A.mpicomm)[1])
+end
+
+function knl_weightedsum(::Val{Np}, A, weights, elems, states) where {Np}
+  DFloat = eltype(A)
+
+  wsum = zero(DoubleFloat{DFloat})
+
+  @inbounds for e = elems
+    for q = states, i = 1:Np
+      wsum += weights[i, e] * A[i, q, e]
+    end
+  end
+
+  wsum
+end
 
 using Requires
 

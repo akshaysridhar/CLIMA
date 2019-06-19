@@ -13,7 +13,32 @@ source function. ``F`` includes both the "inviscid" and "viscous" fluxes. Note
 that this is a space only discretization, time must be advanced using some
 ordinary differential equations methods; see [`ODESolvers`](@ref).
 
+The flux function `F_{i}` is taken to be of the form:
+```math
+F_{i} := F_{i}(q, σ; a)
+σ = H(q, ∇G(q; a); a)
+```
+where ``a`` is a set of parameters and viscous terms enter through ``σ``
+
+The source term is of the form:
+```math
+s := s(q; a)
+```
+
+In the code and docs the following terminology is used:
+- ``q`` is referred to as the state
+- ``σ`` is the viscous state
+- ``a`` is the auxiliary state
+- ``F`` is the physical flux
+- ``H`` is the viscous transform
+- ``G`` is the gradient transform
+
 Much of the notation used in this module follows Hesthaven and Warburton (2008).
+
+!!! note
+
+    Currently all the functions take the same parameters and the gradient
+    transform can take a user-specified subset of the state vector.
 
 !!! note
 
@@ -38,23 +63,15 @@ Much of the notation used in this module follows Hesthaven and Warburton (2008).
 module DGBalanceLawDiscretizations
 
 using MPI
-using ...Grids
-using ...MPIStateArrays
-using Documenter
+using ..Grids
+using ..MPIStateArrays
 using StaticArrays
-using ...SpaceMethods
+using ..SpaceMethods
 using DocStringExtensions
+using ..Topologies
+using GPUifyLoops
 
 export DGBalanceLaw
-
-# {{{ FIXME: remove this after we've figure out how to pass through to kernel
-const _nvgeo = 14
-const _ξx, _ηx, _ζx, _ξy, _ηy, _ζy, _ξz, _ηz, _ζz, _MJ, _MJI,
-       _x, _y, _z = 1:_nvgeo
-
-const _nsgeo = 5
-const _nx, _ny, _nz, _sMJ, _vMJI = 1:_nsgeo
-# }}}
 
 include("DGBalanceLawDiscretizations_kernels.jl")
 include("NumericalFluxes.jl")
@@ -79,54 +96,110 @@ struct DGBalanceLaw <: AbstractDGMethod
   "number of state"
   nstate::Int
 
-  "tuple of states to take the gradient of"
-  gradstates::Tuple
-
-  "physical inviscid flux function"
-  inviscid_flux!::Function
+  "physical flux function"
+  flux!::Function
 
   "numerical flux function"
-  inviscid_numericalflux!::Function
+  numerical_flux!::Function
 
-  "storage for the grad"
-  Qgrad::MPIStateArray
+  "numerical boundary flux function"
+  numerical_boundary_flux!::Union{Nothing, Function}
+
+  "storage for the viscous state"
+  Qvisc::MPIStateArray
+
+  "number of out states for gradient_transform!"
+  number_gradient_states::Int
+
+  "number of out states for the viscous_transform!"
+  number_viscous_states::Int
+
+  "tuple of states going into gradient_transform!"
+  states_for_gradient_transform::Tuple
+
+  "transform from state to variables to take gradient of"
+  gradient_transform!::Union{Nothing, Function}
+
+  "transform from Q and gradient state to viscous states"
+  viscous_transform!::Union{Nothing, Function}
+
+  "penalty for the viscous state computation"
+  viscous_penalty!::Union{Nothing, Function}
+
+  "boundary penalty for the viscous state computation (e.g., Dirichlet)"
+  viscous_boundary_penalty!::Union{Nothing, Function}
 
   "auxiliary state array"
   auxstate::MPIStateArray
 
   "source function"
   source!::Union{Nothing, Function}
+
+  "callback function for before the `odefun!`"
+  preodefun!::Union{Nothing, Function}
 end
 
 """
-     DGBalanceLaw(; grid::DiscontinuousSpectralElementGrid, length_state_vector,
-                  inviscid_flux!, inviscid_numericalflux!,
-                  auxiliary_state_length=0,
-                  auxiliary_state_initialization! = nothing,
-                  source! = nothing)
+    DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
+                 length_state_vector,
+                 flux!,
+                 numerical_flux!,
+                 numerical_boundary_flux! = nothing,
+                 states_for_gradient_transform = (),
+                 number_gradient_states = 0,
+                 number_viscous_states = 0,
+                 gradient_transform! = nothing,
+                 viscous_transform! = nothing,
+                 viscous_penalty! = nothing,
+                 viscous_boundary_penalty! = nothing,
+                 auxiliary_state_length = 0,
+                 auxiliary_state_initialization! = nothing,
+                 source! = nothing,
+                 preodefun! = nothing)
 
 Constructs a `DGBalanceLaw` spatial discretization type for the physics defined
-by `inviscid_flux!` and `source!`. The computational domain is defined by
-`grid`. The number of state variables is defined by `length_state_vector`. The
-user may also specify an auxiliary state which will be unpacked by the compute
-kernel passed on to the user-defined flux and numerical flux functions. The
-source function `source!` is optional.
+by `flux!` and `source!`. The computational domain is defined by `grid`. The
+number of state variables is defined by `length_state_vector`. The user may also
+specify an auxiliary state which will be unpacked by the compute kernel passed
+on to the user-defined flux and numerical flux functions. The source function
+`source!` is optional.
 
-The inviscid flux function is called with data from a degree of freedom (DOF) as
+The flux function is called with data from a degree of freedom (DOF) as
 ```
-inviscid_flux!(F, Q, aux, t)
+flux!(F, Q, V, aux, t)
 ```
 where
 - `F` is an `MArray` of size `(dim, length_state_vector)` to be filled (note
-  that this is uninitialized so user must set to zero is this desired)
+  that this is uninitialized so the user must set to zero if is this desired)
 - `Q` is the state to evaluate (`MArray`)
+- `V` is the viscous state to evaluate (`MArray`)
 - `aux` is the user-defined auxiliary state (`MArray`)
 - `t` is the current simulation time
-Warning: Modifications to `Q` or `aux` may have side effects and should not be done
+Warning: Modifications to `Q` or `aux` may cause side effects and should be
+avoided.
 
-The inviscid numerical flux function is called with data from two DOFs as
+The numerical flux function is called with data from two DOFs as
 ```
-inviscid_numericalflux!(F, nM, QM, auxM, QP, auxP, t)
+numerical_flux!(F, nM, QM, VM, auxM, QP, VP, auxP, t)
+```
+where
+- `F` is an `MVector` of length `length_state_vector` to be filled with the
+  numerical flux across the face (note that this is uninitialized so user must
+  set to zero if is this desired)
+- `nM` is the unit outward normal to the face with respect to the minus side
+  (`MVector` of length `3`)
+- `QM` and `QP` are the minus and plus side states (`MArray`)
+- `VM` and `VP` are the minus and plus viscous side states (`MArray`)
+- `auxM` and `auxP` are the auxiliary states (`MArray`)
+- `t` is the current simulation time
+Warning: Modifications to `nM`, `QM`, `auxM`, `QP`, or `auxP` may cause side
+effects and should be avoided.
+
+If `grid.topology` has a boundary then the function
+`numerical_boundary_flux!` must be specified. This function is called
+with the data from the neighbouring DOF as
+```
+numerical_boundary_flux!(F, nM, QM, VM, auxM, QP, VP, auxP, bctype, t)
 ```
 where
 - `F` is an `MArray` of size `(dim, length_state_vector)` to be filled with the
@@ -134,19 +207,26 @@ where
   set to zero is this desired)
 - `nM` is the unit outward normal to the face with respect to the minus side
   (`MVector` of length `3`)
-- `QM` and `QP` are the minus and plus side values (`MArray`)
+- `QM` and `QP` are the minus and plus side states (`MArray`)
+- `VM` and `VP` are the minus and plus viscous side states (`MArray`)
 - `auxM` and `auxP` are the auxiliary states (`MArray`)
+- `bctype` is the boundary condition flag for the connected face and element of
+   `grid.elemtobndy`
 - `t` is the current simulation time
-Warning: Modifications to `nM`, `QM`, `auxM`, `QP`, or `auxP` may have side
-effects and should not be done
+Note: `QP` and `auxP` are filled with values based on degrees of freedom
+referenced in `grid.vmapP`; `QP` and `auxP` may be modified by the calling
+function.
+
+Warning: Modifications to `nM`, `QM`, or `auxM` may cause side effects and
+should be avoided.
 
 If present the source function is called with data from a DOF as
 ```
 source!(S, Q, aux, t)
 ```
 where `S` is an `MVector` of length `length_state_vector` to be filled; other
-arguments are the same as `inviscid_flux!` and the same warning concerning `Q`
-and `aux` applies.
+arguments are the same as `flux!` and the same warning concerning `Q` and `aux`
+applies.
 
 When `auxiliary_state_initialization! !== nothing` then this is called on the
 auxiliary state (assuming `auxiliary_state_length > 0`) as
@@ -158,45 +238,159 @@ Cartesian coordinate locations `(x, y, z)`; see also
 [`grad_auxiliary_state!`](@ref) allows the user to take the gradient of a field
 stored in the auxiliary state.
 
+When viscous terms are needed, the user must specify values for the following
+keyword arguments:
+- `states_for_gradient_transform` (`Tuple`)
+- `number_gradient_states` (`Int`)
+- `number_viscous_states` (`Int`)
+- `gradient_transform!` (`Function`)
+- `viscous_transform!` (`Function`)
+- `viscous_penalty!` (`Function`)
+- `viscous_boundary_penalty!` (`Function`); only required if the topology has a
+  boundary
+
+The function `gradient_transform!` is the implementation of the function `G` in
+the module docs; see [`DGBalanceLawDiscretizations`](@ref). It transforms the
+elements of the components of state vector specified by
+`states_for_gradient_transform` into the values that should have their gradient
+taken. It is called on each DOF as:
+```
+gradient_transform!(G, Q, aux, t)
+```
+where `G` is an `MVector` of length `number_gradient_states` to be filled, `Q`
+is an `MVector` containing only the states specified by
+`states_for_gradient_transform`, `aux` is the full auxiliary state at the DOF,
+and `t` is the simulation time.Q
+
+The function `viscous_transform!` is the implementation of the function `H` in
+the module docs; see [`DGBalanceLawDiscretizations`](@ref). It transforms the
+gradient ``∇G`` and ``q`` into the viscous state ``σ``. It is called on each DOF
+as:
+```
+viscous_transform!(V, gradG, Q, aux, t)
+```
+where `V` is an `MVector` of length `number_viscous_states` to be filled,
+`gradG` is an `MMatrix` containing the DG-gradient of ``G``, `Q` is an `MVector`
+containing only the states specified by `states_for_gradient_transform`, `aux`
+is the full auxiliary state at the DOF, and `t` is the simulation time. Note
+that `V` is a vector not a matrix so that minimal storage can be used if
+symmetry can be exploited.
+
+The function `viscous_penalty!` is the penalty terms to be used for the
+DG-gradient calculation. It is called with data from two neighbouring degrees of
+freedom as
+```
+viscous_penalty!(V, nM, HM, QM, auxM, HP, QP, auxP, t)
+```
+where:
+- `V` is an `MVector` of length `number_viscous_states` to be filled with the
+  numerical penalty across the face; see below.
+- `nM` is the unit outward normal to the face with respect to the minus side
+  (`MVector` of length `3`)
+- `HM` and `HP` are the minus and plus evaluation of `gradient_transform!` on
+  either side of the face
+- `QM` and `QP` are the minus and plus side states (`MArray`); filled only with
+  `states_for_gradient_transform` states.
+- `auxM` and `auxP` are the auxiliary states (`MArray`)
+- `t` is the current simulation time
+The viscous penalty function is should compute on the faces
+```math
+n^{-} \\cdot H^{*} - n^{-} \\cdot H^{-}
+```
+where ``n^{-} \\cdot H^{*}`` is the "numerical-flux" for the viscous state
+computation and ``H^{-}`` is the value of `viscous_transform!` evaluated on the
+minus side ``n^{-} \\cdot G^{-}`` as an argument.
+
+If `grid.topology` has a boundary then the function `viscous_boundary_penalty!`
+must be specified. This function is called with the data from the neighbouring
+DOF as
+```
+viscous_boundary_penalty!(V, nM, HM, QM, auxM, HP, QP, auxP, bctype, t)
+```
+where the required behaviour mimics that of `viscous_penalty!` and
+`numerical_boundary_flux!`.
+
+If `preodefun!` is called right before the rest of the ODE function, with the
+main purpose to allow the user to populate/modify the auxiliary state
+`disc.auxstate` to be consistent with the current time `t` and solution vector
+`Q`
+```
+preodefun!(disc, Q, t)
+```
+where `disc` is the `DGBalanceLaw` structure and `Q` is the current state being
+used to evaluate the ODE function.
+
+!!! note "notes on `preodefun!`"
+
+    Unlike the other callbacks, this function is not called at the device (or
+    kernel) level but the host level.
+
+    MPI communication of `Q` occurs after the `odefun!` and no MPI communication
+    of `auxstate` is performed (if this is needed we will need to determine a
+    way to handle it in order to overlap communication and computation as well
+    only comm update fields).
+
 !!! note
 
     If `(x, y, z)`, or data derived from this such as spherical coordinates, is
     needed in the flux or source the user is responsible to storing this in the
     auxiliary state
 
-!!! todo
-
-    - Add support for boundary conditions
-    - support viscous fluxes (`gradstates` is in the argument list as part of
-      this future interface)
-
 """
 function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
-                      length_state_vector, inviscid_flux!,
-                      inviscid_numericalflux!, gradstates=(),
+                      length_state_vector, flux!,
+                      numerical_flux!,
+                      numerical_boundary_flux! = nothing,
+                      states_for_gradient_transform=(),
+                      number_gradient_states=0,
+                      number_viscous_states=0,
+                      gradient_transform! = nothing,
+                      viscous_transform! = nothing,
+                      viscous_penalty! = nothing,
+                      viscous_boundary_penalty! = nothing,
                       auxiliary_state_length=0,
                       auxiliary_state_initialization! = nothing,
-                      source! = nothing)
+                      source! = nothing,
+                      preodefun! = nothing)
 
-  ngradstate = length(gradstates)
   topology = grid.topology
   Np = dofs_per_element(grid)
   h_vgeo = Array(grid.vgeo)
   DFloat = eltype(h_vgeo)
   DA = arraytype(grid)
+
+  (Topologies.hasboundary(topology) &&
+   numerical_boundary_flux! === nothing &&
+   error("no `numerical_boundary_flux!` given when topology "*
+         "has boundary"))
+
+  if number_viscous_states > 0 || number_gradient_states > 0 ||
+    length(states_for_gradient_transform) > 0
+
+    # These should all be true in this case
+    @assert number_viscous_states > 0
+    @assert number_gradient_states > 0
+    @assert length(states_for_gradient_transform) > 0
+    @assert gradient_transform! !== nothing
+    @assert viscous_transform! !== nothing
+    @assert viscous_penalty! !== nothing
+    (Topologies.hasboundary(topology)) && (@assert viscous_boundary_penalty! !==
+                                           nothing)
+  end
+
   # TODO: Clean up this MPIStateArray interface...
-  Qgrad = MPIStateArray{Tuple{Np, ngradstate},
-                        DFloat, DA
-                       }(topology.mpicomm,
-                         length(topology.elems),
-                         realelems=topology.realelems,
-                         ghostelems=topology.ghostelems,
-                         sendelems=topology.sendelems,
-                         nabrtorank=topology.nabrtorank,
-                         nabrtorecv=topology.nabrtorecv,
-                         nabrtosend=topology.nabrtosend,
-                         weights=view(h_vgeo, :, grid.Mid, :),
-                         commtag=111)
+  Qvisc = MPIStateArray{Tuple{Np, number_viscous_states},
+                     DFloat, DA
+                    }(topology.mpicomm,
+                      length(topology.elems),
+                      realelems=topology.realelems,
+                      ghostelems=topology.ghostelems,
+                      sendelems=topology.sendelems,
+                      nabrtorank=topology.nabrtorank,
+                      nabrtorecv=topology.nabrtorecv,
+                      nabrtosend=topology.nabrtosend,
+                      weights=view(h_vgeo, :, grid.Mid, :),
+                      commtag=111)
 
   auxstate = MPIStateArray{Tuple{Np, auxiliary_state_length}, DFloat, DA
                           }(topology.mpicomm,
@@ -215,44 +409,52 @@ function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
     dim = dimensionality(grid)
     N = polynomialorder(grid)
     vgeo = grid.vgeo
-    initauxstate!(Val(dim), Val(N), Val(auxiliary_state_length),
-                  auxiliary_state_initialization!, auxstate, vgeo,
-                  topology.realelems)
+    device = typeof(auxstate.Q) <: Array ? CPU() : CUDA()
+    nrealelem = length(topology.realelems)
+    @launch(device, threads=(Np,), blocks=nrealelem,
+            initauxstate!(Val(dim), Val(N), Val(auxiliary_state_length),
+                          auxiliary_state_initialization!, auxstate.Q, vgeo,
+                          topology.realelems))
     MPIStateArrays.start_ghost_exchange!(auxstate)
     MPIStateArrays.finish_ghost_exchange!(auxstate)
   end
 
-  DGBalanceLaw(grid, length_state_vector, gradstates, inviscid_flux!,
-               inviscid_numericalflux!, Qgrad, auxstate, source!)
+  DGBalanceLaw(grid, length_state_vector, flux!,
+               numerical_flux!, numerical_boundary_flux!,
+               Qvisc, number_gradient_states, number_viscous_states,
+               states_for_gradient_transform, gradient_transform!,
+               viscous_transform!, viscous_penalty!,
+               viscous_boundary_penalty!, auxstate, source!, preodefun!)
 end
 
 """
-    MPIStateArray(disc::DGBalanceLaw; commtag=888)
+    MPIStateArray(disc::DGBalanceLaw; nstate=disc.nstate, commtag=888)
 
 Given a discretization `disc` constructs an `MPIStateArrays` for holding a
-solution state. The optional `commtag` allows the user to set the tag to use for
-communication with this `MPIStateArray`.
+solution state. The optional 'nstate' arguments allows the user to specify a
+specific number of states. The optional `commtag` allows the user to set the tag
+to use for communication with this `MPIStateArray`.
 """
-function MPIStateArrays.MPIStateArray(disc::DGBalanceLaw; commtag=888)
+function MPIStateArrays.MPIStateArray(disc::DGBalanceLaw; nstate=disc.nstate,
+                                      commtag=888)
   grid = disc.grid
   topology = disc.grid.topology
-  nvar = disc.nstate
   # FIXME: Remove after updating CUDA
   h_vgeo = Array(disc.grid.vgeo)
   DFloat = eltype(h_vgeo)
   Np = dofs_per_element(grid)
   DA = arraytype(grid)
-  MPIStateArray{Tuple{Np, nvar}, DFloat, DA}(topology.mpicomm,
-                                             length(topology.elems),
-                                             realelems=topology.realelems,
-                                             ghostelems=topology.ghostelems,
-                                             sendelems=topology.sendelems,
-                                             nabrtorank=topology.nabrtorank,
-                                             nabrtorecv=topology.nabrtorecv,
-                                             nabrtosend=topology.nabrtosend,
-                                             weights=view(h_vgeo, :,
-                                                          disc.grid.Mid, :),
-                                             commtag=commtag)
+  MPIStateArray{Tuple{Np, nstate}, DFloat, DA}(topology.mpicomm,
+                                               length(topology.elems),
+                                               realelems=topology.realelems,
+                                               ghostelems=topology.ghostelems,
+                                               sendelems=topology.sendelems,
+                                               nabrtorank=topology.nabrtorank,
+                                               nabrtorecv=topology.nabrtorecv,
+                                               nabrtosend=topology.nabrtosend,
+                                               weights=view(h_vgeo, :,
+                                                            disc.grid.Mid, :),
+                                               commtag=commtag)
 end
 
 """
@@ -274,7 +476,7 @@ through as an `MArray` through the `aux` argument
 
 !!! note
 
-    `Q` is `unde` at start the function (i.e., not initialized to zero)
+    `Q` is `undef` at start the function (i.e., not initialized to zero)
 
 !!! note
 
@@ -341,82 +543,44 @@ MPIStateArrays.MPIStateArray(f::Function,
                              d::DGBalanceLaw; commtag=888
                             ) = MPIStateArray(d, f; commtag=commtag)
 
-#TODO: Need to think about where this should really live. Grid? MPIStateArrays?
-include("../Mesh/vtk.jl")
 
 """
-    writevtk(prefix, Q::MPIStateArray, disc::DGBalanceLaw [, fieldnames])
-
-Write a vtk file for all the fields in the state array `Q` using geometry and
-connectivity information from `disc.grid`. The filename will start with `prefix`
-which may also contain a directory path. The names used for each of the fields
-in the vtk file can be specified through the collection of strings `fieldnames`;
-if not specified the fields names will be `"Q1"` through `"Qk"` where `k` is the
-number of states in `Q`, i.e., `k = size(Q,2)`.
-
-"""
-function writevtk(prefix, Q::MPIStateArray, disc::DGBalanceLaw,
-                  fieldnames=nothing)
-  vgeo = disc.grid.vgeo
-  host_array = Array ∈ typeof(Q).parameters
-  (h_vgeo, h_Q) = host_array ? (vgeo, Q.Q) : (Array(vgeo), Array(Q))
-  writevtk_helper(prefix, h_vgeo, h_Q, disc.grid, fieldnames)
-end
-
-
-"""
-    writevtk_helper(prefix, vgeo::Array, Q::Array, grid, fieldnames)
-
-Internal helper function for `writevtk`
-"""
-function writevtk_helper(prefix, vgeo::Array, Q::Array, grid, fieldnames)
-
-  dim = dimensionality(grid)
-  N = polynomialorder(grid)
-  Nq  = N+1
-
-  nelem = size(Q)[end]
-  Xid = (grid.xid, grid.yid, grid.zid)
-  X = ntuple(j->reshape((@view vgeo[:, Xid[j], :]),
-                        ntuple(j->Nq, dim)...,
-                        nelem), dim)
-  if fieldnames == nothing
-    fields = ntuple(i->("Q$i", reshape((@view Q[:, i, :]),
-                                       ntuple(j->Nq, dim)..., nelem)),
-                    size(Q, 2))
-  else
-    fields = ntuple(i->(fieldnames[i], reshape((@view Q[:, i, :]),
-                                               ntuple(j->Nq, dim)..., nelem)),
-                    size(Q, 2))
-  end
-  writemesh(prefix, X...; fields=fields, realelems=grid.topology.realelems)
-end
-
-"""
-    odefun!(disc::DGBalanceLaw, dQ::MPIStateArray, Q::MPIStateArray, t)
+    odefun!(disc::DGBalanceLaw, dQ::MPIStateArray, Q::MPIStateArray, t; increment)
 
 Evaluates the right-hand side of the discontinuous Galerkin semi-discretization
-defined by `disc` at time `t` with state `Q`. The result is added into
-`dQ`. Namely, the semi-discretization is of the form
-```math
-Q̇ = F(Q, t)
-```
-and after the call `dQ += F(Q, t)`
+defined by `disc` at time `t` with state `Q`.
+The result is either added into
+`dQ` if `increment` is true or stored in `dQ` if it is false.
+Namely, the semi-discretization is of the form
+``
+  \\dot{Q} = F(Q, t)
+``
+and after the call `dQ += F(Q, t)` if `increment == true`
+or `dQ = F(Q, t)` if `increment == false`
 """
 function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
-                              Q::MPIStateArray, t)
+                              Q::MPIStateArray, t; increment)
+
+  device = typeof(Q.Q) <: Array ? CPU() : CUDA()
+
   grid = disc.grid
   topology = grid.topology
 
   dim = dimensionality(grid)
   N = polynomialorder(grid)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+  Nfp = Nq * Nqk
+  nrealelem = length(topology.realelems)
 
-  Qgrad = disc.Qgrad
+  Qvisc = disc.Qvisc
   auxstate = disc.auxstate
 
   nstate = disc.nstate
-  ngradstate = length(disc.gradstates)
+  nviscstate = disc.number_viscous_states
+  ngradstate = disc.number_gradient_states
   nauxstate = size(auxstate, 2)
+  states_grad = disc.states_for_gradient_transform
 
   Dmat = grid.D
   vgeo = grid.vgeo
@@ -425,39 +589,66 @@ function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
   vmapP = grid.vmapP
   elemtobndy = grid.elemtobndy
 
+  ################################
+  # Allow the user to update aux #
+  ################################
+  disc.preodefun! !== nothing && disc.preodefun!(disc, Q, t)
+
   ########################
   # Gradient Computation #
   ########################
   MPIStateArrays.start_ghost_exchange!(Q)
 
-  if ngradstate > 0
-    error("Grad not implemented yet")
+  if nviscstate > 0
 
-    # TODO: volumegrad!
+    @launch(device, threads=(Nq, Nq, Nqk), blocks=nrealelem,
+            volumeviscterms!(Val(dim), Val(N), Val(nstate), Val(states_grad),
+                             Val(ngradstate), Val(nviscstate), Val(nauxstate),
+                             disc.viscous_transform!, disc.gradient_transform!,
+                             Q.Q, Qvisc.Q, auxstate.Q, vgeo, t, Dmat,
+                             topology.realelems))
 
-    MPIStateArrays.finish_ghost_exchange!(Q)
+    MPIStateArrays.finish_ghost_recv!(Q)
 
-    # TODO: facegrad!
+    @launch(device, threads=Nfp, blocks=nrealelem,
+            faceviscterms!(Val(dim), Val(N), Val(nstate), Val(states_grad),
+                           Val(ngradstate), Val(nviscstate), Val(nauxstate),
+                           disc.viscous_penalty!,
+                           disc.viscous_boundary_penalty!,
+                           disc.gradient_transform!, Q.Q, Qvisc.Q, auxstate.Q,
+                           vgeo, sgeo, t, vmapM, vmapP, elemtobndy,
+                           topology.realelems))
 
-    MPIStateArrays.start_ghost_exchange!(Qgrad)
+    MPIStateArrays.start_ghost_exchange!(Qvisc)
   end
 
   ###################
   # RHS Computation #
   ###################
 
-  volumerhs!(Val(dim), Val(N), Val(nstate), Val(ngradstate), Val(nauxstate),
-             disc.inviscid_flux!, disc.source!, dQ.Q, Q.Q, Qgrad.Q, auxstate.Q,
-             vgeo, t, Dmat, topology.realelems)
+  @launch(device, threads=(Nq, Nq, Nqk), blocks=nrealelem,
+          volumerhs!(Val(dim), Val(N), Val(nstate), Val(nviscstate),
+                     Val(nauxstate), disc.flux!, disc.source!, dQ.Q, Q.Q,
+                     Qvisc.Q, auxstate.Q, vgeo, t, Dmat, topology.realelems,
+                     increment))
 
-  MPIStateArrays.finish_ghost_exchange!(ngradstate > 0 ? Qgrad : Q)
+  MPIStateArrays.finish_ghost_recv!(nviscstate > 0 ? Qvisc : Q)
 
-  ngradstate > 0 && MPIStateArrays.finish_ghost_exchange!(Qgrad)
-  ngradstate == 0 && MPIStateArrays.finish_ghost_exchange!(Q)
+  # The main reason for this protection is not for the MPI.Waitall!, but the
+  # make sure that we do not recopy data to the GPU
+  nviscstate > 0 && MPIStateArrays.finish_ghost_recv!(Qvisc)
+  nviscstate == 0 && MPIStateArrays.finish_ghost_recv!(Q)
 
-  facerhs!(Val(dim), Val(N), Val(nstate), Val(ngradstate), Val(nauxstate),
-           disc.inviscid_numericalflux!, dQ.Q, Q.Q, Qgrad.Q, auxstate.Q, vgeo,
-           sgeo, t, vmapM, vmapP, elemtobndy, topology.realelems)
+  @launch(device, threads=Nfp, blocks=nrealelem,
+          facerhs!(Val(dim), Val(N), Val(nstate), Val(nviscstate),
+                   Val(nauxstate), disc.numerical_flux!,
+                   disc.numerical_boundary_flux!, dQ.Q, Q.Q, Qvisc.Q,
+                   auxstate.Q, vgeo, sgeo, t, vmapM, vmapP, elemtobndy,
+                   topology.realelems))
+
+  # Just to be safe, we wait on the sends we started.
+  MPIStateArrays.finish_ghost_send!(Qvisc)
+  MPIStateArrays.finish_ghost_send!(Q)
 end
 
 """
@@ -490,8 +681,160 @@ function grad_auxiliary_state!(disc::DGBalanceLaw, id, (idx, idy, idz))
   Dmat = grid.D
   vgeo = grid.vgeo
 
-  elem_grad_field!(Val(dim), Val(N), Val(nauxstate), auxstate, vgeo,
-                   Dmat, topology.elems, id, idx, idy, idz)
+  device = typeof(auxstate.Q) <: Array ? CPU() : CUDA()
+
+  nelem = length(topology.elems)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+
+  @launch(device, threads=(Nq, Nq, Nqk), blocks=nelem,
+          elem_grad_field!(Val(dim), Val(N), Val(nauxstate), auxstate.Q, vgeo,
+                           Dmat, topology.elems, id, idx, idy, idz))
+end
+
+"""
+    indefinite_stack_integral!(disc, f, Q, out_states, [P=disc.auxstate])
+
+Computes an indefinite line integral along the trailing dimension (`zeta` in
+3-D and `η` in 2-D) up an element stack using state `Q`
+```math
+∫_{ζ_{0}}^{ζ} f(q; aux, t)
+```
+and stores the result of the integral in field of `P` indicated by
+`out_states`
+
+The syntax of the integral kernel is:
+```
+f(F, Q, aux)
+```
+where `F` is an `MVector` of length `length(out_states)`, `Q` and `aux` are
+the `MVectors` for the state and auxiliary state at a single degree of freedom.
+The function is responsible for filling `F`.
+
+Requires the `isstacked(disc.grid.topology) == true`
+"""
+function indefinite_stack_integral!(disc::DGBalanceLaw, f, Q, out_states,
+                                    P=disc.auxstate)
+  grid = disc.grid
+  topology = grid.topology
+  @assert isstacked(topology)
+
+  dim = dimensionality(grid)
+  N = polynomialorder(grid)
+
+  auxstate = disc.auxstate
+  nauxstate = size(auxstate, 2)
+  nstate = size(Q, 2)
+
+  Imat = grid.Imat
+  vgeo = grid.vgeo
+  device = typeof(Q.Q) <: Array ? CPU() : CUDA()
+
+  nelem = length(topology.elems)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+
+  nvertelem = topology.stacksize
+  nhorzelem = div(nelem, nvertelem)
+  @assert nelem == nvertelem * nhorzelem
+
+  @launch(device, threads=(Nq, Nqk, 1), blocks=nhorzelem,
+          knl_indefinite_stack_integral!(Val(dim), Val(N), Val(nstate),
+                                         Val(nauxstate), Val(nvertelem), f, P.Q,
+                                         Q.Q, auxstate.Q, vgeo, Imat,
+                                         1:nhorzelem, Val(out_states)))
+end
+
+"""
+    reverse_indefinite_stack_integral!(disc, oustate, instate,
+                                       [P=disc.auxstate])
+
+reverse previously computed indefinite integral(s) computed with
+`indefinite_stack_integral!` to be
+```math
+∫_{ζ}^{ζ_{max}} f(q; aux, t)
+```
+
+The states `instate[i]` is reverse and stored in `instate[i]`.
+
+Requires the `isstacked(disc.grid.topology) == true`
+"""
+function reverse_indefinite_stack_integral!(disc::DGBalanceLaw, oustate,
+                                            instate, P=disc.auxstate)
+  grid = disc.grid
+  topology = grid.topology
+  @assert isstacked(topology)
+  @assert length(oustate) == length(instate)
+
+  dim = dimensionality(grid)
+  N = polynomialorder(grid)
+
+  device = typeof(P.Q) <: Array ? CPU() : CUDA()
+
+  nelem = length(topology.elems)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+
+  nvertelem = topology.stacksize
+  nhorzelem = div(nelem, nvertelem)
+  @assert nelem == nvertelem * nhorzelem
+
+  @launch(device, threads=(Nq, Nqk, 1), blocks=nhorzelem,
+          knl_reverse_indefinite_stack_integral!(Val(dim), Val(N),
+                                                 Val(nvertelem), P.Q,
+                                                 1:nhorzelem, Val(oustate),
+                                                 Val(instate)))
+end
+
+"""
+    dof_iteration!(dof_fun!::Function, R::MPIStateArray, disc::DGBalanceLaw,
+                   Q::MPIStateArray)
+
+Iterate over each dof to fill `R` using the `dof_fun!`. The syntax of the
+`dof_fun!` is
+```
+dof_fun!(l_R, l_Q, l_Qvisc, l_aux)
+```
+where `l_R`, `l_Q`, `l_Qvisc`, and `l_aux` are of type `MArray` filled initially
+with the values at a single degree of freedom. After the call the values in
+`l_R` will be written back to the degree of freedom of `R`.
+"""
+function dof_iteration!(dof_fun!::Function, R::MPIStateArray, disc::DGBalanceLaw,
+                        Q::MPIStateArray)
+  grid = disc.grid
+  topology = grid.topology
+
+  @assert size(R)[end] == size(Q)[end] == size(disc.auxstate)[end]
+  @assert size(R)[1] == size(Q)[1] == size(disc.auxstate)[1]
+
+  dim = dimensionality(grid)
+  N = polynomialorder(grid)
+
+  Qvisc = disc.Qvisc
+  auxstate = disc.auxstate
+
+  nstate = size(Q, 2)
+  nviscstate = size(Qvisc, 2)
+  nauxstate = size(auxstate, 2)
+
+  nRstate = size(R, 2)
+
+  Dmat = grid.D
+  vgeo = grid.vgeo
+
+  device = typeof(auxstate.Q) <: Array ? CPU() : CUDA()
+
+  nelem = length(topology.elems)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+  Np = Nq * Nq * Nqk
+
+  nrealelem = length(topology.realelems)
+
+  @launch(device, threads=(Np,), blocks=nrealelem,
+          knl_dof_iteration!(Val(dim), Val(N), Val(nRstate), Val(nstate),
+                             Val(nviscstate), Val(nauxstate), dof_fun!, R.Q,
+                             Q.Q, Qvisc.Q, auxstate.Q, topology.realelems))
 end
 
 end
