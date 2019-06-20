@@ -691,7 +691,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
     # Set up the information callback
     starttime = Ref(now())
-    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(60, mpicomm) do (s=false)
+    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(3600*1, mpicomm) do (s=false)
         if s
             starttime[] = now()
         else
@@ -716,7 +716,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
     step = [0]
     mkpath("vtk-dycoms-4gpu")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
         DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                    Q) do R, Q, QV, aux
                                                        @inbounds let

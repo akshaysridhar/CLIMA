@@ -78,19 +78,18 @@ const numdims = 3
 const Δx    =  100
 const Δy    =  100
 const Δz    =  90
+
 const Npoly = 4
 
 # Physical domain extents 
 (xmin, xmax) = (0, 25600)
-(ymin, ymax) = (0,  6400) 
+(ymin, ymax) = (0,  6400) #VERTICAL
 (zmin, zmax) = (0,  1000)
-
 
 #Get Nex, Ney from resolution
 Lx = xmax - xmin
 Ly = ymax - ymin
 Lz = zmax - ymin
-
 ratiox = (Lx/Δx - 1)/Npoly
 ratioy = (Ly/Δy - 1)/Npoly
 ratioz = (Lz/Δz - 1)/Npoly
@@ -98,15 +97,10 @@ const Nex = ceil(Int64, ratiox)
 const Ney = ceil(Int64, ratioy)
 const Nez = ceil(Int64, ratioz)
     
-
-# Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-# Anisotropic grid computation
-const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
 @info @sprintf """ ----------------------------------------------------"""
 @info @sprintf """   ______ _      _____ __  ________                  """     
-@info @sprintf """  |  ____| |    |_   _|  ...  |  __  |               """  
-@info @sprintf """  | |    | |      | | |   .   | |  | |               """ 
-@info @sprintf """  | |    | |      | | | |   | | |__| |               """
+@info @sprintf """  |  ____| |    |_   _|  . .  |  __  |               """  
+@info @sprintf """  | |    | |      | | | | . | | |__| |               """
 @info @sprintf """  | |____| |____ _| |_| |   | | |  | |               """
 @info @sprintf """  | _____|______|_____|_|   |_|_|  |_|               """
 @info @sprintf """                                                     """
@@ -190,11 +184,8 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
         vθy = VF[_θy]
         
-        #Richardson contribution:
-        
         SijSij = VF[_SijSij]
         f_R = 1.0 # buoyancy_correction_smag(SijSij, θ, dθdy)
-
         # Multiply stress tensor by viscosity coefficient:
         τ11, τ22, τ33 = VF[_τ11] , VF[_τ22], VF[_τ33]
         τ12 = τ21 = VF[_τ12] 
@@ -260,24 +251,12 @@ end
         dTdx, dTdy, dTdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
         dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
         
-        # virtual potential temperature gradient: for richardson calculation
-        # strains
-        # --------------------------------------------
-        # SMAGORINSKY COEFFICIENT COMPONENTS
-        # --------------------------------------------
-        
-        (S11,S22,S33,S12,S13,S23, SijSij) = compute_strainrate_tensor(dudx, dudy, dudz, 
-                                                                       dvdx, dvdy, dvdz, 
-                                                                       dwdx, dwdy, dwdz)
+        # AMD #================================================================= 
+        (S11,S22,S33,S12,S13,S23, SijSij) = compute_strainrate_tensor(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz)
+        ν_e = anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δx, Δy, Δz)
+        D_e = anisotropic_minimum_dissipation_diffusivity(dqdx, dqdy, dqdz, dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz, Δx, Δy, Δz)
+        #AMD #================================================================= 
 
-        # AMD #================================================================= 
-        (ν_e, D_e, SijSij) = static_smag(dudx, dudy, dudz, 
-                                          dvdx, dvdy, dvdz, 
-                                          dwdx, dwdy, dwdz,
-                                          Δsqr)
-        # AMD #================================================================= 
-        
-        #--------------------------------------------
         # deviatoric stresses
         # Fix up index magic numbers
         VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3) * ν_e
@@ -287,6 +266,7 @@ end
         VF[_τ13] = 2 * S13 * ν_e
         VF[_τ23] = 2 * S23 * ν_e 
         
+        # TODO: Viscous stresse come from SubgridScaleTurbulence module
         #VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
         VF[_Tx], VF[_Ty], VF[_Tz] = ν_e * dTdx,ν_e * dTdy,ν_e * dTdz
         VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
@@ -354,6 +334,7 @@ end
     # Typically these sources are imported from modules
     @inbounds begin
         source_geopot!(S, Q, aux, t)
+        #source_sponge!(S, Q, aux, t)
     end
 end
 
@@ -402,7 +383,6 @@ end
 end
 
 
-# ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 
 
 # initial condition
@@ -519,8 +499,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
     step = [0]
-    mkpath("vtk-DC-smago")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(2500) do (init=false)
+    mkpath("vtk-DC-amd")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(500) do (init=false)
         DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                    Q) do R, Q, QV, aux
                                                        @inbounds let
@@ -528,7 +508,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                                        end
                                                    end
 
-        outprefix = @sprintf("vtk-DC-smago/cns_%dD_mpirank%04d_step%04d", dim,
+        outprefix = @sprintf("vtk-DC-amd/cns_%dD_mpirank%04d_step%04d", dim,
                              MPI.Comm_rank(mpicomm), step[1])
         @debug "doing VTK output" outprefix
         writevtk(outprefix, Q, spacedisc, statenames,
@@ -591,7 +571,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney,Nez)
-    dt = 0.01
+    dt = 0.1
     timeend = 1200
     polynomialorder = Npoly
     DFloat = Float64

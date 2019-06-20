@@ -126,7 +126,7 @@ const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
 # around its behaviour. 
 # The preflux function interacts with the following  
 # Modules: NumericalFluxes.jl 
-# functions: wavespeed, cns_flux!, bcstate!
+# functions: wavespeed, navier_stokes_flux!, bcstate!
 # -------------------------------------------------------------------------
 @inline function preflux(Q,VF, aux, _...)
     gravity::eltype(Q) = grav
@@ -170,10 +170,10 @@ end
 #md # $\boldsymbol{F}$ contains both the viscous and inviscid flux components
 #md # and $\boldsymbol{S}$ contains source terms.
 #md # Note that the preflux calculation is splatted at the end of the function call
-#md # to cns_flux!
+#md # to navier_stokes_flux!
 # -------------------------------------------------------------------------
-cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
-@inline function cns_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+navier_stokes_flux!(F, Q, VF, aux, t) = navier_stokes_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
+@inline function navier_stokes!(F, Q, VF, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
     gravity::eltype(Q) = grav
     @inbounds begin
         ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
@@ -221,6 +221,20 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     end
 end
 
+euler_flux!(F, Q, VF, aux, t) = euler_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
+@inline function euler_flux!(F, Q, VF, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
+    gravity::eltype(Q) = grav
+    @inbounds begin
+        ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+        # Inviscid contributions
+        F[1, _ρ], F[2, _ρ], F[3, _ρ] = U          , V          , W
+        F[1, _U], F[2, _U], F[3, _U] = u * U  + P , v * U      , w * U
+        F[1, _V], F[2, _V], F[3, _V] = u * V      , v * V + P  , w * V
+        F[1, _W], F[2, _W], F[3, _W] = u * W      , v * W      , w * W + P
+        F[1, _E], F[2, _E], F[3, _E] = u * (E + P), v * (E + P), w * (E + P)
+        F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
+    end
+end
 # -------------------------------------------------------------------------
 #md # Here we define a function to extract the velocity components from the 
 #md # prognostic equations (i.e. the momentum and density variables). This 
@@ -461,13 +475,19 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                             DeviceArray = ArrayType,
                                             polynomialorder = N)
     
-    numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed, preflux)
-    numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed, preflux)
+    numflux!(x...) = NumericalFluxes.rusanov!(x..., navier_stokes_flux!, wavespeed, preflux)
+    numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., navier_stokes_flux!, bcstate!, wavespeed, preflux)
 
+    inviscidflux!(x...) = NumericalFluxes.rusanov!(x..., euler_flux!, wavespeed, preflux)
+    inviscidbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., euler_flux!, bcstate!, wavespeed, preflux)
+    
     # spacedisc = data needed for evaluating the right-hand side function
     spacedisc = DGBalanceLaw(grid = grid,
                              length_state_vector = _nstate,
-                             flux! = cns_flux!,
+                             inviscid_flux! = euler_flux!, 
+                             inviscid_numerical_flux! = inviscidflux!,
+                             inviscid_numerical_boundary_flux! = inviscidbcflux!, 
+                             flux! = navier_stokes_flux!,
                              numerical_flux! = numflux!,
                              numerical_boundary_flux! = numbcflux!, 
                              number_gradient_states = _ngradstates,

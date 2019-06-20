@@ -345,6 +345,44 @@ function knl_L2dist(::Val{Np}, A, B, weights, elems) where {Np}
   dist
 end
 
+
+"""
+Compute the global maximum for the desired (user defined) state 
+"""
+function global_max(A::MPIStateArray, states=1:size(A, 2))
+  host_array = Array ∈ typeof(A).parameters
+  h_A = host_array ? A : Array(A)
+  locmax = maximum(view(h_A, :, states, A.realelems))
+  MPI.Allreduce([locmax], MPI.MAX, A.mpicomm)[1]
+end
+
+"""
+Compute the global mean for the desired (user defined) state 
+"""
+function global_mean(A::MPIStateArray, states=1:size(A,2))
+  host_array = Array ∈ typeof(A).parameters
+  h_A = host_array ? A : Array(A) 
+  (Np, nstate, nelem) = size(A) 
+  numpts = (nelem * Np) + 1
+  localsum = sum(view(h_A, :, states, A.realelems)) 
+  MPI.Allreduce([localsum], MPI.SUM, A.mpicomm)[1] / numpts 
+end
+
+
+"""
+Compute the infinity norm (elementwise) of the residual 
+The residual Res for a system of equations given by 
+dQdt = - rhs is given by 
+Res = dQdt + rhs    
+"""
+function knl_elem_infnorm(::Val{Np}, dQ, Q, elems) where {Np}
+  DFloat = eltype(Q)
+  (_, nstate, nelem) = size(Q)
+  element_infnorm = zeros(nelem) 
+  tol = eps
+  #FIXME: incomplete function 
+end
+
 """
     weightedsum(A[, states])
 
