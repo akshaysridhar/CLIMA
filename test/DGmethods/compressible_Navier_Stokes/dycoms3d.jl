@@ -60,26 +60,13 @@ const Prandtl         = 71 // 100
 const Prandtl_t       = 1 // 3
 const cp_over_prandtl = cp_d / Prandtl_t
 
-# Problem description 
-# --------------------
-# 2D thermal perturbation (cold bubble) in a neutrally stratified atmosphere
-# No wall-shear, lateral periodic boundaries with no-flux walls at the domain
-# top and bottom. 
-# Inviscid, Constant viscosity, StandardSmagorinsky, MinimumDissipation
-# filters are tested against this benchmark problem
-# TODO: link to module SubGridScaleTurbulence
-
-#
 # User Input
-#
 const numdims = 3
 
-#
 # Define grid size 
-#
-Δx    = 35
-Δy    = 35
-Δz    = 10
+Δx    = 10
+Δy    = 10
+Δz    = 5
 #
 # OR:
 #
@@ -89,8 +76,8 @@ const (Nex, Ney, Nez) = (10, 10, 1)
 const Npoly = 4
 
 # Physical domain extents 
-const (xmin, xmax) = (0, 3820)
-const (ymin, ymax) = (0, 3820) #VERTICAL
+const (xmin, xmax) = (0, 3820/4)
+const (ymin, ymax) = (0, 3820/4) #VERTICAL
 const (zmin, zmax) = (0, 1500)
 #(xmin, xmax) = (0, 3820)
 #(ymin, ymax) = (0, 1200) #VERTICAL
@@ -123,7 +110,7 @@ else
 end
 
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-const C_smag = 0.23
+const C_smag = 0.14
 # Equivalent grid-scale
 Δ = (Δx * Δy * Δz)^(1/3)
 const Δsqr = Δ * Δ
@@ -239,9 +226,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
         vθy = VF[_θy]
       
-        # Radiation contribution 
-        F_rad = ρ * radiation(aux)  
-        aux[_a_rad] = F_rad
+        # Radiation contribution
+        (F_rad, _) = radiation(aux)
+        F_rad = ρ * F_rad 
        
         SijSij = VF[_SijSij]
         f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
@@ -301,6 +288,7 @@ end
   zero_to_z = aux[_a_02z]
   z_to_inf = aux[_a_02inf] - zero_to_z
   z = aux[_a_z]
+  LWP = z_to_inf + zero_to_z
   z_i = 840  # Start with constant inversion height of 840 meters then build in check based on q_tot
   (z - z_i) >=0 ? Δz_i = (z - z_i) : Δz_i = 0 
   # Constants 
@@ -313,7 +301,7 @@ end
   term2 = F_1 * exp(-zero_to_z)
   term3 = ρ_i * cp_d * D_subsidence * α_z * (0.25 * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
   F_rad = term1 + term2 + term3  
-  return F_rad
+  return (F_rad, LWP)
 end
 
 # -------------------------------------------------------------------------
@@ -343,10 +331,6 @@ end
     S12 = (dudy + dvdx) / 2
     S13 = (dudz + dwdx) / 2
     S23 = (dvdz + dwdy) / 2
-    # --------------------------------------------
-    # SMAGORINSKY COEFFICIENT COMPONENTS
-    # --------------------------------------------
-    # FIXME: Grab functions from module SubgridScaleTurbulence 
     SijSij = (S11^2 + S22^2 + S33^2
               + 2.0 * S12^2
               + 2.0 * S13^2 
@@ -355,7 +339,6 @@ end
     
     #--------------------------------------------
     # deviatoric stresses
-    # Fix up index magic numbers
     VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
     VF[_τ22] = 2 * (S22 - (S11 + S22 + S33) / 3)
     VF[_τ33] = 2 * (S33 - (S11 + S22 + S33) / 3)
@@ -363,7 +346,6 @@ end
     VF[_τ13] = 2 * S13
     VF[_τ23] = 2 * S23
     
-    # TODO: Viscous stresse come from SubgridScaleTurbulence module
     VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
     VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
     VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
@@ -380,7 +362,7 @@ end
 #md # where a local Richardson number via potential temperature gradient is required)
 # -------------------------------------------------------------------------
 const _nauxstate = 7
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_02inf, _a_rad = 1:_nauxstate
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_02inf, _a_rad  = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z)
     @inbounds begin
         aux[_a_x] = x
@@ -567,7 +549,7 @@ end
     # Establish the current thermodynamic state using the prognostic variables
     TS = PhaseEquil(e_int, q_tot, ρ)
     q_liq = PhasePartition(TS).liq
-    val[1] = ρ * κ * q_liq 
+    val[1] = ρ * κ * q_liq / (1-q_tot) 
   end
 end
 
@@ -628,8 +610,10 @@ function dycoms!(dim, Q, t, x, y, z, _...)
     dataq          = dataq * 1.0e-3
     
 
-    θ_liq = datat
-    q_tot = dataq
+
+    randnum   = rand(1)[1] / 100
+    θ_liq = datat + randnum * datat
+    q_tot = dataq + randnum * dataq
     P     = datap    
     T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, PhasePartition(q_tot))
     ρ     = air_density(T, P)
@@ -665,7 +649,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     
     # User defined periodicity in the topl assignment
     # brickrange defines the domain extents
-    topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,false,true))
+    topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,true,false))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             FloatType = DFloat,
@@ -707,7 +691,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
     # Set up the information callback
     starttime = Ref(now())
-    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
+    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(60, mpicomm) do (s=false)
         if s
             starttime[] = now()
         else
@@ -725,23 +709,23 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
     end
 
-    npoststates = 11
-    _int1, _int2, _betaout, _P, _u, _v, _w, _ρinv, _q_liq, _T, _θ = 1:npoststates
-    postnames = ("INT1", "INT2", "BETA", "P", "u", "v", "w", "rhoinv", "_q_liq", "T", "THETA")
+    npoststates = 12
+    _int1, _int2, _frad, _LWPout, _P, _u, _v, _w, _ρinv, _q_liq, _T, _θ = 1:npoststates
+    postnames = ("INT1", "INT2", "F_rad", "LWP", "P", "u", "v", "w", "rhoinv", "_q_liq", "T", "THETA")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
     step = [0]
-    mkpath("vtk-dycoms")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(200) do (init=false)
+    mkpath("vtk-dycoms-4gpu")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
         DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                    Q) do R, Q, QV, aux
                                                        @inbounds let
-                                                          F_rad_out = radiation(aux)
-                                                           (R[_int1], R[_int2], R[_betaout], R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = (aux[_a_02z], aux[_a_02inf], F_rad_out, preflux(Q, QV, aux)...)
+                                                         F_rad_out, LWP_out = radiation(aux)
+                                                          (R[_int1], R[_int2], R[_frad], R[_LWPout], R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = (aux[_a_02z], aux[_a_02inf], F_rad_out, LWP_out, preflux(Q, QV, aux)...)
                                                        end
                                                    end
 
-        outprefix = @sprintf("vtk-dycoms/cns_%dD_mpirank%04d_step%04d", dim,
+        outprefix = @sprintf("vtk-dycoms-4gpu/cns_%dD_mpirank%04d_step%04d", dim,
                              MPI.Comm_rank(mpicomm), step[1])
         @debug "doing VTK output" outprefix
         writevtk(outprefix, Q, spacedisc, statenames,
@@ -806,7 +790,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney,Nez)
-    dt = 0.0025
+    dt = 0.005
     timeend = 14400
     polynomialorder = Npoly
     DFloat = Float64
