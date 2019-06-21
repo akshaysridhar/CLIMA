@@ -15,7 +15,7 @@ export anisotropic_minimum_dissipation_viscosity
 export anisotropic_minimum_dissipation_diffusivity
 export anisotropic_coefficient_sgs
 
-function anisotropic_coefficient_sgs(Δx, Δy, Δz)
+function anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
     Δ = (Δx * Δy *  Δz)^(1/3)
     Δ_sorted = sort([Δx, Δy, Δz])  
     Δ_s1 = Δ_sorted[1]
@@ -32,7 +32,7 @@ end
 # C_ss == static smagorinsky coefficient
 # C_ds == dynamic smagorinsky coefficient
 const μ_sgs = 100.0
-const C_ss = 0.23 # Typical value of the Smagorinsky-Lilly coeff 0.18 for isotropic turb and 0.23 for atmos flows
+const C_ss = 0.14 # Typical value of the Smagorinsky-Lilly coeff 0.18 for isotropic turb and 0.23 for atmos flows
 const Prandtl_t = 1 // 3
 const γ = cp_d / cv_d 
 const Pr = 0.70

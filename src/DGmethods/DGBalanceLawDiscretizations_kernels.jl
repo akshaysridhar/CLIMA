@@ -2,6 +2,7 @@ using Requires
 @init @require CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17" begin
   using .CUDAnative
 end
+using Statistics
 
 # {{{ FIXME: remove this after we've figure out how to pass through to kernel
 const _ξx, _ηx, _ζx = Grids._ξx, Grids._ηx, Grids._ζx
@@ -772,3 +773,120 @@ function knl_reverse_indefinite_stack_integral!(::Val{dim}, ::Val{N},
   end
   nothing
 end
+
+
+
+"""
+    knl_dynsgs!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{nviscstate},
+               ::Val{nauxstate}, inviscid_flux!, source!, rhs, Q, auxstate,
+               vgeo, t, D, elems) where {dim, N, nstate, nviscstate,
+
+Computational kernel: computes the elementwise residual infinity norm 
+and the global (state - mean(state)) for the dyn-SGS model. Output is the model 
+viscosity as defined by Marras. An approximation is used with the dQdt term omitted.
+μmax = |dQ|_Ω / |Q - overbar{Q}|_Ω
+"""
+function knl_dynsgs(::Val{dim}, ::Val{N},
+                    ::Val{nstate}, ::Val{nviscstate},
+                    ::Val{nauxstate},
+                    inviscid_flux!, source!,
+                    rhs, Q, auxstate, vgeo, t,
+                    D, elems) where {dim, N, nstate, nviscstate,
+                                     nauxstate}
+  
+  #FIXME kernels need muted quantities for GPU functionality. All values except the returned viscosity
+  # parameter are local to this kernel 
+  
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+
+  Nqk = dim == 2 ? 1 : Nq
+
+  s_Finviscid = @shmem DFloat (3, Nq, Nq, Nqk, nstate)
+  s_Dinviscid = @shmem DFloat (Nq, Nq)
+  l_res = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
+  l_diff = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
+  l_dynvis = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
+  
+  source! !== nothing && (l_S = MArray{Tuple{nstate}, DFloat}(undef))
+  l_Qinviscid = MArray{Tuple{nstate}, DFloat}(undef)
+  l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_Finviscid = MArray{Tuple{3, nstate}, DFloat}(undef)
+
+  @inbounds @loop for k in (1; threadIdx().z)
+    @loop for j in (1:Nq; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        s_Dinviscid[i, j] = D[i, j]
+      end
+    end
+  end
+
+  @inbounds @loop for e in (elems; blockIdx().x)
+    @loop for k in (1:Nqk; threadIdx().z)
+      @loop for j in (1:Nq; threadIdx().y)
+        @loop for i in (1:Nq; threadIdx().x)
+          ijk = i + Nq * ((j-1) + Nq * (k-1))
+          MJ = vgeo[ijk, _M, e]
+          ξx, ξy, ξz = vgeo[ijk,_ξx,e], vgeo[ijk,_ξy,e], vgeo[ijk,_ξz,e]
+          ηx, ηy, ηz = vgeo[ijk,_ηx,e], vgeo[ijk,_ηy,e], vgeo[ijk,_ηz,e]
+          ζx, ζy, ζz = vgeo[ijk,_ζx,e], vgeo[ijk,_ζy,e], vgeo[ijk,_ζz,e]
+          @unroll for s = 1:nstate
+            l_res[s, i, j, k] = rhs[ijk, s, e]
+          end
+          @unroll for s = 1:nstate
+            l_Qinviscid[s] = Q[ijk, s, e]
+          end
+          @unroll for s = 1:nauxstate
+            l_aux[s] = auxstate[ijk, s, e]
+          end
+          inviscid_flux!(l_Finviscid, l_Qinviscid, l_aux, t)
+          @unroll for s = 1:nstate
+            s_Finviscid[1,i,j,k,s] = MJ * (ξx*l_Finviscid[1,s] + ξy*l_Finviscid[2,s] + ξz*l_Finviscid[3,s])
+            s_Finviscid[2,i,j,k,s] = MJ * (ηx*l_Finviscid[1,s] + ηy*l_Finviscid[2,s] + ηz*l_Finviscid[3,s])
+            s_Finviscid[3,i,j,k,s] = MJ * (ζx*l_Finviscid[1,s] + ζy*l_Finviscid[2,s] + ζz*l_Finviscid[3,s])
+          end
+          if source! !== nothing
+            source!(l_S, l_Qinviscid, l_aux, t)
+            @unroll for s = 1:nstate
+              l_res[s, i, j, k] += l_S[s]
+            end
+          end
+        end
+      end
+    end
+
+    @synchronize
+    @unroll for s = 5
+      meanQ = mean(Q[:,s,e])
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            ijk = i + Nq * ((j-1) + Nq * (k-1))
+            MJI = vgeo[ijk, _MI, e]
+            for n = 1:Nq
+              Dni = s_Dinviscid[n, i]
+              Dnj = s_Dinviscid[n, j]
+              Nqk > 1 && (Dnk = s_Dinviscid[n, k])
+              # ξ-grid lines
+              l_res[s, i, j, k] += MJI * Dni * s_Finviscid[1, n, j, k, s]
+              # η-grid lines
+              l_res[s, i, j, k] += MJI * Dnj * s_Finviscid[2, i, n, k, s]
+              # ζ-grid lines
+              Nqk > 1 && (l_res[s, i, j, k] += MJI * Dnk * s_Finviscid[3, i, j, n, s])
+              # compute residuals and difference from mean state
+              l_res[s, i, j, k] = abs(l_res[s, i, j, k])
+              diff = abs(l_Qinviscid[s] - meanQ)
+              l_diff[s, i, j, k] = diff 
+              l_dynvis[5, i, j, k] = l_res[5, i, j, k] / l_diff[5, i, j, k] 
+            end
+          end
+        end
+      end
+      #@show((s,maximum(l_res[5,:,:,:]),maximum(l_diff[5,:,:,:,])))
+    end
+  end
+  @synchronize
+  return maximum(l_dynvis[5,:,:,:])
+end
+

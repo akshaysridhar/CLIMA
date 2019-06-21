@@ -14,6 +14,7 @@ using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
 using CLIMA.Vtk
+using CLIMA.SubgridScaleTurbulence
 
 if haspkg("CuArrays")
     using CUDAdrv

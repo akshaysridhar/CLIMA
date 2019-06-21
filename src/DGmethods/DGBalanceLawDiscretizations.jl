@@ -96,6 +96,15 @@ struct DGBalanceLaw <: AbstractDGMethod
   "number of state"
   nstate::Int
 
+  "inviscid flux function"
+  inviscid_flux!::Union{Nothing,Function}
+
+  "numerical flux function"
+  inviscid_numerical_flux!::Union{Nothing, Function} 
+
+  "numerical boundary flux function"
+  inviscid_numerical_boundary_flux!::Union{Nothing, Function}
+  
   "physical flux function"
   flux!::Function
 
@@ -338,7 +347,11 @@ used to evaluate the ODE function.
 
 """
 function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
-                      length_state_vector, flux!,
+                      length_state_vector, 
+                      inviscid_flux! = nothing,
+                      inviscid_numerical_flux! = nothing,
+                      inviscid_numerical_boundary_flux! = nothing,
+                      flux!,
                       numerical_flux!,
                       numerical_boundary_flux! = nothing,
                       states_for_gradient_transform=(),
@@ -419,8 +432,13 @@ function DGBalanceLaw(;grid::DiscontinuousSpectralElementGrid,
     MPIStateArrays.finish_ghost_exchange!(auxstate)
   end
 
-  DGBalanceLaw(grid, length_state_vector, flux!,
-               numerical_flux!, numerical_boundary_flux!,
+  DGBalanceLaw(grid, length_state_vector, 
+               inviscid_flux!,
+               inviscid_numerical_flux!, 
+               inviscid_numerical_boundary_flux!,
+               flux!,
+               numerical_flux!, 
+               numerical_boundary_flux!,
                Qvisc, number_gradient_states, number_viscous_states,
                states_for_gradient_transform, gradient_transform!,
                viscous_transform!, viscous_penalty!,
@@ -597,12 +615,20 @@ function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
   MPIStateArrays.start_ghost_exchange!(Q)
 
   if nviscstate > 0
+    visc = 1.0 
+    if t > 0 
+      visc = @launch(device, threads=(Nq, Nq, Nqk), blocks=nrealelem,
+              knl_dynsgs(Val(dim), Val(N), Val(nstate), Val(nviscstate),
+                         Val(nauxstate), disc.inviscid_flux!, disc.source!, dQ.Q, Q.Q,
+                         auxstate.Q, vgeo, t, Dmat, topology.realelems))
+      @show(visc)
+    end
 
     @launch(device, threads=(Nq, Nq, Nqk), blocks=nrealelem,
             volumeviscterms!(Val(dim), Val(N), Val(nstate), Val(states_grad),
                              Val(ngradstate), Val(nviscstate), Val(nauxstate),
                              disc.viscous_transform!, disc.gradient_transform!,
-                             Q.Q, Qvisc.Q, auxstate.Q, vgeo, t, Dmat,
+                             Q.Q, visc * Qvisc.Q, auxstate.Q, vgeo, t, Dmat,
                              topology.realelems))
 
     MPIStateArrays.finish_ghost_recv!(Q)
@@ -622,11 +648,10 @@ function SpaceMethods.odefun!(disc::DGBalanceLaw, dQ::MPIStateArray,
   ###################
   # RHS Computation #
   ###################
-
   @launch(device, threads=(Nq, Nq, Nqk), blocks=nrealelem,
           volumerhs!(Val(dim), Val(N), Val(nstate), Val(nviscstate),
                      Val(nauxstate), disc.flux!, disc.source!, dQ.Q, Q.Q,
-                     Qvisc.Q, auxstate.Q, vgeo, t, Dmat, topology.realelems))
+                     visc * Qvisc.Q, auxstate.Q, vgeo, t, Dmat, topology.realelems))
 
   MPIStateArrays.finish_ghost_recv!(nviscstate > 0 ? Qvisc : Q)
 
