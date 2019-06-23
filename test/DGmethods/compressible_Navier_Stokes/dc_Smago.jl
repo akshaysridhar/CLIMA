@@ -53,9 +53,7 @@ if !@isdefined integration_testing
     using Random
 end
 
-# Problem constants (TODO: parameters module (?))
 const Prandtl         = 71 // 100
-const Prandtl_t         = 1 // 3
 const cp_over_prandtl = cp_d / Prandtl
 
 # Problem description 
@@ -65,7 +63,6 @@ const cp_over_prandtl = cp_d / Prandtl
 # top and bottom. 
 # Inviscid, Constant viscosity, StandardSmagorinsky, MinimumDissipation
 # filters are tested against this benchmark problem
-# TODO: link to module SubGridScaleTurbulence
 
 #
 # User Input
@@ -75,16 +72,10 @@ const numdims = 3
 #
 # Define grid size 
 #
-Δx    =  30
-Δy    =  90
-Δz    =  90
-#
-# OR:
-#
-# Set Δx < 0 and define  Nex, Ney, Nez:
-#
-(Nex, Ney, Nez) = (64, 16, 1)
-Npoly = 4
+Δx    =  200
+Δy    =  200
+Δz    =  100
+const Npoly = 4
 
 # Physical domain extents 
 (xmin, xmax) = (0, 25600)
@@ -117,7 +108,6 @@ else
     Δz = Lz / ((Nez * Npoly) + 1)
 end
 
-# Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
 # Anisotropic grid computation
 const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
 @info @sprintf """ ----------------------------------------------------"""
@@ -134,6 +124,21 @@ const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
 @info @sprintf """     (Δx, Δy, Δz)    = (%.2e, %.2e, %.2e)            """ Δx Δy Δz
 @info @sprintf """     (Nex, Ney, Nez) = (%d, %d, %d)                  """ Nex Ney Nez
 @info @sprintf """ ----------------------------------------------------"""
+
+# -------------------------------------------------------------------------
+#md ### Auxiliary Function (Not required)
+#md # In this example the auxiliary function is used to store the spatial
+#md # coordinates. 
+# -------------------------------------------------------------------------
+const _nauxstate = 3
+const _a_x, _a_y, _a_z, = 1:_nauxstate
+@inline function auxiliary_state_initialization!(aux, x, y, z)
+    @inbounds begin
+        aux[_a_x] = x
+        aux[_a_y] = y
+        aux[_a_z] = z
+    end
+end
 
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
@@ -208,77 +213,38 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
         vθy = VF[_θy]
         
-        #Richardson contribution:
-        
         SijSij = VF[_SijSij]
-        f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
 
         #Dynamic eddy viscosity from Smagorinsky:
+        (ν_e, D_e) = static_smagorinsky(SijSij, Δsqr)
+        
+        #buoyancy_correction_smag!(ν_e, D_e, SijSij, θ, vθy)
+        
+        #=
         C_ss = 0.14
         ν_e::eltype(VF) = sqrt(2.0 * SijSij) * C_ss^2 * Δsqr
-        D_e = ν_e / Prandtl_t
-        
+        D_e = ν_e * 3
+        =#
+
         # Multiply stress tensor by viscosity coefficient:
-        τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22]* ν_e, VF[_τ33] * ν_e
+        τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22] * ν_e, VF[_τ33] * ν_e
         τ12 = τ21 = VF[_τ12] * ν_e 
         τ13 = τ31 = VF[_τ13] * ν_e               
         τ23 = τ32 = VF[_τ23] * ν_e
         
         # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
-        F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
-        F[1, _V] -= τ21 * f_R ; F[2, _V] -= τ22 * f_R ; F[3, _V] -= τ23 * f_R
-        F[1, _W] -= τ31 * f_R ; F[2, _W] -= τ32 * f_R ; F[3, _W] -= τ33 * f_R
+        F[1, _U] -= τ11 ; F[2, _U] -= τ12 ; F[3, _U] -= τ13 
+        F[1, _V] -= τ21 ; F[2, _V] -= τ22 ; F[3, _V] -= τ23
+        F[1, _W] -= τ31 ; F[2, _W] -= τ32 ; F[3, _W] -= τ33 
         
         # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
         F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * ν_e
         F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * ν_e
         F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * ν_e
         
-        # Viscous contributions to mass flux terms
-        #F[1, _ρ] -=  vqx
-        #F[2, _ρ] -=  vqy
-        #F[3, _ρ] -=  vqz
-        #F[1, _QT] -=  vqx
-        #F[2, _QT] -=  vqy
-        #F[3, _QT] -=  vqz
     end
 end
 
-# -------------------------------------------------------------------------
-#md # Here we define a function to extract the velocity components from the 
-#md # prognostic equations (i.e. the momentum and density variables). This 
-#md # function is not required in general, but provides useful functionality 
-#md # in some cases. 
-# -------------------------------------------------------------------------
-# Compute the velocity from the state
-gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,~,aux)...)
-@inline function gradient_vars!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
-    @inbounds begin
-        y = aux[_a_y]
-        # ordering should match states_for_gradient_transform
-        ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-        E, QT = Q[_E], Q[_QT]
-        ρinv = 1 / ρ
-        vel[1], vel[2], vel[3] = u, v, w
-        vel[4], vel[5], vel[6] = E, QT, T
-        vel[7] = θ
-    end
-end
-
-# -------------------------------------------------------------------------
-#md ### Auxiliary Function (Not required)
-#md # In this example the auxiliary function is used to store the spatial
-#md # coordinates. 
-# -------------------------------------------------------------------------
-const _nauxstate = 3
-const _a_x, _a_y, _a_z, = 1:_nauxstate
-@inline function auxiliary_state_initialization!(aux, x, y, z)
-    @inbounds begin
-        aux[_a_x] = x
-        aux[_a_y] = y
-        aux[_a_z] = z
-    end
-end
 # -------------------------------------------------------------------------
 #md ### Viscous fluxes. 
 #md # The viscous flux function compute_stresses computes the components of 
@@ -296,28 +262,12 @@ end
         dqdx, dqdy, dqdz = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
         dTdx, dTdy, dTdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
         dθdx, dθdy, dθdz = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
-        # virtual potential temperature gradient: for richardson calculation
-        # strains
-        # --------------------------------------------
-        # SMAGORINSKY COEFFICIENT COMPONENTS
-        # --------------------------------------------
-        S11 = dudx
-        S22 = dvdy
-        S33 = dwdz
-        S12 = (dudy + dvdx) / 2
-        S13 = (dudz + dwdx) / 2
-        S23 = (dvdz + dwdy) / 2
-        # --------------------------------------------
-        # SMAGORINSKY COEFFICIENT COMPONENTS
-        # --------------------------------------------
-        # FIXME: Grab functions from module SubgridScaleTurbulence 
-        SijSij = (S11^2 + S22^2 + S33^2
-                  + 2.0 * S12^2
-                  + 2.0 * S13^2 
-                  + 2.0 * S23^2) 
-        modSij = sqrt(2.0 * SijSij)
         
+        # --------------------------------------------
+        # SMAGORINSKY COEFFICIENT COMPONENTS
+        (S11, S22, S33, S12, S13, S23, SijSij) = compute_strainrate_tensor(grad_vel)
         #--------------------------------------------
+        
         # deviatoric stresses
         # Fix up index magic numbers
         VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
@@ -327,34 +277,30 @@ end
         VF[_τ13] = 2 * S13
         VF[_τ23] = 2 * S23
         
-        # TODO: Viscous stresse come from SubgridScaleTurbulence module
-        #VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
+        VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
         VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
         VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
         VF[_SijSij] = SijSij
     end
 end
 # -------------------------------------------------------------------------
+#md # Here we define a function to extract the velocity components from the 
+#md # prognostic equations (i.e. the momentum and density variables). This 
+#md # function is not required in general, but provides useful functionality 
+#md # in some cases. 
 # -------------------------------------------------------------------------
-#md ### Auxiliary Function (Not required)
-#md # In this example the auxiliary function is used to store the spatial
-#md # coordinates. This may also be used to store variables for which gradients
-#md # are needed, but are not available through teh prognostic variable 
-#md # calculations. (An example of this will follow - in the Smagorinsky model, 
-#md # where a local Richardson number via potential temperature gradient is required)
-# -------------------------------------------------------------------------
-const _nauxstate = 3
-const _a_x, _a_y, _a_z, = 1:_nauxstate
-@inline function auxiliary_state_initialization!(aux, x, y, z)
+# Compute the velocity from the state
+gradient_vars!(vel, Q, aux, t, _...) = gradient_vars!(vel, Q, aux, t, preflux(Q,~,aux)...)
+@inline function gradient_vars!(vel, Q, aux, t, P, u, v, w, ρinv, q_liq, T, θ)
     @inbounds begin
-        aux[_a_x] = x
-        aux[_a_y] = y
-        aux[_a_z] = z
+        y = aux[_a_y]
+        # ordering should match states_for_gradient_transform
+        ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+        vel[1], vel[2], vel[3] = u, v, w
+        vel[4], vel[5], vel[6] = E, QT, T
+        vel[7] = θ
     end
 end
-
-# -------------------------------------------------------------------------
-# generic bc for 2d , 3d
 
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, wM, ρinvM, q_liqM, TM, θM)
     @inbounds begin
@@ -366,8 +312,6 @@ end
         QP[_U] = UM - 2 * nM[1] * UnM
         QP[_V] = VM - 2 * nM[2] * UnM
         QP[_W] = WM - 2 * nM[3] * UnM
-        #QP[_ρ] = ρM
-        #QP[_QT] = QTM
         VFP .= 0 
         nothing
     end
@@ -396,7 +340,6 @@ end
     # Typically these sources are imported from modules
     @inbounds begin
         source_geopot!(S, Q, aux, t)
-        #source_sponge!(S, Q, aux, t)
     end
 end
 
@@ -530,7 +473,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     initialcondition(Q, x...) = density_current!(Val(dim), Q, DFloat(0), x...)
     Q = MPIStateArray(spacedisc, initialcondition)
 
-    lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
+    lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
 
     eng0 = norm(Q)
     @info @sprintf """Starting
