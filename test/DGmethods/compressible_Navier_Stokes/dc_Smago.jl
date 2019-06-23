@@ -14,6 +14,7 @@ using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
 using CLIMA.Vtk
+using CLIMA.SubgridScaleTurbulence
 
 if haspkg("CuArrays")
     using CUDAdrv
@@ -54,7 +55,8 @@ end
 
 # Problem constants (TODO: parameters module (?))
 const Prandtl         = 71 // 100
-const cp_over_prandtl = cp_d / Prandtl_t
+const Prandtl_t         = 1 // 3
+const cp_over_prandtl = cp_d / Prandtl
 
 # Problem description 
 # --------------------
@@ -117,7 +119,7 @@ end
 
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
 # Anisotropic grid computation
-const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz)
+const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
 @info @sprintf """ ----------------------------------------------------"""
 @info @sprintf """   ______ _      _____ __  ________                  """     
 @info @sprintf """  |  ____| |    |_   _|  ...  |  __  |               """  
@@ -212,6 +214,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
 
         #Dynamic eddy viscosity from Smagorinsky:
+        C_ss = 0.14
         ν_e::eltype(VF) = sqrt(2.0 * SijSij) * C_ss^2 * Δsqr
         D_e = ν_e / Prandtl_t
         
