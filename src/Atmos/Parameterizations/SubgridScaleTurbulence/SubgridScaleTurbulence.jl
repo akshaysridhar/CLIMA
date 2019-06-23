@@ -8,15 +8,15 @@ using CLIMA.PlanetParameters: grav, cp_d, cv_d
 # Module exported functions 
 export compute_strainrate_tensor
 export compute_stress_tensor
-export static_smag
-export dynamic_smag
+export static_smagorinsky
+export dynamic_smagorinsky
 export buoyancy_correction_smag!
 export anisotropic_minimum_dissipation_viscosity
 export anisotropic_minimum_dissipation_diffusivity
 export anisotropic_coefficient_sgs
 
 function anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
-    Δ = (Δx * Δy *  Δz)^(1/3)
+    Δ = (Δx * Δy * Δz)^(1/3)
     Δ_sorted = sort([Δx, Δy, Δz])  
     Δ_s1 = Δ_sorted[1]
     Δ_s2 = Δ_sorted[2]
@@ -30,11 +30,10 @@ end
 
 ################################## BEGIN MODULE ####################################################
 # C_ss == static smagorinsky coefficient
-# C_ds == dynamic smagorinsky coefficient
+const γ = cp_d / cv_d 
 const μ_sgs = 100.0
 const C_ss = 0.14 # Typical value of the Smagorinsky-Lilly coeff 0.18 for isotropic turb and 0.23 for atmos flows
 const Prandtl_turb = 1 // 3
-const γ = cp_d / cv_d 
 const Prandtl = 71 // 100
 
 ####################################################################################################
@@ -64,8 +63,8 @@ function compute_strainrate_tensor(grad_vel)
   dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
   dwdx, dwdy, dwdz = grad_vel[1, 3], grad_vel[2, 3], grad_vel[3, 3]
   S11, S12, S13 = dudx, (dudy + dvdx) / 2, (dudz + dwdx) / 2
-  S22, S23      =              dvdy,       (dvdz + dwdy) / 2
-  S33           =                          dwdz
+  S22, S23      = dvdy, (dvdz + dwdy) / 2
+  S33           = dwdz
   SijSij = S11^2 + S22^2 + S33^2 + 2 * (S12^2 + S13^2 + S23^2)  
   return (S11, S22, S33, S12, S13, S23, SijSij)
 end
@@ -90,8 +89,8 @@ are returned. Inputs to the function are the grid descriptors
 of the resolved scale rate of strain tensor
 
 """
-function static_smag(SijSij, Δ2)
-  ν_e::eltype(SijSij) = C_ss * C_ss * Δ2 * sqrt(2 * SijSij)
+function static_smagorinsky(SijSij, Δ2)
+  ν_e::eltype(SijSij) = sqrt(2.0 * SijSij) * C_ss^2 * Δ2
   D_e::eltype(SijSij) = ν_e / Prandtl_turb 
   return (ν_e, D_e)
 end
@@ -109,7 +108,7 @@ function buoyancy_correction_smag!(ν_e, D_e, SijSij, θ, dθdz)
   D_e *= Ri_correction
   return 
 end
-
+#=
 ##################################################################################################33
 """
 Anisotropic minimum dissipation method 
@@ -118,21 +117,14 @@ Akbar et al (2016)
 Poincare inequality used to compute a measure of the subgrid-scale
 eddy viscosity and eddy diffusivity
 """
-function anisotropic_minimum_dissipation_viscosity(dudx, dudy, dudz, 
-                                                   dvdx, dvdy, dvdz, 
-                                                   dwdx, dwdy, dwdz, 
+function anisotropic_minimum_dissipation_viscosity(grad_vel,
                                                    Δx, Δy, Δz) 
   # UNDER CONSTRUCTION 
   Δ = cbrt(Δx * Δy * Δz)
   Δ2 = Δ * Δ
   C_δ = Δ2 / π / π
-  (D11, D12, D13, D21, D22, D23, D31, D32, D33) = compute_velgrad_tensor(dudx, dudy, dudz,
-                                                                         dvdx, dvdy, dvdz, 
-                                                                         dwdx, dwdy, dwdz)
-  (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(dudx, dudy, dudz, 
-                                                                          dvdx, dvdy, dvdz, 
-                                                                          dwdx, dwdy, dwdz)
-
+  (D11, D12, D13, D21, D22, D23, D31, D32, D33) = compute_velgrad_tensor(grad_vel)
+  (S11, S22, S33, S12, S13, S23, modulus_Sij) = compute_strainrate_tensor(grad_vel)
   denominator = D11^2 + D12^2 + D13^2 + D21^2 + D22^2 + D23^2 + D31^2 + D32^2 + D33^2
   # Derivatives need to be scaled by directional grid spacing 
   ϕ11 = D11^2 + D12^2 + D13^2 
@@ -166,5 +158,5 @@ function anisotropic_minimum_dissipation_diffusivity(dqdx, dqdy, dqdz,
 end
 
 ################################################# END MODULE #######################################
-  
+=#
 end

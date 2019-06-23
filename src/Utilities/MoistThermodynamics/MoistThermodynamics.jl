@@ -8,7 +8,6 @@ saturation specific humidities
 module MoistThermodynamics
 
 using DocStringExtensions
-
 using ..RootSolvers
 using ..PlanetParameters
 

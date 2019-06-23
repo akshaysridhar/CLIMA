@@ -77,9 +77,9 @@ const numdims = 3
 #
 # Define grid size 
 #
-Δx    = 35
-Δy    = 35
-Δz    = 10
+Δx    = 100
+Δy    = 100
+Δz    = 50
 #
 # OR:
 #
@@ -807,7 +807,7 @@ let
     # User defined polynomial order 
     numelem = (Nex,Ney,Nez)
     dt = 0.0025
-    timeend = 14400
+    timeend = dt #14400
     polynomialorder = Npoly
     DFloat = Float64
     dim = numdims
