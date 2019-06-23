@@ -716,7 +716,6 @@ function knl_indefinite_stack_integral!(::Val{dim}, ::Val{N}, ::Val{nstate},
               l_int[ind_out, k, i, j] = l_int[ind_out, Nq, i, j]
             end
           end
-        #FIXME
         end
       end
     end
@@ -769,6 +768,227 @@ function knl_reverse_indefinite_stack_integral!(::Val{dim}, ::Val{N},
         end
       end
     end
+  end
+  nothing
+end
+
+
+function knl_find_value!(::Val{dim}, ::Val{N},
+                         ::Val{nvertelem}, P, elems,
+                         ::Val{outstate},
+                         ::Val{instate}
+                         ) where {dim, N, outstate,
+                                  instate, nvertelem}
+  DFloat = eltype(P)
+
+  Nq = N + 1
+  Nqj = dim == 2 ? 1 : Nq
+
+  nout = length(outstate)
+
+  # note that k is the second not 4th index (since this is scratch memory and k
+  # needs to be persistent across threads)
+  l_T = MArray{Tuple{nout}, DFloat}(undef)
+  l_V = MArray{Tuple{nout}, DFloat}(undef)
+
+  @inbounds @loop for eh in (elems; blockIdx().x)
+    # Initialize the constant state at zero
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        ijk = i + Nq * ((j-1) + Nqj * (Nq-1))
+        et = nvertelem + (eh - 1) * nvertelem
+        @unroll for s = 1:nout
+          l_T[s] = P[ijk, instate[s], et]
+        end
+
+        # Loop up the stack of elements
+        for ev = 1:nvertelem
+          e = ev + (eh - 1) * nvertelem
+          @unroll for k in 1:Nq
+            ijk = i + Nq * ((j-1) + Nqj * (k-1))
+            #=
+            @unroll for s = 1:nout
+              l_V[s] = P[ijk, instate[s], e]
+            end
+            =# 
+            @unroll for s = 1:nout
+              P[ijk, outstate[s], e] = l_T[s] #l_T[s] - l_V[s]
+            end
+          end
+        end
+      end
+    end
+  end
+  nothing
+end
+
+
+#FIXME: courant number calculator 
+"""
+    knl_compute_courant!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                         ::Val{nauxstate}, ::Val{nvertelem},
+                         int_knl!, Q, auxstate, vgeo, Imat,
+                         elems, ::Val{outstate}
+                         ) where {dim, N, nstate, nauxstate,
+                                  outstate, nvertelem}
+
+Computational kernel: Compute courant number 
+See [`DGBalanceLaw`](@ref) for usage.
+"""
+function knl_compute_courant!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                                        ::Val{nauxstate}, ::Val{nvertelem},
+                                        int_knl!, P, Q, auxstate, vgeo, Imat,
+                                        elems, ::Val{outstate}
+                                       ) where {dim, N, nstate, nauxstate,
+                                                outstate, nvertelem}
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+  Nqj = dim == 2 ? 1 : Nq
+
+  nout = length(outstate)
+
+  l_Q = MArray{Tuple{nstate}, DFloat}(undef)
+  l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_knl = MArray{Tuple{nout, Nq}, DFloat}(undef)
+  # note that k is the second not 4th index (since this is scratch memory and k
+  # needs to be persistent across threads)
+  l_int = @scratch DFloat (nout + 1, Nq, Nq, Nqj) 2
+
+  s_I = @shmem DFloat (Nq, Nq)
+
+  @inbounds @loop for k in (1; threadIdx().z)
+    @loop for i in (1:Nq; threadIdx().x)
+      @unroll for n = 1:Nq
+        s_I[i, n] = Imat[i, n]
+      end
+    end
+  end
+  @synchronize
+
+  @inbounds @loop for eh in (elems; blockIdx().x)
+    # Initialize the constant state at zero
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        @unroll for k in 1:Nq
+          @unroll for s = 1:nout
+            l_int[s, k, i, j] = 0
+          end
+        end
+      end
+    end
+    # Loop up the stack of elements
+    for ev = 1:nvertelem
+      e = ev + (eh - 1) * nvertelem
+
+      # Evaluate the integral kernel at each DOF in the slabk
+      @loop for j in (1:Nqj; threadIdx().y)
+        @loop for i in (1:Nq; threadIdx().x)
+          # loop up the pencil
+          @unroll for k in 1:Nq
+            ijk = i + Nq * ((j-1) + Nqj * (k-1))
+            Jc = vgeo[ijk, _JcV, e]
+            @unroll for s = 1:nstate
+              l_Q[s] = Q[ijk, s, e]
+            end
+
+            @unroll for s = 1:nauxstate
+              l_aux[s] = auxstate[ijk, s, e]
+            end
+
+            # multiply in the curve jacobian
+            @unroll for s = 1:nout
+              l_knl[s, k] *= Jc
+            end
+          end
+
+          # Evaluate the integral up the element
+          @unroll for s = 1:nout
+            @unroll for k in 1:Nq
+              @unroll for n in 1:Nq
+                l_int[s, k, i, j] += s_I[k, n] * l_knl[s, n]
+              end
+            end
+          end
+
+          # Store out to memory and reset the background value for next element
+          @unroll for k in 1:Nq
+            ijk = i + Nq * ((j-1) + Nqj * (k-1))
+            @unroll for ind_out = 1:nout
+              s = outstate[ind_out]
+              P[ijk, s, e] = l_int[ind_out, k, i, j]
+              l_int[ind_out, k, i, j] = l_int[ind_out, Nq, i, j]
+            end
+          end
+        end
+      end
+    end
+  end
+  nothing
+end
+
+"""
+    knl_dynsgs!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{nviscstate},
+               ::Val{nauxstate}, flux!, source!, rhs, Q, Qvisc, auxstate,
+               vgeo, t, D, elems) where {dim, N, nstate, nviscstate,
+
+Computational kernel: Prior to the time solve operation in each timestep, we compute the residual 
+given the DG discretised right-hand-side (numerical RHS, not the physical forcing terms), 
+compute the residuals and viscosity
+coefficients for the Dyn-SGS filter. 
+References: Nazarov and Hoffmann (2002), Marras et al. (2015)
+See [`odefun!`](@ref) for usage.
+"""
+function knl_dynsgs!(::Val{dim}, ::Val{N},
+                    ::Val{nstate}, ::Val{nviscstate},
+                    ::Val{nauxstate},
+                    inviscid_flux!, source!,
+                    rhs, Q, auxstate, vgeo, t,
+                    D, elems) where {dim, N, nstate, nviscstate,
+                                     nauxstate}
+  DFloat = eltype(Q)
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+  s_F = @shmem DFloat (3, Nq, Nq, Nqk, nstate)
+  s_D = @shmem DFloat (Nq, Nq)
+  l_rhs = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
+
+  source! !== nothing && (l_S = MArray{Tuple{nstate}, DFloat}(undef))
+  l_Q = MArray{Tuple{nstate}, DFloat}(undef)
+  l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
+  l_F = MArray{Tuple{3, nstate}, DFloat}(undef)
+
+  @inbounds @loop for k in (1; threadIdx().z)
+    @loop for j in (1:Nq; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        s_D[i, j] = D[i, j]
+      end
+    end
+  end
+  @inbounds @loop for e in (elems; blockIdx().x)
+    @loop for k in (1:Nqk; threadIdx().z)
+      @loop for j in (1:Nq; threadIdx().y)
+        @loop for i in (1:Nq; threadIdx().x)
+          ijk = i + Nq * ((j-1) + Nq * (k-1))
+          MJ = vgeo[ijk, _M, e]
+          ξx, ξy, ξz = vgeo[ijk,_ξx,e], vgeo[ijk,_ξy,e], vgeo[ijk,_ξz,e]
+          ηx, ηy, ηz = vgeo[ijk,_ηx,e], vgeo[ijk,_ηy,e], vgeo[ijk,_ηz,e]
+          ζx, ζy, ζz = vgeo[ijk,_ζx,e], vgeo[ijk,_ζy,e], vgeo[ijk,_ζz,e]
+          @unroll for s = 1:nstate
+            l_rhs[s, i, j, k] = rhs[ijk, s, e]
+          end
+          @unroll for s = 1:nstate
+            l_Q[s] = Q[ijk, s, e]
+          end
+          @unroll for s = 1:nauxstate
+            l_aux[s] = auxstate[ijk, s, e]
+          end
+          store_dynsgs_residuals!(l_F, l_Q, l_aux, t)
+          compute_dynsgs_viscosity!(l_F, l_Q, l_aux, t)
+        end
+      end
+    end
+    @synchronize
   end
   nothing
 end
