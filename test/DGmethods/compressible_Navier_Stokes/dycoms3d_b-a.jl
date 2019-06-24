@@ -1,5 +1,3 @@
-
-# Load Modules 
 using MPI
 using CLIMA
 using CLIMA.Topologies
@@ -57,8 +55,7 @@ end
 
 const μ_sgs           = 100.0
 const Prandtl         = 71 // 100
-const Prandtl_t       = 1 // 3
-const cp_over_prandtl = cp_d / Prandtl_t
+const cp_over_prandtl = cp_d / Prandtl
 
 # Problem description 
 # --------------------
@@ -67,35 +64,30 @@ const cp_over_prandtl = cp_d / Prandtl_t
 # top and bottom. 
 # Inviscid, Constant viscosity, StandardSmagorinsky, MinimumDissipation
 # filters are tested against this benchmark problem
-# TODO: link to module SubGridScaleTurbulence
 
 #
 # User Input
 #
 const numdims = 3
+const Npoly = 4
 
 #
 # Define grid size 
 #
-Δx    = 30
-Δy    = 30
-Δz    = 10
+Δx    = 35
+Δy    = 35
+Δz    = 5
 #
 # OR:
 #
 # Set Δx < 0 and define  Nex, Ney, Nez:
 #
-const (Nex, Ney, Nez) = (10, 10, 1)
-const Npoly = 4
+(Nex, Ney, Nez) = (5, 5, 5)
 
 # Physical domain extents 
-const (xmin, xmax) = (0, 1910)
-const (ymin, ymax) = (0, 1910) #VERTICAL
+const (xmin, xmax) = (0, 840)
+const (ymin, ymax) = (0, 840)
 const (zmin, zmax) = (0, 1500)
-#(xmin, xmax) = (0, 3820)
-#(ymin, ymax) = (0, 1200) #VERTICAL
-#(zmin, zmax) = (0, 1910)
-
 
 #Get Nex, Ney from resolution
 const Lx = xmax - xmin
@@ -122,27 +114,12 @@ else
     Δz = Lz / ((Nez * Npoly) + 1)
 end
 
+DoF = (Nex*Npoly+1)*(Ney*Npoly+1)*(Nez*Npoly+1)*(_nstate + _nviscstates)
+Memory_need_estimate = DoF*16
+
+
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-const C_smag = 0.23
-# Equivalent grid-scale
-Δ = (Δx * Δy * Δz)^(1/3)
-const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly)
-
-
-@info @sprintf """ ----------------------------------------------------"""
-@info @sprintf """   ______ _      _____ __  ________                  """     
-@info @sprintf """  |  ____| |    |_   _|  ...  |  __  |               """  
-@info @sprintf """  | |    | |      | | |   .   | |  | |               """ 
-@info @sprintf """  | |    | |      | | | |   | | |__| |               """
-@info @sprintf """  | |____| |____ _| |_| |   | | |  | |               """
-@info @sprintf """  | _____|______|_____|_|   |_|_|  |_|               """
-@info @sprintf """                                                     """
-@info @sprintf """ ----------------------------------------------------"""
-@info @sprintf """ Dycoms                                              """
-@info @sprintf """   Resolution:                                       """ 
-@info @sprintf """     (Δx, Δy, Δz)   = (%.2e, %.2e, %.2e)             """ Δx Δy Δz
-@info @sprintf """     (Nex, Ney, Nez) = (%d, %d, %d)                  """ Nex Ney Nez
-@info @sprintf """ ----------------------------------------------------"""
+const Δsqr = anisotropic_coefficient_sgs(Δx, Δy, Δz, Npoly) 
 
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
@@ -201,8 +178,8 @@ end
 # -------------------------------------------------------------------------
 function read_sounding()
     #read in the original squal sounding
-    #fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_TEST1.dat"))
-    fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_from_PyCles.dat"))
+    fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_TEST1.dat"))
+    #fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_from_PyCles.dat"))
     sounding = readdlm(fsounding)
     close(fsounding)
     (nzmax, ncols) = size(sounding)
@@ -237,17 +214,17 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         #Derivative of T and Q:
         vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]        
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
-        vθy = VF[_θy]
+        vθz = VF[_θz]
       
         # Radiation contribution 
         F_rad = ρ * radiation(aux)  
         aux[_a_rad] = F_rad
        
-        # Unpack SijSij and compute Smagorinsky viscosity
+        #Dynamic eddy viscosity from Smagorinsky:
         SijSij = VF[_SijSij]
         (ν_e, D_e) = standard_smagorinsky(SijSij, Δsqr)
-        buoyancy_correction!(ν_e, D_e, SijSij, θ, vθy)
-        
+        (ν_e, D_e) = buoyancy_correction!(ν_e, D_e, SijSij, θ, vθz)
+
         # Multiply stress tensor by viscosity coefficient:
         τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22]* ν_e, VF[_τ33] * ν_e
         τ12 = τ21 = VF[_τ12] * ν_e 
@@ -297,7 +274,7 @@ end
 
 @inline function radiation(aux)
   zero_to_z = aux[_a_02z]
-  z_to_inf = aux[_a_02inf] - zero_to_z
+  z_to_inf = aux[_a_z2inf]
   z = aux[_a_z]
   z_i = 840  # Start with constant inversion height of 840 meters then build in check based on q_tot
   (z - z_i) >=0 ? Δz_i = (z - z_i) : Δz_i = 0 
@@ -335,7 +312,23 @@ end
     # --------------------------------------------
     # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
-    (S11, S22, S33, S12, S13, S23, SijSij) = compute_strainrate_tensor(dudx, dudy, dudz, dvdx, dvdy, dvdz, dwdx, dwdy, dwdz) 
+    S11 = dudx
+    S22 = dvdy
+    S33 = dwdz
+    S12 = (dudy + dvdx) / 2
+    S13 = (dudz + dwdx) / 2
+    S23 = (dvdz + dwdy) / 2
+    # --------------------------------------------
+    # SMAGORINSKY COEFFICIENT COMPONENTS
+    # --------------------------------------------
+    # FIXME: Grab functions from module SubgridScaleTurbulence 
+    SijSij = (S11^2 + S22^2 + S33^2
+              + 2.0 * S12^2
+              + 2.0 * S13^2 
+              + 2.0 * S23^2) 
+    modSij = sqrt(2.0 * SijSij)
+    
+    #--------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
     VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
@@ -362,7 +355,7 @@ end
 #md # where a local Richardson number via potential temperature gradient is required)
 # -------------------------------------------------------------------------
 const _nauxstate = 7
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_02inf, _a_rad = 1:_nauxstate
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z)
     @inbounds begin
         aux[_a_x] = x
@@ -378,7 +371,7 @@ const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_02inf, _a_rad = 1:_nauxstate
         
         cs_left_right = 0.0
         cs_front_back = 0.0
-        ct            = 1.0
+        ct            = 0.75
 
         #BEGIN  User modification on domain parameters.
         #Only change the first index of brickrange if your axis are
@@ -452,6 +445,9 @@ end
         QP[_U] = UM - 2 * nM[1] * UnM
         QP[_V] = VM - 2 * nM[2] * UnM
         QP[_W] = WM - 2 * nM[3] * UnM
+        #QP[_ρ] = ρM
+        #QP[_QT] = QTM
+        VFP .= 0 
         nothing
     end
 end
@@ -489,8 +485,8 @@ end
 Coriolis force
 """
 const f_coriolis = 7.62e-5
-const u_geostrophic = 7.0
-const v_geostrophic = -5.5 
+const U_geostrophic = 7.0
+const V_geostrophic = -5.5 
 const Ω = Omega
 @inline function source_coriolis!(S,Q,aux,t)
   @inbounds begin
@@ -506,12 +502,11 @@ Geostrophic wind forcing
 """
 @inline function source_geostrophic!(S,Q,aux,t)
     @inbounds begin
-      ρ = Q[_ρ]
       W = Q[_W]
       U = Q[_U]
       V = Q[_V]
-      S[_U] -= f_coriolis * (U - ρ*u_geostrophic)
-      S[_V] -= f_coriolis * (V - ρ*v_geostrophic)
+      S[_U] -= f_coriolis * (U - U_geostrophic)
+      S[_V] -= f_coriolis * (V - V_geostrophic)
     end
 end
 
@@ -555,7 +550,7 @@ function integral_computation(disc, Q, t)
   DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integral_knl, Q,
                                                          (_a_02z))
   DGBalanceLawDiscretizations.reverse_indefinite_stack_integral!(disc,
-                                                                 _a_02inf,
+                                                                 _a_z2inf,
                                                                  _a_02z)
 end
 
@@ -598,28 +593,30 @@ function dycoms!(dim, Q, t, x, y, z, _...)
     # --------------------------------------------------
     # INITIALISE ARRAYS FOR INTERPOLATED VALUES
     # --------------------------------------------------
-    xvert          = z
     
-    datat::DFloat          = spl_tinit(xvert)
-    dataq::DFloat          = spl_qinit(xvert) * 1e-3
-    datau::DFloat          = spl_uinit(xvert)
-    datav::DFloat          = spl_vinit(xvert)
-    datap::DFloat          = spl_pinit(xvert)
+    datat          = spl_tinit(z)
+    dataq          = spl_qinit(z)
+    datau          = spl_uinit(z)
+    datav          = spl_vinit(z)
+    datap          = spl_pinit(z)
+    dataq          = dataq * 1.0e-3
     
-
-    θ_liq = datat
-    q_tot = dataq
+    randnum1   = rand(1)[1] / 100
+    randnum2   = rand(1)[1] / 100
+    
+    θ_liq = datat + randnum1 * datat
+    q_tot = dataq + randnum2 * dataq
     P     = datap    
     T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, PhasePartition(q_tot))
     ρ     = air_density(T, P)
     
     # energy definitions
-    u, v, w     = 0*datau, 0*datav, 0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
+    u, v, w     = datau, datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     U           = ρ * u
     V           = ρ * v
     W           = ρ * w
     e_kin       = (u^2 + v^2 + w^2) / 2  
-    e_pot       = grav * xvert
+    e_pot       = grav * z
     e_int       = internal_energy(T, PhasePartition(q_tot))
     E           = ρ * total_energy(e_kin, e_pot, T, PhasePartition(q_tot))
     
@@ -644,7 +641,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     
     # User defined periodicity in the topl assignment
     # brickrange defines the domain extents
-    topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,false,true))
+    topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,true,false))
 
     grid = DiscontinuousSpectralElementGrid(topl,
                                             FloatType = DFloat,
@@ -679,46 +676,46 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     Q = MPIStateArray(spacedisc, initialcondition)
     
     lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
-    eng0 = norm(Q)
+    
+    #=eng0 = norm(Q)
     @info @sprintf """Starting
       norm(Q₀) = %.16e""" eng0
-
+    =#
     # Set up the information callback
     starttime = Ref(now())
-    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(60, mpicomm) do (s=false)
+    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(600, mpicomm) do (s=false)
         if s
             starttime[] = now()
         else
-            energy = norm(Q)
+            #energy = norm(Q)
             #globmean = global_mean(Q, _ρ)
             @info @sprintf("""Update
                          simtime = %.16e
-                         runtime = %s
-                         norm(Q) = %.16e""", 
+                         runtime = %s""",
                            ODESolvers.gettime(lsrk),
                            Dates.format(convert(Dates.DateTime,
                                                 Dates.now()-starttime[]),
-                                        Dates.dateformat"HH:MM:SS"),
-                           energy )#, globmean)
+                                        Dates.dateformat"HH:MM:SS")) #, energy )#, globmean)
         end
     end
+
     npoststates = 11
     _int1, _int2, _betaout, _P, _u, _v, _w, _ρinv, _q_liq, _T, _θ = 1:npoststates
     postnames = ("INT1", "INT2", "BETA", "P", "u", "v", "w", "rhoinv", "_q_liq", "T", "THETA")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
     step = [0]
-    mkpath("vtk-dycoms-f32")
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
+    mkpath("/central/scratch/asridhar/dycoms")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(2000) do (init=false)
         DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
                                                    Q) do R, Q, QV, aux
                                                        @inbounds let
                                                           F_rad_out = radiation(aux)
-                                                           (R[_int1], R[_int2], R[_betaout], R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = (aux[_a_02z], aux[_a_02inf], F_rad_out, preflux(Q, QV, aux)...)
+                                                           (R[_int1], R[_int2], R[_betaout], R[_P], R[_u], R[_v], R[_w], R[_ρinv], R[_q_liq], R[_T], R[_θ]) = (aux[_a_02z], aux[_a_z2inf], F_rad_out, preflux(Q, QV, aux)...)
                                                        end
                                                    end
 
-        outprefix = @sprintf("vtk-dycoms-f32/cns_%dD_mpirank%04d_step%04d", dim,
+        outprefix = @sprintf("/central/scratch/asridhar/dycoms/cns_%dD_mpirank%04d_step%04d", dim,
                              MPI.Comm_rank(mpicomm), step[1])
         @debug "doing VTK output" outprefix
         writevtk(outprefix, Q, spacedisc, statenames,
@@ -740,6 +737,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 
+#=
     # Print some end of the simulation information
     engf = norm(Q)
     if integration_testing
@@ -762,6 +760,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         norm(Q) - norm(Q₀) = %.16e""" engf engf/eng0 engf-eng0
     end
 integration_testing ? errf : (engf / eng0)
+=#
+
 end
 
 using Test
@@ -786,8 +786,30 @@ let
     dt = 0.0025
     timeend = 14400
     polynomialorder = Npoly
-    DFloat = Float32
+    DFloat = Float64
     dim = numdims
+
+    if MPI.Comm_rank(mpicomm) == 0
+        @info @sprintf """ ----------------------------------------------------"""
+        @info @sprintf """   ______ _      _____ __  ________                  """     
+        @info @sprintf """  |  ____| |    |_   _|  ...  |  __  |               """  
+        @info @sprintf """  | |    | |      | | |   .   | |  | |               """ 
+        @info @sprintf """  | |    | |      | | | |   | | |__| |               """
+        @info @sprintf """  | |____| |____ _| |_| |   | | |  | |               """
+        @info @sprintf """  | _____|______|_____|_|   |_|_|  |_|               """
+        @info @sprintf """                                                     """
+        @info @sprintf """ ----------------------------------------------------"""
+        @info @sprintf """ Dycoms                                              """
+        @info @sprintf """   Resolution:                                       """ 
+        @info @sprintf """     (Δx, Δy, Δz)   = (%.2e, %.2e, %.2e)             """ Δx Δy Δz
+        @info @sprintf """     (Nex, Ney, Nez) = (%d, %d, %d)                  """ Nex Ney Nez
+        @info @sprintf """     DoF = %d                                        """ DoF
+        @info @sprintf """     Minimum necessary memory to run this test: %d   """ Memory_need_estimate
+        @info @sprintf """     Time step dt: %.2e                              """ dt
+        @info @sprintf """     End time  t : %d                                """ timeend
+        @info @sprintf """ ----------------------------------------------------"""
+    end
+    
     engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                     DFloat, dt)
 end

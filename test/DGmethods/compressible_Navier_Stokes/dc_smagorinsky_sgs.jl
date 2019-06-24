@@ -213,7 +213,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
         vθy = VF[_θy]
         
-        #Dynamic eddy viscosity from Smagorinsky:
+        #Standard eddy viscosity, diffusivity from Smagorinsky with buoyancy adjustment
         SijSij = VF[_SijSij]
         (ν_e, D_e) = standard_smagorinsky(SijSij, Δsqr)
         buoyancy_correction!(ν_e, D_e, SijSij, θ, vθy)
@@ -223,12 +223,10 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         τ12 = τ21 = VF[_τ12] * ν_e 
         τ13 = τ31 = VF[_τ13] * ν_e               
         τ23 = τ32 = VF[_τ23] * ν_e
-        
         # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
         F[1, _U] -= τ11 ; F[2, _U] -= τ12 ; F[3, _U] -= τ13 
         F[1, _V] -= τ21 ; F[2, _V] -= τ22 ; F[3, _V] -= τ23
         F[1, _W] -= τ31 ; F[2, _W] -= τ32 ; F[3, _W] -= τ33 
-        
         # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
         F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * ν_e
         F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * ν_e

@@ -1,0 +1,99 @@
+srun: Warning: can't run 1 processes on 2 nodes, setting nnodes to 1
+┌ Warning: Replacing docs for `CLIMA.DGBalanceLawDiscretizations.indefinite_stack_integral! :: Union{Tuple{CLIMA.DGBalanceLawDiscretizations.DGBalanceLaw,Any,Any,Any}, Tuple{CLIMA.DGBalanceLawDiscretizations.DGBalanceLaw,Any,Any,Any,Any}}` in module `CLIMA.DGBalanceLawDiscretizations`
+└ @ Base.Docs docs/Docs.jl:223
+[ Info:  ----------------------------------------------------
+[ Info:    ______ _      _____ __  ________                  
+[ Info:   |  ____| |    |_   _|  ...  |  __  |               
+[ Info:   | |    | |      | | |   .   | |  | |               
+[ Info:   | |    | |      | | | |   | | |__| |               
+[ Info:   | |____| |____ _| |_| |   | | |  | |               
+[ Info:   | _____|______|_____|_|   |_|_|  |_|               
+[ Info:                                                      
+[ Info:  ----------------------------------------------------
+[ Info:  Dycoms                                              
+[ Info:    Resolution:                                       
+[ Info:      (Δx, Δy, Δz)   = (3.50e+01, 3.50e+01, 5.00e+00)             
+[ Info:      (Nex, Ney, Nez) = (6, 6, 75)                  
+[ Info:      DoF = 4138750                                        
+[ Info:      Minimum necessary memory to run this test: 66220000   
+[ Info:      Time step dt: 2.50e-03                              
+[ Info:      End time  t : 14400                                
+[ Info:  ----------------------------------------------------
+┌ Info: Update
+│ simtime = 3.1152500000006711e+01
+└ runtime = 00:09:59
+┌ Info: Update
+│ simtime = 6.5484999999976694e+01
+└ runtime = 00:19:59
+┌ Info: Update
+│ simtime = 1.0124499999994417e+02
+└ runtime = 00:29:59
+┌ Info: Update
+│ simtime = 1.3781499999991092e+02
+└ runtime = 00:39:59
+┌ Info: Update
+│ simtime = 1.7500249999987710e+02
+└ runtime = 00:50:00
+┌ Info: Update
+│ simtime = 2.1283999999984269e+02
+└ runtime = 01:00:00
+┌ Info: Update
+│ simtime = 2.5080999999980816e+02
+└ runtime = 01:10:00
+┌ Info: Update
+│ simtime = 2.8899999999977342e+02
+└ runtime = 01:20:00
+┌ Info: Update
+│ simtime = 3.2728999999973860e+02
+└ runtime = 01:30:00
+┌ Info: Update
+│ simtime = 3.6596499999970342e+02
+└ runtime = 01:40:00
+┌ Info: Update
+│ simtime = 4.0516249999966777e+02
+└ runtime = 01:50:00
+┌ Info: Update
+│ simtime = 4.4456999999963193e+02
+└ runtime = 02:00:00
+┌ Info: Update
+│ simtime = 4.8317499999959682e+02
+└ runtime = 02:10:00
+┌ Info: Update
+│ simtime = 5.2114249999977017e+02
+└ runtime = 02:20:00
+┌ Info: Update
+│ simtime = 5.5870000000058997e+02
+└ runtime = 02:30:00
+┌ Info: Update
+│ simtime = 5.9599750000140409e+02
+└ runtime = 02:40:00
+┌ Info: Update
+│ simtime = 6.3362500000222542e+02
+└ runtime = 02:50:00
+┌ Info: Update
+│ simtime = 6.7165500000305553e+02
+└ runtime = 03:00:00
+┌ Info: Update
+│ simtime = 7.1000250000389258e+02
+└ runtime = 03:10:02
+┌ Info: Update
+│ simtime = 7.4868500000473693e+02
+└ runtime = 03:20:02
+┌ Info: Update
+│ simtime = 7.8768500000558822e+02
+└ runtime = 03:30:02
+┌ Info: Update
+│ simtime = 8.2715500000644977e+02
+└ runtime = 03:40:02
+┌ Info: Update
+│ simtime = 8.6744000000732910e+02
+└ runtime = 03:50:02
+┌ Info: Update
+│ simtime = 9.0836500000822241e+02
+└ runtime = 04:00:02
+┌ Info: Update
+│ simtime = 9.4966000000912379e+02
+└ runtime = 04:10:02
+┌ Info: Update
+│ simtime = 9.9143750001003571e+02
+└ runtime = 04:20:02
