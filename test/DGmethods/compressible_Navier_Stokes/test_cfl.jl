@@ -15,7 +15,6 @@ using Logging, Printf, Dates
 using CLIMA.Vtk
 using DelimitedFiles
 using Dierckx
-using CLIMA.Topography
 
 if haspkg("CuArrays")
     using CUDAdrv
@@ -75,26 +74,12 @@ const cp_over_prandtl = cp_d / Prandtl_t
 const numdims = 3
 const Npoly = 4
 
-#
-# Define grid size 
-#
 
-#
-#Read external topography:
-#
-#const lread_external_grid = "y"
-#if lread_external_grid == "y"
-header_file_in                                           = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.hdr")
-(nlon, nlat, lonmin, lonmax, latmin, latmax, dlon, dlat) = ReadExternalHeader(header_file_in)
 const (Nex, Ney, Nez) = (5, 5, 5)
 const Npoly = 4
-const (xmin, xmax) = (abs(lonmin - lonmin), abs(lonmax-lonmin))
-const (ymin, ymax) = (abs(latmin - latmin), abs(latmax-latmin))
+const (xmin, xmax) = (0, 1000)
+const (ymin, ymax) = (0, 1000)
 const (zmin, zmax) = (0, 3000)
-
-@show(lonmin)
-@show((xmin,xmax),(ymin,ymax))
-
 
 const (Lx, Ly, Lz) = (abs(xmax-xmin), abs(ymax-ymin), abs(zmax-zmin))
 const Δx = Lx / ((Nex * Npoly) + 1)
@@ -345,8 +330,8 @@ end
 #md # calculations. (An example of this will follow - in the Smagorinsky model, 
 #md # where a local Richardson number via potential temperature gradient is required)
 # -------------------------------------------------------------------------
-const _nauxstate = 7
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad = 1:_nauxstate
+const _nauxstate = 10
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_CFLx, _a_CFLy, _a_CFLz = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z)
     @inbounds begin
         aux[_a_x] = x
@@ -537,27 +522,62 @@ end
   end
 end
 
-function preodefun!(disc, Q, t, grid.vgeo)
+
+function preodefun!(disc, Q, t)
   DGBalanceLawDiscretizations.dof_iteration!(disc.auxstate, disc, Q) do R, Q, QV, aux
+    
     @inbounds let
+      
+      # How do we get access to vgeo information at this level 
+
+      ξx = vgeo[n, _ξx, e]
+      ηy = vgeo[n, _ηy, e]
+      ζz = vgeo[n, _ζz, e]
+      
       ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+      
       z = aux[_a_z]
       e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
       q_tot = QT / ρ
 
       TS = PhaseEquil(e_int, q_tot, ρ)
       T = air_temperature(TS)
-      P = air_pressure(TS) # Test with dry atmosphere
+      P = air_pressure(TS) 
       q_liq = PhasePartition(TS).liq
 
+      dx = 1.0/(2*ξx)
+      dy = 1.0/(2*ηy)
+      dz = 1.0/(2*ζz)
+       
+      wave_speedx = (u + sqrt(γ * P / ρ))
+      wave_speedy = (v + sqrt(γ * P / ρ))
+      wave_speedz = (w + sqrt(γ * P / ρ))
+
+      dt_locx = 1.0/wave_speedx/N/dx
+      dt_locy = 1.0/wave_speedy/N/dy
+      dt_locz = 1.0/wave_speedz/N/dz
+       
+      aux[_a_CFLx]= wave_speedx*dt_locx*N/dx
+      aux[_a_CFLy]= wave_speedy*dt_locy*N/dy
+      aux[_a_CFLz]= wave_speedz*dt_locz*N/dz
+      
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
       R[_a_soundspeed_air] = soundspeed_air(TS)
+   
     end
   end
-
+  
+  # FIXME: Only compute CFL at every X timesteps? 
+  CFL_coeff = 1.0 # Safety factor (?) 
+  CFLx = MPI.Allreduce(aux[_a_CFLx], MPI.MAX, mpicomm)
+  CFLy = MPI.Allreduce(aux[_a_CFLy], MPI.MAX, mpicomm)
+  CFLz = MPI.Allreduce(aux[_a_CFLz], MPI.MAX, mpicomm)
+  
+  # Integral computation for radiation flux 
   integral_computation(disc, Q, t)
+
 end
 
 function integral_computation(disc, Q, t)
@@ -655,30 +675,6 @@ function warp_agnesi(xin, yin, zin)
     z_diff = hm/(1.0 + ( (xin - xc)^2 + (yin - yc)^2)/a_c)
     x, y, z = xin, yin, zin + z_diff * (zmax - zin)/zmax
 end
-@show("agnesi done")
-    """
-      Topography from file
-    """
-TopoBathy_flg = 0 
-body_file_in = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.xyz")
-(TopoX, TopoY, TopoZ) = (Topography.ReadExternalTxtCoordinates(body_file_in, TopoBathy_flg, nlon, nlat))
-TopoSpline = Spline2D(abs.(TopoX[:,1] - lonmin), abs.(TopoY[1,:] .- latmin), TopoZ)
-@show(TopoY[1,:] .- latmin)
-@show(TopoX[:,1] .- lonmin)
-warp_external_topography(xin, yin, zin) = warp_external_topography(xin, yin, zin; SplineFunction=TopoSpline)
-
-function warp_external_topography(xin, yin, zin; SplineFunction=TopoSpline)
-    """
-    Given the input set of spatial coordinates based on the DG transform
-    Interpolate using the 2D spline to get the mesh warp on the entire grid,
-    pointwise. 
-    """
-    x = xin
-    y = yin
-    z = zin
-    zdiff = TopoSpline(x,y) * (zmax-zin)^3/(zmax^3)
-    x,y,z+zdiff
-end
 # ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 
 
@@ -698,8 +694,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     grid = DiscontinuousSpectralElementGrid(topl,
                                             FloatType = DFloat,
                                             DeviceArray = ArrayType,
-                                            polynomialorder = N,
-                                            meshwarp = warp_external_topography)
+                                            polynomialorder = N)
     
     numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed, preflux)
     numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed, preflux)
