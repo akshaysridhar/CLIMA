@@ -464,7 +464,7 @@ let
     # User defined timestep estimate
     # User defined simulation end time
     # User defined polynomial order 
-    numelem = (5,5,1)
+    numelem = (121,61,2)
     dt = 1e-2
     timeend = 10
     polynomialorder = 5

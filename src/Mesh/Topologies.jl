@@ -730,7 +730,6 @@ function cubedshellmesh(Ne; part=1, numparts=1)
   (elemtovert, elemtocoord, elemtobndy, faceconnections)
 end
 
-
 """
     cubedshellwarp(a, b, c, R = max(abs(a), abs(b), abs(c)))
 

@@ -45,7 +45,7 @@ const _nviscstates = 16
 const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij = 1:_nviscstates
 
 # Gradient state labels
-const _ngradstates = 6
+const _ngradstates = 7
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
 
 if !@isdefined integration_testing
@@ -71,7 +71,7 @@ const cp_over_prandtl = cp_d / Prandtl_t
 
 #
 # User Input
-#
+
 const numdims = 3
 const Npoly = 4
 
@@ -82,103 +82,22 @@ const Npoly = 4
 #
 #Read external topography:
 #
-const lread_external_grid = "n"
-if lread_external_grid == "y"
-    
-    header_file_in                                           = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.hdr")
-    (nlon, nlat, lonmin, lonmax, latmin, latmax, dlon, dlat) = ReadExternalHeader(header_file_in)
-    
-    Δx    = dlon
-    Δy    = dlat
-    Δz    = 5000
-    
-    #
-    # OR:
-    #
-    # Set Δx < 0 and define  Nex, Ney, Nez:
-    #
-    (Nex, Ney, Nez) = (nlon, nlat, 10)
-
-    # Physical domain extents 
-    const (xmin, xmax) = (lonmin, lonmax)
-    const (ymin, ymax) = (latmin, latmax)
-    const (zmin, zmax) = (0, 30000)
-    const Lz = zmax - zmin
-    
-    if ( Δz > 0)
-        #
-        # User defines the grid size:
-        #
-        ratioz = (Lz/Δz - 1)/Npoly
-        Nez    = ceil(Int64, ratioz)
-        
-    else
-        #
-        # User defines the number of elements:
-        #
-         Nez = 10
-        
-        # Physical domain extents 
-        const (xmin, xmax) = (0, 10000)
-        const (ymin, ymax) = (0, 10000)
-        const (zmin, zmax) = (0, 30000)
-        
-        Δz = Lz / ((Nez * Npoly) + 1)
-    end
-    
-    @info @sprintf """ Nex %d""" nlon
-    @info @sprintf """ Nex %d""" nlat
-    @info @sprintf """ xmin-max %.16e %.16e""" lonmin lonmax
-    @info @sprintf """ ymin-max %.16e %.16e""" latmin latmax
-    
-else
-    
-    Δx    = -100
-    Δy    = 100
-    Δz    = 100
-    #
-    # OR:
-    #
-    # Set Δx < 0 and define  Nex, Ney, Nez:
-    #
-    (Nex, Ney, Nez) = (20, 20, 1)
-
-    # Physical domain extents 
-    const (xmin, xmax) = (0, 1000)
-    const (ymin, ymax) = (0, 1500)
-    const (zmin, zmax) = (0, 2000)
-    
-    #Get Nex, Ney from resolution
-    const Lx = xmax - xmin
-    const Ly = ymax - ymin
-    const Lz = zmax - zmin
-
-    if ( Δx > 0)
-        #
-        # User defines the grid size:
-        #
-        ratiox = (Lx/Δx - 1)/Npoly
-        ratioy = (Ly/Δy - 1)/Npoly
-        ratioz = (Lz/Δz - 1)/Npoly
-        Nex = ceil(Int64, ratiox)
-        Ney = ceil(Int64, ratioy)
-        Nez = ceil(Int64, ratioz)
-        
-    else
-        #
-        # User defines the number of elements:
-        #
-        Δx = Lx / ((Nex * Npoly) + 1)
-        Δy = Ly / ((Ney * Npoly) + 1)
-        Δz = Lz / ((Nez * Npoly) + 1)
-    end
-    
-end
-
+#const lread_external_grid = "y"
+#if lread_external_grid == "y"
+header_file_in                                           = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.hdr")
+(nlon, nlat, lonmin, lonmax, latmin, latmax, dlon, dlat) = ReadExternalHeader(header_file_in)
+const (Nex, Ney, Nez) = (5, 5, 5)
+const Npoly = 4
+const (xmin, xmax) = (lonmin - lonmin, lonmax-lonmin) 
+const (ymin, ymax) = (latmin - latmin, latmax-latmin)
+const (zmin, zmax) = (0,3000)
+const (Lx, Ly, Lz) = (xmax-xmin, ymax-ymin, zmax-zmin)
+const Δx = Lx / ((Nex * Npoly) + 1)
+const Δy = Ly / ((Ney * Npoly) + 1)
+const Δz = Lz / ((Nez * Npoly) + 1)
 
 DoF = (Nex*Npoly+1)*(Ney*Npoly+1)*(Nez*Npoly+1)*(_nstate + _nviscstates)
 Memory_need_estimate = DoF*16
-
 
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
 const C_smag = 0.18
@@ -696,49 +615,48 @@ function dycoms!(dim, Q, t, x, y, z, _...)
     
 end
 
-
+function warp_agnesi(xin, yin, zin)
+    """
+       Classical agnesi mountain:
+    """
+    mountain_top = 0.05
+    a_c    = xmax * 0.65;
+    hm     = 1.0
+    xc     = 0.5*(xmax + xmin)
+    yc     = 0.5*(ymax + ymin)
+    z_diff = hm/(1.0 + ( (xin - xc)^2 + (yin - yc)^2)/a_c)
+    x, y, z = xin, yin, zin + z_diff * (zmax - zin)/zmax
+end
+@show("agnesi done")
+    """
+      Topography from file
+    """
+TopoBathy_flg = 0 
+body_file_in = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.xyz")
+(TopoX, TopoY, TopoZ) = Topography.ReadExternalTxtCoordinates(body_file_in, TopoBathy_flg, nlon, nlat)
+TopoSpline = Spline2D(TopoX[:,1] .- TopoX[1,1],TopoY[1,:] .- TopoY[1,1], TopoZ)
+warp_external_topography(xin, yin, zin) = warp_external_topography(xin, yin, zin; SplineFunction=TopoSpline)
+function warp_external_topography(xin, yin, zin; SplineFunction=TopoSpline)
+    """
+    Given the input set of spatial coordinates based on the DG transform
+    Interpolate using the 2D spline to get the mesh warp on the entire grid,
+    pointwise. 
+    """
+    x = xin
+    y = yin
+    z = zin
+    zdiff = TopoSpline(x,y) * (zmax-zin)^3/(zmax^3)
+    x,y,z+zdiff
+end
 # ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)    
    
-    function warp_agnesi(xin, yin, zin)
-        
-        """
-           Classical agnesi mountain:
-        """
-
-        mountain_top = 1000.0
-        
-        a_c    = xmax * 0.65;
-        hm     = 1000.0
-        xc     = 0.5*(xmax + xmin)
-        yc     = 0.5*(ymax + ymin)
-        z_diff = hm/(1.0 + ( (xin - xc)^2 + (yin - yc)^2)/a_c)
-
-        x, y, z = xin, yin, zin + z_diff * (zmax - zin)/zmax
-    end
-
-    function warp_external_topography(xin, yin, zin)
-        """
-          Topography from file
-        """
-        
-        body_file_in   = joinpath(@__DIR__, "../../TopographyFiles/NOAA/monterey.xyz")
-        (Topography, nlon, nlat, xmin, xmax, ymin, ymax, dlon, dlat) = TopographyReadExternal("NOAA", header_file_in, body_file_in, "all")
-
-        x, y = xin, yin
-        z    = Topography
-        
-    end
 
     brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                   range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)),
                   range(DFloat(zmin), length=Ne[3]+1, DFloat(zmax)))
-    
-    #brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-    #              range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)),
-    #              range(DFloat(zmin), length=Ne[3]+1, DFloat(zmax)))
     
     
     # User defined periodicity in the topl assignment
@@ -750,7 +668,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                                             FloatType = DFloat,
                                             DeviceArray = ArrayType,
                                             polynomialorder = N,
-                                            meshwarp = warp_agnesi)
+                                            meshwarp = warp_external_topography)
     
     numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed, preflux)
     numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed, preflux)

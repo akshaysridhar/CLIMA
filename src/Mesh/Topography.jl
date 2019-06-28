@@ -5,7 +5,8 @@ using DelimitedFiles
 using Dierckx
 
 export TopographyReadExternal
-
+export ReadExternalTxtCoordinates
+export ReadExternalHeader
 import Canary
 using MPI
 
@@ -124,16 +125,19 @@ function ReadExternalTxtCoordinates(body_file_in, TopoBathy_flg, nlon, nlat)
     # Create array on the device
     nnodes_lon, nnodes_lat = nlon, nlat #Linear grid
     LonLatZ = Array{DFloat, 2}(undef, nnodes_lon, nnodes_lat)
-    
+    TopoX = Array{DFloat, 2}(undef, nnodes_lon, nnodes_lat)
+    TopoY = Array{DFloat, 2}(undef, nnodes_lon, nnodes_lat)
+    TopoZ = Array{DFloat, 2}(undef, nnodes_lon, nnodes_lat)
     k = 0
     for j = nnodes_lat:-1:1
         for i = 1:1:nnodes_lon
             k = k + 1
-            Topography[i, j] = topo_body[k,3]
+            TopoY[i, j] = topo_body[k,2]
+            TopoX[i, j] = topo_body[k,1]
+            TopoZ[i, j] = topo_body[k,3]
         end
     end    
     @info @sprintf """ Grids.jl: Reading topography file ... DONE""" 
-
     #Check that the file is not empty
     (nrows, _) = size(topo_body)
     if nrows == 0
@@ -144,7 +148,7 @@ function ReadExternalTxtCoordinates(body_file_in, TopoBathy_flg, nlon, nlat)
     close(ftopo_body)
     @info @sprintf """ Grids.jl: Closing topography      ... DONE"""
 
-    return Topography
+    return (TopoX,TopoY,TopoZ)
     
 end
 #}}}
