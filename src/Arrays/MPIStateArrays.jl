@@ -382,6 +382,15 @@ function global_max(A::MPIStateArray, states=1:size(A, 2))
   MPI.Allreduce([locmax], MPI.MAX, A.mpicomm)[1]
 end
 
+function global_mean(A::MPIStateArray, states=1:size(A,2))
+  host_array = Array ∈ typeof(A).parameters
+  h_A = host_array ? A : Array(A) 
+  (Np, nstate, nelem) = size(A) 
+  numpts = (nelem * Np) + 1
+  localsum = sum(view(h_A, :, states, A.realelems)) 
+  MPI.Allreduce([localsum], MPI.SUM, A.mpicomm)[1] / numpts 
+end
+
 using Requires
 
 @init @require CuArrays = "3a865a2d-5b23-5a0f-bc46-62713ec82fae" begin
