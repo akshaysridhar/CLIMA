@@ -121,37 +121,17 @@ const Nez = ceil(Int64, ratioz)
 #md # calculations. (An example of this will follow - in the Smagorinsky model, 
 #md # where a local Richardson number via potential temperature gradient is required)
 # -------------------------------------------------------------------------
-const _nauxstate = 9
-const _a_x, _a_y, _a_z, _a_dx, _a_dy, _a_Δsqr, _a_cfl_coeffx, _a_cfl_coeffy, _a_cfl_coeffm = 1:_nauxstate
+const _nauxstate = 8
+const _a_x, _a_y, _a_dx, _a_dy, _a_Δsqr, _a_cfl_coeffx, _a_cfl_coeffy, _a_cfl_coeffm = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z, dx, dy, dz)
-    @inbounds begin
-        aux[_a_x] = x
-        aux[_a_y] = y
-        aux[_a_z] = z
-        aux[_a_dx] = dx
-        aux[_a_dy] = dy
-        aux[_a_Δsqr] = SubgridScaleTurbulence.standard_coefficient_sgs2D(dx, dy)
-    end
-end
-
-@inline function preodefun!(disc, Q, t)
-  DGBalanceLawDiscretizations.dof_iteration!(disc.auxstate,disc,Q) do R, Q, QV, aux
-    @inbounds let
-      z = aux[_a_z]
-      ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-      e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
-      q_tot = QT / ρ
-      u, v, w = U/ρ, V/ρ, W/ρ
-      TS = PhaseEquil(e_int, q_tot, ρ)
-      soundspeed = soundspeed_air(TS)
-      dx, dy= aux[_a_dx], aux[_a_dy]
-      aux[_a_cfl_coeffx] = (abs(u) + soundspeed) * Npoly / dx
-      aux[_a_cfl_coeffy] = (abs(v) + soundspeed) * Npoly / dy 
-      aux[_a_cfl_coeffm] = max(R[_a_cfl_coeffx], R[_a_cfl_coeffy])
-    end
+  @inbounds begin
+    aux[_a_x] = x
+    aux[_a_y] = y
+    aux[_a_dx] = dx
+    aux[_a_dy] = dy
+    aux[_a_Δsqr] = SubgridScaleTurbulence.standard_coefficient_sgs2D(dx, dy)
   end
 end
-
 
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
@@ -169,7 +149,7 @@ end
     R_gas::eltype(Q) = R_d
     @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
     ρinv = 1 / ρ
-    x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
+    x,y = aux[_a_x], aux[_a_y]
     u, v, w = ρinv * U, ρinv * V, ρinv * W
     e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
     q_tot = QT / ρ
@@ -189,7 +169,7 @@ end
   gravity::eltype(Q) = grav
   @inbounds begin 
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-    x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
+    x,y= aux[_a_x], aux[_a_y]
     u, v, w = ρinv * U, ρinv * V, ρinv * W
     e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
     q_tot = QT / ρ
@@ -228,7 +208,6 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     
     #Richardson contribution:
     SijSij = VF[_SijSij]
-    @show(aux[_a_cfl_coeffm])   
     #Dynamic eddy viscosity from Smagorinsky:
     Δsqr = aux[_a_Δsqr]
     (ν_e, D_e) = SubgridScaleTurbulence.standard_smagorinsky(SijSij, Δsqr)
@@ -316,7 +295,7 @@ end
 
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, PM, uM, vM, wM, ρinvM, q_liqM, TM, θM)
     @inbounds begin
-        x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
+        x, y= auxM[_a_x], auxM[_a_y]
         ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
         # No flux boundary conditions
         # No shear on walls (free-slip condition)
@@ -483,14 +462,36 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                              auxiliary_state_length = _nauxstate,
                              auxiliary_state_initialization! =
                              auxiliary_state_initialization!,
-                             source! = source!,
-                             preodefun! = preodefun!)
+                             source! = source!)
 
     # This is a actual state/function that lives on the grid
     initialcondition(Q, x...) = density_current!(Val(dim), Q, DFloat(0), x...)
     Q = MPIStateArray(spacedisc, initialcondition)
 
     lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
+    
+    cbdt = GenericCallbacks.EveryXSimulationSteps(1) do (init=false)
+        DGBalanceLawDiscretizations.dof_iteration!(spacedisc.auxstate, spacedisc,
+           Q) do R, Q, QV, aux
+               @inbounds let
+                  dx, dy = aux[_a_dx], aux[_a_dy]
+                  y = aux[_a_y]
+                  ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+                  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * y) / ρ
+                  q_tot = QT / ρ
+                  u, v, w = U/ρ, V/ρ, W/ρ
+                  TS = PhaseEquil(e_int, q_tot, ρ)
+                  soundspeed = soundspeed_air(TS)
+                  dx, dy = aux[_a_dx], aux[_a_dy]
+                  R[_a_cfl_coeffx] = (abs(u) + soundspeed) * Npoly / dx
+                  R[_a_cfl_coeffy] = (abs(v) + soundspeed) * Npoly / dy 
+                  R[_a_cfl_coeffm] = max(R[_a_cfl_coeffx], R[_a_cfl_coeffy])
+               end
+            end
+          CFL_coeff_max = global_max(spacedisc.auxstate, _a_cfl_coeffm) 
+          dt = dt / (dt * CFL_coeff_max) * 0.90
+          ODESolvers.updatedt!(lsrk, dt)
+      end
 
     eng0 = norm(Q)
     @info @sprintf """Starting
@@ -499,6 +500,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # Set up the information callback
     starttime = Ref(now())
     cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
+    @info @sprintf """Updated timestep = %.16e s""" dt
         if s
             starttime[] = now()
         else
@@ -547,7 +549,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         nothing
     end
     
-    solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+    solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdt))
 
 
     # Print some end of the simulation information
@@ -593,8 +595,8 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney)
-    dt = 0.02
-    timeend = 3*dt
+    dt = 0.0001
+    timeend = 1000
     polynomialorder = Npoly
     DFloat = Float64
     dim = numdims
