@@ -2,6 +2,8 @@ module LowStorageRungeKuttaMethod
 export LowStorageRungeKutta2N
 export LSRK54CarpenterKennedy, LSRK144NiegemannDiehlBusch
 
+using CLIMA.MPIStateArrays
+
 using GPUifyLoops
 include("LowStorageRungeKuttaMethod_kernels.jl")
 
@@ -133,7 +135,17 @@ function LSRK54CarpenterKennedy(F::Union{Function, AbstractSpaceMethod},
                                 Q::AT; dt=nothing, t0=0) where {AT <: AbstractArray}
   T = eltype(Q)
   RT = real(T)
-
+  
+  #ad hoc solution (needs revision) 
+  #The CFL index needs to be passed in rather than constants being redefined
+  _nauxstate =9
+  _a_x, _a_y, _a_z, _a_dx, _a_dy, _a_Δsqr, _a_cfl_coeffx, _a_cfl_coeffy, _a_cfl_coeffm = 1:_nauxstate
+  @show(F.auxstate)
+  coeff_acoustic = MPIStateArrays.global_max(F.auxstate, )
+  CFL_current = dt * coeff_acoustic
+  CFL_limit = 0.90
+  CFL_required = max(CFL_limit, CFL_current)
+  dt = dt / CFL_required
   RKA = (RT(0),
          RT(-567301805773  // 1357537059087),
          RT(-2404267990393 // 2016746695238),
