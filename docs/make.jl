@@ -35,7 +35,7 @@ makedocs(
       "Microphysics" => "Atmos/Microphysics.md",
     ],
     "ODESolvers" => "ODESolvers.md",
-    "Mesh" => "Mesh.md",
+    "Mesh.md",
     "Arrays" => "Arrays.md",
     "DGmethods" => "DGmethods.md",
     "InputOutput.md",
