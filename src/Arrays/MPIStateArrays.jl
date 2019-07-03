@@ -6,7 +6,10 @@ using StaticArrays
 
 using MPI
 
+<<<<<<< HEAD
 using Base.Broadcast: Broadcasted, BroadcastStyle, ArrayStyle
+=======
+>>>>>>> fc708fe5aee9529dc2a62ad8714f22b14cb53904
 export MPIStateArray, euclidean_distance, weightedsum, global_max, global_mean
 
 """
