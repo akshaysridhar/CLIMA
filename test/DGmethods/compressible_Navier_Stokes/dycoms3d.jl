@@ -85,8 +85,8 @@ const Npoly = 4
 #
 # Define grid size 
 #
-Δx    = 200
-Δy    = 200
+Δx    = 100
+Δy    = 100
 Δz    = 50
 
 #
@@ -659,25 +659,9 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
 
     @timeit to "Time stepping init" begin
-        cfl_safety_factor = 0.85
         
         lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
         #solve!(Q, lsrk; timeend = t1)
-        
-        @show(spacedisc.auxstate)
-        Courant_max = dt * global_max(spacedisc.auxstate, _a_timescale)
-        @show(Courant_max)
-
-        if (Courant_max >= 1)
-          dt = dt / Courant_max * cfl_safety_factor
-        else
-          dt = cfl_safety_factor / Courant_max * dt
-        end
-
-        #ODESolvers.updatedt!(lsrk, dt)
-        #solve!(Q, lsrk; timeend = t2)
-        ODESolvers.updatedt!(lsrk, dt)
-        @info @sprintf """ dt = %.8e. max(CFL) = %.8e""" dt Courant_max
         
         #=eng0 = norm(Q)
         @info @sprintf """Starting
@@ -744,11 +728,39 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 @info @sprintf """Starting...
             norm(Q) = %25.16e""" norm(Q)
 
+
+cbdt = GenericCallbacks.EveryXSimulationSteps(1) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(spacedisc.auxstate, spacedisc,
+      Q) do R, Q, QV, aux
+        @inbounds let
+          dx, dy, dz = aux[_a_dx], aux[_a_dy], aux[_a_dz]
+          z = aux[_a_z]
+          ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+          e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
+          q_tot = QT / ρ
+          u, v, w = U/ρ, V/ρ, W/ρ
+          TS = PhaseEquil(e_int, q_tot, ρ)
+          soundspeed  = soundspeed_air(TS)
+          u_timescale = (abs(u) + soundspeed) * Npoly/ dx
+          v_timescale = (abs(v) + soundspeed) * Npoly/ dy 
+          w_timescale = (abs(w) + soundspeed) * Npoly/ dz 
+          R[_a_timescale] = max(u_timescale, v_timescale, w_timescale)
+        end
+      end
+    cfl_safety_factor = 0.80
+    Courant_max = dt * global_max(spacedisc.auxstate, _a_timescale)
+    if (Courant_max >= 1)
+      dt = dt / Courant_max * cfl_safety_factor
+    else
+      dt = cfl_safety_factor / Courant_max * dt
+    end
+    ODESolvers.updatedt!(lsrk, dt)
+    @info @sprintf """ dt = %.8e. max(CFL) = %.8e""" dt Courant_max
+end
+  
 # Initialise the integration computation. Kernels calculate this at every timestep?? 
 @timeit to "initial integral" integral_computation(spacedisc, Q, 0) 
-@timeit to "solve" solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
-
-
+@timeit to "solve" solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbdt))
 @info @sprintf """Finished...
             norm(Q) = %25.16e""" norm(Q)
 
