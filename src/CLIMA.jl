@@ -22,5 +22,7 @@ include("LinearSolvers/LinearSolvers.jl")
 include("LinearSolvers/GeneralizedConjugateResidualSolver.jl")
 include("InputOutput/Vtk/Vtk.jl")
 include("misc.jl")
+include("Atmos/Parameterizations/SubgridScaleTurbulence/SubgridScaleParameters.jl")
+include("Atmos/Parameterizations/SubgridScaleTurbulence/SubgridScaleTurbulence.jl")
 
 end

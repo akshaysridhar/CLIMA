@@ -13,6 +13,20 @@ const _JcV = Grids._JcV
 
 const _nx, _ny, _nz = Grids._nx, Grids._ny, Grids._nz
 const _sM, _vMI = Grids._sM, Grids._vMI
+
+struct MetricTermStruct{T}
+  ξx::T
+  ηx::T
+  ζx::T
+  ξy::T
+  ηy::T
+  ζy::T
+  ξz::T
+  ηz::T
+  ζz::T
+end
+
+
 # }}}
 
 """
@@ -558,15 +572,25 @@ function initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
   @inbounds @loop for e in (elems; blockIdx().x)
     @loop for n in (1:Np; threadIdx().x)
       x, y, z = vgeo[n, _x, e], vgeo[n, _y, e], vgeo[n, _z, e]
+      # Load the mesh metric terms to compute the local dx, dy, dz 
+      # horizontal and vertical spacings. Useful for filter definitions
+      # and computations for anisotropic gridscales.
+      #TODO: Review by LCW / SM79
+      ξx, ξy, ξz = vgeo[n, _ξx, e], vgeo[n, _ξy, e], vgeo[n, _ξz, e]
+      ηx, ηy, ηz = vgeo[n, _ηx, e], vgeo[n, _ηy, e], vgeo[n, _ηz, e]
+      ζx, ζy, ζz = vgeo[n, _ζx, e], vgeo[n, _ζy, e], vgeo[n, _ζz, e]
+      
       @unroll for s = 1:nauxstate
         l_aux[s] = auxstate[n, s, e]
       end
-
-      auxstatefun!(l_aux, x, y, z)
-
+      
+      MTS = MetricTermStruct{DFloat}(ξx, ηx, ζx, ξy, ηy, ζy, ξz, ηz, ζz)
+      auxstatefun!(l_aux, x, y, z, MTS)
+      
       @unroll for s = 1:nauxstate
         auxstate[n, s, e] = l_aux[s]
       end
+    
     end
   end
 end
