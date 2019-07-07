@@ -13,6 +13,19 @@ const _JcV = Grids._JcV
 
 const _nx, _ny, _nz = Grids._nx, Grids._ny, Grids._nz
 const _sM, _vMI = Grids._sM, Grids._vMI
+
+struct MetricTermStruct{T}
+  ξx::T
+  ξy::T
+  ξz::T
+  ηx::T
+  ηy::T
+  ηz::T
+  ζx::T
+  ζy::T
+  ζz::T
+end
+
 # }}}
 
 """
@@ -570,7 +583,9 @@ function initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
         l_aux[s] = auxstate[n, s, e]
       end
 
+      MTS = MetricTermStruct{DFloat}(ξx,ξy,ξz,ηx,ηy,ηz,ζx,ζy,ζz)
       auxstatefun!(l_aux, x, y, z, dx, dy, dz)
+
 
       @unroll for s = 1:nauxstate
         auxstate[n, s, e] = l_aux[s]
