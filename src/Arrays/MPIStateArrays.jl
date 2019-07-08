@@ -9,6 +9,7 @@ using MPI
 using Base.Broadcast: Broadcasted, BroadcastStyle, ArrayStyle
 
 export MPIStateArray, euclidean_distance, weightedsum
+export global_mean 
 
 """
     MPIStateArray{S <: Tuple, T, DeviceArray, N,
@@ -392,6 +393,30 @@ function weightedsum(A::MPIStateArray, states=1:size(A, 2))
   # Need to use anomous function version of sum else MPI.jl using MPI_SUM
   T(MPI.Allreduce([locwsum], (x,y)->x+y, A.mpicomm)[1])
 end
+
+"""
+  global_mean(A, state, scaleind, power)
+
+Computes global mean of user specified quantities
+state, scaleind are the density index by default 
+and power = 0 by default so we take
+momentum as a start
+
+"""
+function global_mean(A::MPIStateArray, state1=1, state2=1, power=0)
+  T = eltype(A)
+  (Np, nstate, nelem) = size(A) 
+  host_array = Array ∈ typeof(A).parameters
+  h_A = host_array ? A : Array(A)
+  locmean = T(0)
+  @inbounds for e = nelem
+    for ii = 1:Np
+      locmean += (A[ii, state1, e] .* A[ii, state2, e] .^ (power)) ./ (nelem*Np)
+    end
+  end
+  MPI.Allreduce([locmean], MPI.SUM, A.mpicomm)[1]
+end
+
 
 using Requires
 

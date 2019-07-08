@@ -107,7 +107,7 @@ const Nez = ceil(Int64, ratioz)
 @info @sprintf """  | _____|______|_____|_|   |_|_|  |_|               """
 @info @sprintf """                                                     """
 @info @sprintf """ ----------------------------------------------------"""
-@info @sprintf """ Rising Bubble                                       """
+@info @sprintf """ Density Current                                     """
 @info @sprintf """   Resolution:                                       """ 
 @info @sprintf """     (Δx, Δy)   = (%.2e, %.2e)                       """ Δx Δy
 @info @sprintf """     (Nex, Ney) = (%d, %d)                           """ Nex Ney
@@ -118,8 +118,8 @@ const Nez = ceil(Int64, ratioz)
 #md # In this example the auxiliary function is used to store the spatial
 #md # coordinates and the equivalent grid lengthscale coefficient. 
 # -------------------------------------------------------------------------
-const _nauxstate = 6
-const _a_x, _a_y, _a_z, _a_dx, _a_dy, _a_Δsqr = 1:_nauxstate
+const _nauxstate = 11
+const _a_x, _a_y, _a_z, _a_dx, _a_dy, _a_Δsqr, _a_T, _a_P, _a_q_liq, _a_soundspeed_air, _a_θ  = 1:_nauxstate
 @inline function auxiliary_state_initialization!(aux, x, y, z, MTS)
     @inbounds begin
         aux[_a_x] = x
@@ -429,6 +429,28 @@ function density_current!(dim, Q, t, x, y, z, _...)
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
 end
 
+function preodefun!(disc, Q, t)
+  DGBalanceLawDiscretizations.dof_iteration!(disc.auxstate, disc, Q) do R, Q, QV, aux
+    @inbounds let
+      ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+      y = aux[_a_y]  
+      e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * y) / ρ
+      q_tot = QT / ρ
+
+      TS = PhaseEquil(e_int, q_tot, ρ)
+      T = air_temperature(TS)
+      P = air_pressure(TS) # Test with dry atmosphere
+      θ = (TS) # Test with dry atmosphere
+      q_liq = PhasePartition(TS).liq
+
+      R[_a_T] = T
+      R[_a_P] = P
+      R[_a_q_liq] = q_liq
+      R[_a_θ] = virtual_pottemp(TS)
+      R[_a_soundspeed_air] = soundspeed_air(TS)
+    end
+  end
+end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
@@ -464,7 +486,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                              auxiliary_state_length = _nauxstate,
                              auxiliary_state_initialization! =
                              auxiliary_state_initialization!,
-                             source! = source!)
+                             source! = source!,
+                             preodefun! = preodefun!)
 
     # This is a actual state/function that lives on the grid
     initialcondition(Q, x...) = density_current!(Val(dim), Q, DFloat(0), x...)
@@ -483,7 +506,6 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
             starttime[] = now()
         else
             energy = norm(Q)
-            #globmean = global_mean(Q, _ρ)
             @info @sprintf("""Update
                          simtime = %.16e
                          runtime = %s
@@ -492,7 +514,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            Dates.format(convert(Dates.DateTime,
                                                 Dates.now()-starttime[]),
                                         Dates.dateformat"HH:MM:SS"),
-                           energy )#, globmean)
+                           energy )
         end
     end
 
@@ -528,6 +550,56 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         nothing
     end
     
+    _nstatstates = 8
+    _s_uprime, _s_uprime2, _s_uprime3, _s_wprime, _s_wprime2, _s_wprime3, _s_TKE, _s_wθprime =  1:_nstatstates
+    statnames = ("u'", "u'u'", "u'u'u'", "v'", "v'v'", "v'v'v'", "turb_kin", "w'θ'")
+    statsarray = MPIStateArray(spacedisc; nstate=_nstatstates)
+
+    step = [0]
+    mkpath("stats-DC")
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(1) do (init=false)
+      
+    u̅ = global_mean(Q, _U, _ρ, 1.0)
+    v̅ = global_mean(Q, _V, _ρ, 1.0)
+    w̅ = global_mean(Q, _W, _ρ, 1.0)
+    momflux = global_mean(Q, _U, _V, 1.0)
+      DGBalanceLawDiscretizations.dof_iteration!(statsarray, spacedisc, 
+       Q) do R, Q, QV, aux
+            @inbounds let
+              ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+              ρinv = 1/ρ
+              u,v,w = U*ρinv, V*ρinv, W*ρinv
+              u_prime = u - u̅
+              v_prime = v - v̅
+              w_prime = w - w̅
+              R[_s_uprime] = u_prime
+              R[_s_uprime2] = u_prime^2
+              R[_s_uprime3] = u_prime^3
+              R[_s_wprime] = v_prime
+              R[_s_wprime2] = v_prime^2
+              R[_s_wprime3] = v_prime^3
+              R[_s_TKE] = 0.5 * (u_prime^2 + v_prime^2 + w_prime^2)
+              R[_s_wθprime] = momflux
+            end
+          end
+
+        outprefix = @sprintf("stats-DC/statfields_%dD_mpirank%04d_step%04d", dim,
+                             MPI.Comm_rank(mpicomm), step[1])
+        @debug "doing VTK output" outprefix
+
+        writevtk(outprefix, Q, spacedisc, statenames,
+                 statsarray, statnames)
+        #= 
+        pvtuprefix = @sprintf("vtk/cns_%dD_step%04d", dim, step[1])
+        prefixes = ntuple(i->
+        @sprintf("vtk/cns_%dD_mpirank%04d_step%04d",
+        dim, i-1, step[1]),
+        MPI.Comm_size(mpicomm))
+        writepvtu(pvtuprefix, prefixes, postnames)
+        =# 
+        step[1] += 1
+        nothing
+    end
     solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 
@@ -569,10 +641,6 @@ let
     else
         global_logger(NullLogger())
     end
-    # User defined number of elements
-    # User defined timestep estimate
-    # User defined simulation end time
-    # User defined polynomial order 
     numelem = (Nex,Ney)
     dt = 0.01
     timeend = 900

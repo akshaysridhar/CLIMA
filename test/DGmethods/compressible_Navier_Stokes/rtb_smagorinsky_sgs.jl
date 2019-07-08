@@ -489,7 +489,6 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
             starttime[] = now()
         else
             energy = norm(Q)
-            #globmean = global_mean(Q, _ρ)
             @info @sprintf("""Update
                          simtime = %.16e
                          runtime = %s
@@ -498,7 +497,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            Dates.format(convert(Dates.DateTime,
                                                 Dates.now()-starttime[]),
                                         Dates.dateformat"HH:MM:SS"),
-                           energy )#, globmean)
+                           energy )
         end
     end
 
