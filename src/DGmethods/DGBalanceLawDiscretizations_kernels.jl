@@ -2,7 +2,6 @@ using Requires
 @init @require CUDAnative = "be33ccc6-a3ff-5ff2-a52e-74243cff1e17" begin
   using .CUDAnative
 end
-using Statistics
 
 # {{{ FIXME: remove this after we've figure out how to pass through to kernel
 const _ξx, _ηx, _ζx = Grids._ξx, Grids._ηx, Grids._ζx
@@ -31,7 +30,7 @@ function volumerhs!(::Val{dim}, ::Val{N},
                     ::Val{nauxstate},
                     flux!, source!,
                     rhs, Q, Qvisc, auxstate, vgeo, t,
-                    D, elems) where {dim, N, nstate, nviscstate,
+                    ω, D, elems, increment) where {dim, N, nstate, nviscstate,
                                      nauxstate}
   DFloat = eltype(Q)
 
@@ -40,7 +39,8 @@ function volumerhs!(::Val{dim}, ::Val{N},
   Nqk = dim == 2 ? 1 : Nq
 
   s_F = @shmem DFloat (3, Nq, Nq, Nqk, nstate)
-  s_D = @shmem DFloat (Nq, Nq)
+  s_ω = @shmem DFloat (Nq, )
+  s_half_D = @shmem DFloat (Nq, Nq)
   l_rhs = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
 
   source! !== nothing && (l_S = MArray{Tuple{nstate}, DFloat}(undef))
@@ -48,38 +48,44 @@ function volumerhs!(::Val{dim}, ::Val{N},
   l_Qvisc = MArray{Tuple{nviscstate}, DFloat}(undef)
   l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
   l_F = MArray{Tuple{3, nstate}, DFloat}(undef)
+  l_M = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ξx = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ξy = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ξz = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ηx = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ηy = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ηz = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ζx = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ζy = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ζz = @scratch DFloat (Nq, Nq, Nqk) 3
 
   @inbounds @loop for k in (1; threadIdx().z)
     @loop for j in (1:Nq; threadIdx().y)
+      s_ω[j] = ω[j]
       @loop for i in (1:Nq; threadIdx().x)
-        s_D[i, j] = D[i, j]
+        s_half_D[i, j] = D[i, j] / 2
       end
     end
   end
-    
-  #=  
-  @inbounds @loop for e in (elems; blockIdx().x)
-    k = Nqk 
-    @loop for j in (1:Nq; threadIdx().y)
-      @loop for i in (1:Nq; threadIdx().x)
-        l_aux[] = 
-      end
-    end
-  end
-  =#
 
   @inbounds @loop for e in (elems; blockIdx().x)
     @loop for k in (1:Nqk; threadIdx().z)
       @loop for j in (1:Nq; threadIdx().y)
         @loop for i in (1:Nq; threadIdx().x)
           ijk = i + Nq * ((j-1) + Nq * (k-1))
-          MJ = vgeo[ijk, _M, e]
-          ξx, ξy, ξz = vgeo[ijk,_ξx,e], vgeo[ijk,_ξy,e], vgeo[ijk,_ξz,e]
-          ηx, ηy, ηz = vgeo[ijk,_ηx,e], vgeo[ijk,_ηy,e], vgeo[ijk,_ηz,e]
-          ζx, ζy, ζz = vgeo[ijk,_ζx,e], vgeo[ijk,_ζy,e], vgeo[ijk,_ζz,e]
+          l_M[i, j, k] = vgeo[ijk, _M, e]
+          l_ξx[i, j, k] = vgeo[ijk, _ξx, e]
+          l_ξy[i, j, k] = vgeo[ijk, _ξy, e]
+          l_ξz[i, j, k] = vgeo[ijk, _ξz, e]
+          l_ηx[i, j, k] = vgeo[ijk, _ηx, e]
+          l_ηy[i, j, k] = vgeo[ijk, _ηy, e]
+          l_ηz[i, j, k] = vgeo[ijk, _ηz, e]
+          l_ζx[i, j, k] = vgeo[ijk, _ζx, e]
+          l_ζy[i, j, k] = vgeo[ijk, _ζy, e]
+          l_ζz[i, j, k] = vgeo[ijk, _ζz, e]
 
           @unroll for s = 1:nstate
-            l_rhs[s, i, j, k] = rhs[ijk, s, e]
+            l_rhs[s, i, j, k] = increment ? rhs[ijk, s, e] : zero(DFloat)
           end
 
           @unroll for s = 1:nstate
@@ -97,13 +103,14 @@ function volumerhs!(::Val{dim}, ::Val{N},
           flux!(l_F, l_Q, l_Qvisc, l_aux, t)
 
           @unroll for s = 1:nstate
-            s_F[1,i,j,k,s] = MJ * (ξx*l_F[1,s] + ξy*l_F[2,s] + ξz*l_F[3,s])
-            s_F[2,i,j,k,s] = MJ * (ηx*l_F[1,s] + ηy*l_F[2,s] + ηz*l_F[3,s])
-            s_F[3,i,j,k,s] = MJ * (ζx*l_F[1,s] + ζy*l_F[2,s] + ζz*l_F[3,s])
+            s_F[1,i,j,k,s] = l_F[1,s]
+            s_F[2,i,j,k,s] = l_F[2,s]
+            s_F[3,i,j,k,s] = l_F[3,s]
           end
 
           if source! !== nothing
             source!(l_S, l_Q, l_aux, t)
+
             @unroll for s = 1:nstate
               l_rhs[s, i, j, k] += l_S[s]
             end
@@ -113,24 +120,79 @@ function volumerhs!(::Val{dim}, ::Val{N},
     end
     @synchronize
 
+    # Weak "outside metrics" derivative
+    @unroll for s = 1:nstate
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            @unroll for n = 1:Nq
+              Dni = s_half_D[n, i] * s_ω[n] / s_ω[i]
+              Dnj = s_half_D[n, j] * s_ω[n] / s_ω[j]
+              Nqk > 1 && (Dnk = s_half_D[n, k] * s_ω[n] / s_ω[k])
+
+              # ξ-grid lines
+              l_rhs[s, i, j, k] += l_ξx[i, j, k] * Dni * s_F[1, n, j, k, s]
+              l_rhs[s, i, j, k] += l_ξy[i, j, k] * Dni * s_F[2, n, j, k, s]
+              l_rhs[s, i, j, k] += l_ξz[i, j, k] * Dni * s_F[3, n, j, k, s]
+
+              # η-grid lines
+              l_rhs[s, i, j, k] += l_ηx[i, j, k] * Dnj * s_F[1, i, n, k, s]
+              l_rhs[s, i, j, k] += l_ηy[i, j, k] * Dnj * s_F[2, i, n, k, s]
+              l_rhs[s, i, j, k] += l_ηz[i, j, k] * Dnj * s_F[3, i, n, k, s]
+
+              # ζ-grid lines
+              if Nqk > 1
+                l_rhs[s, i, j, k] += l_ζx[i, j, k] * Dnk * s_F[1, i, j, n, s]
+                l_rhs[s, i, j, k] += l_ζy[i, j, k] * Dnk * s_F[2, i, j, n, s]
+                l_rhs[s, i, j, k] += l_ζz[i, j, k] * Dnk * s_F[3, i, j, n, s]
+              end
+            end
+          end
+        end
+      end
+    end
+    @synchronize
+
+    # Build "inside metrics" flux
+    @loop for k in (1:Nqk; threadIdx().z)
+      @loop for j in (1:Nq; threadIdx().y)
+        @loop for i in (1:Nq; threadIdx().x)
+          @unroll for s = 1:nstate
+            F1, F2, F3 = s_F[1,i,j,k,s], s_F[2,i,j,k,s], s_F[3,i,j,k,s]
+            s_F[1,i,j,k,s] = l_M[i, j, k] * (l_ξx[i, j, k] * F1 +
+                                              l_ξy[i, j, k] * F2 +
+                                              l_ξz[i, j, k] * F3)
+            s_F[2,i,j,k,s] = l_M[i, j, k] * (l_ηx[i, j, k] * F1 +
+                                              l_ηy[i, j, k] * F2 +
+                                              l_ηz[i, j, k] * F3)
+            s_F[3,i,j,k,s] = l_M[i, j, k] * (l_ζx[i, j, k] * F1 +
+                                              l_ζy[i, j, k] * F2 +
+                                              l_ζz[i, j, k] * F3)
+          end
+        end
+      end
+    end
+    @synchronize
+
+    # Weak "inside metrics" derivative
     @unroll for s = 1:nstate
       @loop for k in (1:Nqk; threadIdx().z)
         @loop for j in (1:Nq; threadIdx().y)
           @loop for i in (1:Nq; threadIdx().x)
             ijk = i + Nq * ((j-1) + Nq * (k-1))
-            MJI = vgeo[ijk, _MI, e]
-            for n = 1:Nq
-              Dni = s_D[n, i]
-              Dnj = s_D[n, j]
-              Nqk > 1 && (Dnk = s_D[n, k])
+            MI = vgeo[ijk, _MI, e]
+            @unroll for n = 1:Nq
+              Dni = s_half_D[n, i]
+              Dnj = s_half_D[n, j]
+              Nqk > 1 && (Dnk = s_half_D[n, k])
               # ξ-grid lines
-              l_rhs[s, i, j, k] += MJI * Dni * s_F[1, n, j, k, s]
+              l_rhs[s, i, j, k] += MI * Dni * s_F[1, n, j, k, s]
 
               # η-grid lines
-              l_rhs[s, i, j, k] += MJI * Dnj * s_F[2, i, n, k, s]
+              l_rhs[s, i, j, k] += MI * Dnj * s_F[2, i, n, k, s]
 
               # ζ-grid lines
-              Nqk > 1 && (l_rhs[s, i, j, k] += MJI * Dnk * s_F[3, i, j, n, s])
+              Nqk > 1 && (l_rhs[s, i, j, k] += MI * Dnk * s_F[3, i, j, n, s])
             end
           end
         end
@@ -199,7 +261,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{nviscstate},
     for f = 1:nface
       @loop for n in (1:Nfp; threadIdx().x)
         nM = (sgeo[_nx, n, f, e], sgeo[_ny, n, f, e], sgeo[_nz, n, f, e])
-        sMJ, vMJI = sgeo[_sM, n, f, e], sgeo[_vMI, n, f, e]
+        sM, vMI = sgeo[_sM, n, f, e], sgeo[_vMI, n, f, e]
         idM, idP = vmapM[n, f, e], vmapP[n, f, e]
 
         eM, eP = e, ((idP - 1) ÷ Np) + 1
@@ -244,7 +306,7 @@ function facerhs!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{nviscstate},
         #Update RHS
         @unroll for s = 1:nstate
           # FIXME: Should we pretch these?
-          rhs[vidM, s, eM] -= vMJI * sMJ * l_F[s]
+          rhs[vidM, s, eM] -= vMI * sM * l_F[s]
         end
       end
       # Need to wait after even faces to avoid race conditions
@@ -386,7 +448,7 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{states_grad},
     for f = 1:nface
       @loop for n in (1:Nfp; threadIdx().x)
         nM = (sgeo[_nx, n, f, e], sgeo[_ny, n, f, e], sgeo[_nz, n, f, e])
-        sMJ, vMJI = sgeo[_sM, n, f, e], sgeo[_vMI, n, f, e]
+        sM, vMI = sgeo[_sM, n, f, e], sgeo[_vMI, n, f, e]
         idM, idP = vmapM[n, f, e], vmapP[n, f, e]
 
         eM, eP = e, ((idP - 1) ÷ Np) + 1
@@ -425,7 +487,7 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{states_grad},
         end
 
         @unroll for s = 1:nviscstate
-          Qvisc[vidM, s, eM] += vMJI * sMJ * l_Qvisc[s]
+          Qvisc[vidM, s, eM] += vMI * sM * l_Qvisc[s]
         end
       end
       # Need to wait after even faces to avoid race conditions
@@ -435,6 +497,40 @@ function faceviscterms!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{states_grad},
   nothing
 end
 
+"""
+    initstate!(::Val{dim}, ::Val{N}, ::Val{nvar}, ::Val{nauxstate},
+               ic!, Q, auxstate, vgeo, elems) where {dim, N, nvar, nauxstate}
+
+Computational kernel: Initialize the state
+
+See [`DGBalanceLaw`](@ref) for usage.
+"""
+function initstate!(::Val{dim}, ::Val{N}, ::Val{nvar}, ::Val{nauxstate},
+                    ic!, Q, auxstate, vgeo, elems) where {dim, N, nvar, nauxstate}
+
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+  Nqk = dim == 2 ? 1 : Nq
+  Np = Nq * Nq * Nqk
+
+  l_Qdof = MArray{Tuple{nvar}, DFloat}(undef)
+  l_auxdof = MArray{Tuple{nauxstate}, DFloat}(undef)
+
+  @inbounds @loop for e in (elems; blockIdx().x)
+    @loop for i in (1:Np; threadIdx().x)
+      x, y, z = vgeo[i, _x, e], vgeo[i, _y, e], vgeo[i, _z, e]
+
+      @unroll for s = 1:nauxstate
+        l_auxdof[s] = auxstate[i, s, e]
+      end
+      ic!(l_Qdof, x, y, z, l_auxdof)
+      @unroll for n = 1:nvar
+        Q[i, n, e] = l_Qdof[n]
+      end
+    end
+  end
+end
 
 """
     initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
@@ -485,7 +581,7 @@ it in `sx`, `sy`, and `sz` of `Q`.
 
 """
 function elem_grad_field!(::Val{dim}, ::Val{N}, ::Val{nstate}, Q, vgeo,
-                          D, elems, s, sx, sy, sz) where {dim, N, nstate}
+                          ω, D, elems, s, sx, sy, sz) where {dim, N, nstate}
 
   DFloat = eltype(vgeo)
 
@@ -493,17 +589,21 @@ function elem_grad_field!(::Val{dim}, ::Val{N}, ::Val{nstate}, Q, vgeo,
 
   Nqk = dim == 2 ? 1 : Nq
 
-  s_f = @shmem DFloat (Nq, Nq, Nqk)
-  s_D = @shmem DFloat (Nq, Nq)
+  s_f = @shmem DFloat (3, Nq, Nq, Nqk)
+  s_half_D = @shmem DFloat (Nq, Nq)
 
-  l_fξ = @scratch DFloat (Nq, Nq, Nqk) 3
-  l_fη = @scratch DFloat (Nq, Nq, Nqk) 3
-  l_fζ = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_f  = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_fd = @scratch DFloat (3, Nq, Nq, Nqk) 3
+
+  l_J = @scratch DFloat (Nq, Nq, Nqk) 3
+  l_ξd = @scratch DFloat (3, Nq, Nq, Nqk) 3
+  l_ηd = @scratch DFloat (3, Nq, Nq, Nqk) 3
+  l_ζd = @scratch DFloat (3, Nq, Nq, Nqk) 3
 
   @inbounds @loop for k in (1; threadIdx().z)
     @loop for j in (1:Nq; threadIdx().y)
       @loop for i in (1:Nq; threadIdx().x)
-        s_D[i, j] = D[i, j]
+        s_half_D[i, j] = D[i, j] / 2
       end
     end
   end
@@ -513,35 +613,84 @@ function elem_grad_field!(::Val{dim}, ::Val{N}, ::Val{nstate}, Q, vgeo,
       @loop for j in (1:Nq; threadIdx().y)
         @loop for i in (1:Nq; threadIdx().x)
           ijk = i + Nq * ((j-1) + Nq * (k-1))
-          s_f[i, j, k] = Q[ijk, s, e]
+          M = dim == 2 ? ω[i] * ω[j] : ω[i] * ω[j] * ω[k]
+          l_J[i, j, k] = vgeo[ijk, _M, e] / M
+          l_ξd[1, i, j, k] = vgeo[ijk, _ξx, e]
+          l_ξd[2, i, j, k] = vgeo[ijk, _ξy, e]
+          l_ξd[3, i, j, k] = vgeo[ijk, _ξz, e]
+          l_ηd[1, i, j, k] = vgeo[ijk, _ηx, e]
+          l_ηd[2, i, j, k] = vgeo[ijk, _ηy, e]
+          l_ηd[3, i, j, k] = vgeo[ijk, _ηz, e]
+          l_ζd[1, i, j, k] = vgeo[ijk, _ζx, e]
+          l_ζd[2, i, j, k] = vgeo[ijk, _ζy, e]
+          l_ζd[3, i, j, k] = vgeo[ijk, _ζz, e]
+          l_f[i, j, k] = s_f[1, i, j, k] = Q[ijk, s, e]
         end
       end
     end
     @synchronize
 
-    # reference gradient
+    # reference gradient: outside metrics
     @loop for k in (1:Nqk; threadIdx().z)
       @loop for j in (1:Nq; threadIdx().y)
         @loop for i in (1:Nq; threadIdx().x)
-          l_fξ[i, j, k] = 0
-          l_fη[i, j, k] = 0
-          l_fζ[i, j, k] = 0
+          fξ = DFloat(0)
+          fη = DFloat(0)
+          fζ = DFloat(0)
           @unroll for n = 1:Nq
-            Din = s_D[i, n]
-            Djn = s_D[j, n]
-            Nqk > 1 && (Dkn = s_D[k, n])
+            Din = s_half_D[i, n]
+            Djn = s_half_D[j, n]
+            Nqk > 1 && (Dkn = s_half_D[k, n])
 
             # ξ-grid lines
-            l_fξ[i, j, k] += Din * s_f[n, j, k]
+            fξ += Din * s_f[1, n, j, k]
 
             # η-grid lines
-            l_fη[i, j, k] += Djn * s_f[i, n, k]
+            fη += Djn * s_f[1, i, n, k]
 
             # ζ-grid lines
-            Nqk > 1 && (l_fζ[i, j, k] += Dkn * s_f[i, j, n])
+            Nqk > 1 && (fζ += Dkn * s_f[1, i, j, n])
+          end
+          @unroll for d = 1:3
+            l_fd[d, i, j, k] = l_ξd[d, i, j, k] * fξ +
+                               l_ηd[d, i, j, k] * fη +
+                               l_ζd[d, i, j, k] * fζ
           end
         end
       end
+    end
+    @synchronize
+
+    # Build "inside metrics" flux
+    for d = 1:3
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            s_f[1,i,j,k] = l_J[i, j, k] * l_ξd[d, i, j, k] * l_f[i, j, k]
+            s_f[2,i,j,k] = l_J[i, j, k] * l_ηd[d, i, j, k] * l_f[i, j, k]
+            s_f[3,i,j,k] = l_J[i, j, k] * l_ζd[d, i, j, k] * l_f[i, j, k]
+          end
+        end
+      end
+      @synchronize
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            fd = DFloat(0)
+            JI = 1 / l_J[i, j, k]
+            @unroll for n = 1:Nq
+              Din = s_half_D[i, n]
+              Djn = s_half_D[j, n]
+              Nqk > 1 && (Dkn = s_half_D[k, n])
+
+              l_fd[d, i, j, k] += JI * Din * s_f[1, n, j, k]
+              l_fd[d, i, j, k] += JI * Djn * s_f[2, i, n, k]
+              Nqk > 1 && (l_fd[d, i, j, k] += JI * Dkn * s_f[3, i, j, n])
+            end
+          end
+        end
+      end
+      @synchronize
     end
 
     # Physical gradient
@@ -549,14 +698,9 @@ function elem_grad_field!(::Val{dim}, ::Val{N}, ::Val{nstate}, Q, vgeo,
       @loop for j in (1:Nq; threadIdx().y)
         @loop for i in (1:Nq; threadIdx().x)
           ijk = i + Nq * ((j-1) + Nq * (k-1))
-
-          ξx, ξy, ξz = vgeo[ijk, _ξx, e], vgeo[ijk, _ξy, e], vgeo[ijk, _ξz, e]
-          ηx, ηy, ηz = vgeo[ijk, _ηx, e], vgeo[ijk, _ηy, e], vgeo[ijk, _ηz, e]
-          ζx, ζy, ζz = vgeo[ijk, _ζx, e], vgeo[ijk, _ζy, e], vgeo[ijk, _ζz, e]
-
-          Q[ijk, sx, e] = ξx * l_fξ[ijk] + ηx * l_fη[ijk] + ζx * l_fζ[ijk]
-          Q[ijk, sy, e] = ξy * l_fξ[ijk] + ηy * l_fη[ijk] + ζy * l_fζ[ijk]
-          Q[ijk, sz, e] = ξz * l_fξ[ijk] + ηz * l_fη[ijk] + ζz * l_fζ[ijk]
+          Q[ijk, sx, e] = l_fd[1, i, j, k]
+          Q[ijk, sy, e] = l_fd[2, i, j, k]
+          Q[ijk, sz, e] = l_fd[3, i, j, k]
         end
       end
     end
@@ -648,7 +792,7 @@ function knl_indefinite_stack_integral!(::Val{dim}, ::Val{N}, ::Val{nstate},
   l_knl = MArray{Tuple{nout, Nq}, DFloat}(undef)
   # note that k is the second not 4th index (since this is scratch memory and k
   # needs to be persistent across threads)
-  l_int = @scratch DFloat (nout + 1, Nq, Nq, Nqj) 2
+  l_int = @scratch DFloat (nout, Nq, Nq, Nqj) 2
 
   s_I = @shmem DFloat (Nq, Nq)
 
@@ -717,7 +861,6 @@ function knl_indefinite_stack_integral!(::Val{dim}, ::Val{N}, ::Val{nstate},
               l_int[ind_out, k, i, j] = l_int[ind_out, Nq, i, j]
             end
           end
-        #FIXME
         end
       end
     end
@@ -758,13 +901,11 @@ function knl_reverse_indefinite_stack_integral!(::Val{dim}, ::Val{N},
           e = ev + (eh - 1) * nvertelem
           @unroll for k in 1:Nq
             ijk = i + Nq * ((j-1) + Nqj * (k-1))
-            #=
             @unroll for s = 1:nout
               l_V[s] = P[ijk, instate[s], e]
             end
-            =# 
             @unroll for s = 1:nout
-              P[ijk, outstate[s], e] = l_T[s] #l_T[s] - l_V[s]
+              P[ijk, outstate[s], e] = l_T[s] - l_V[s]
             end
           end
         end
@@ -774,50 +915,45 @@ function knl_reverse_indefinite_stack_integral!(::Val{dim}, ::Val{N},
   nothing
 end
 
-
-
 """
-    knl_dynsgs!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{nviscstate},
-               ::Val{nauxstate}, inviscid_flux!, source!, rhs, Q, auxstate,
-               vgeo, t, D, elems) where {dim, N, nstate, nviscstate,
+    knl_apply_filter!(::Val{dim}, ::Val{N}, ::Val{nstate}, ::Val{horizontal},
+                      ::Val{vertical}, Q, ::Val{states}, filtermatrix,
+                      elems) where {dim, N, nstate, states, horizontal, vertical}
 
-Computational kernel: computes the elementwise residual infinity norm 
-and the global (state - mean(state)) for the dyn-SGS model. Output is the model 
-viscosity as defined by Marras. An approximation is used with the dQdt term omitted.
-μmax = |dQ|_Ω / |Q - overbar{Q}|_Ω
+Computational kernel: Applies the `filtermatrix` to the `states` of `Q`.
+
+The arguments `horizontal` and `vertical` are used to control if the filter is
+applied in the horizontal and vertical reference directions, respectively.
 """
-function knl_dynsgs(::Val{dim}, ::Val{N},
-                    ::Val{nstate}, ::Val{nviscstate},
-                    ::Val{nauxstate},
-                    inviscid_flux!, source!,
-                    rhs, Q, auxstate, vgeo, t,
-                    D, elems) where {dim, N, nstate, nviscstate,
-                                     nauxstate}
-  
-  #FIXME kernels need muted quantities for GPU functionality. All values except the returned viscosity
-  # parameter are local to this kernel 
-  
+function knl_apply_filter!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                           ::Val{horizontal}, ::Val{vertical}, Q,
+                           ::Val{states}, filtermatrix,
+                           elems) where {dim, N, nstate, horizontal, vertical,
+                                         states}
   DFloat = eltype(Q)
 
   Nq = N + 1
-
   Nqk = dim == 2 ? 1 : Nq
 
-  s_Finviscid = @shmem DFloat (3, Nq, Nq, Nqk, nstate)
-  s_Dinviscid = @shmem DFloat (Nq, Nq)
-  l_res = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
-  l_diff = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
-  l_dynvis = @scratch DFloat (nstate, Nq, Nq, Nqk) 3
-  
-  source! !== nothing && (l_S = MArray{Tuple{nstate}, DFloat}(undef))
-  l_Qinviscid = MArray{Tuple{nstate}, DFloat}(undef)
-  l_aux = MArray{Tuple{nauxstate}, DFloat}(undef)
-  l_Finviscid = MArray{Tuple{3, nstate}, DFloat}(undef)
+  filterinξ = horizontal
+  filterinη = dim == 2 ? vertical : horizontal
+  filterinζ = dim == 2 ? false : vertical
+
+  # Return if we are not filtering in any direction
+  if !(filterinξ || filterinη || filterinζ)
+    return
+  end
+
+  nfilterstates = length(states)
+
+  s_filter = @shmem DFloat (Nq, Nq)
+  s_Q = @shmem DFloat (Nq, Nq, Nqk, nfilterstates)
+  l_Qfiltered = @scratch DFloat (nfilterstates, Nq, Nq, Nqk) 3
 
   @inbounds @loop for k in (1; threadIdx().z)
     @loop for j in (1:Nq; threadIdx().y)
       @loop for i in (1:Nq; threadIdx().x)
-        s_Dinviscid[i, j] = D[i, j]
+        s_filter[i, j] = filtermatrix[i, j]
       end
     end
   end
@@ -826,67 +962,104 @@ function knl_dynsgs(::Val{dim}, ::Val{N},
     @loop for k in (1:Nqk; threadIdx().z)
       @loop for j in (1:Nq; threadIdx().y)
         @loop for i in (1:Nq; threadIdx().x)
+          @unroll for fs = 1:nfilterstates
+            l_Qfiltered[fs, i, j, k] = zero(DFloat)
+          end
+
           ijk = i + Nq * ((j-1) + Nq * (k-1))
-          MJ = vgeo[ijk, _M, e]
-          ξx, ξy, ξz = vgeo[ijk,_ξx,e], vgeo[ijk,_ξy,e], vgeo[ijk,_ξz,e]
-          ηx, ηy, ηz = vgeo[ijk,_ηx,e], vgeo[ijk,_ηy,e], vgeo[ijk,_ηz,e]
-          ζx, ζy, ζz = vgeo[ijk,_ζx,e], vgeo[ijk,_ζy,e], vgeo[ijk,_ζz,e]
-          @unroll for s = 1:nstate
-            l_res[s, i, j, k] = rhs[ijk, s, e]
+
+          @unroll for fs = 1:nfilterstates
+            s_Q[i, j, k, fs] = Q[ijk, states[fs], e]
           end
-          @unroll for s = 1:nstate
-            l_Qinviscid[s] = Q[ijk, s, e]
-          end
-          @unroll for s = 1:nauxstate
-            l_aux[s] = auxstate[ijk, s, e]
-          end
-          inviscid_flux!(l_Finviscid, l_Qinviscid, l_aux, t)
-          @unroll for s = 1:nstate
-            s_Finviscid[1,i,j,k,s] = MJ * (ξx*l_Finviscid[1,s] + ξy*l_Finviscid[2,s] + ξz*l_Finviscid[3,s])
-            s_Finviscid[2,i,j,k,s] = MJ * (ηx*l_Finviscid[1,s] + ηy*l_Finviscid[2,s] + ηz*l_Finviscid[3,s])
-            s_Finviscid[3,i,j,k,s] = MJ * (ζx*l_Finviscid[1,s] + ζy*l_Finviscid[2,s] + ζz*l_Finviscid[3,s])
-          end
-          if source! !== nothing
-            source!(l_S, l_Qinviscid, l_aux, t)
-            @unroll for s = 1:nstate
-              l_res[s, i, j, k] += l_S[s]
+        end
+      end
+    end
+
+
+    if filterinξ
+      @synchronize
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            @unroll for n = 1:Nq
+              @unroll for fs = 1:nfilterstates
+                l_Qfiltered[fs, i, j, k] += s_filter[i, n] * s_Q[n, j, k, fs]
+              end
             end
+          end
+        end
+      end
+
+      if filterinη || filterinζ
+        @loop for k in (1:Nqk; threadIdx().z)
+          @loop for j in (1:Nq; threadIdx().y)
+            @loop for i in (1:Nq; threadIdx().x)
+              @unroll for fs = 1:nfilterstates
+                s_Q[i, j, k, fs] = l_Qfiltered[fs, i, j, k]
+                l_Qfiltered[fs, i, j, k] = zero(DFloat)
+              end
+            end
+          end
+        end
+      end
+    end
+
+    if filterinη
+      @synchronize
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            @unroll for n = 1:Nq
+              @unroll for fs = 1:nfilterstates
+                l_Qfiltered[fs, i, j, k] += s_filter[j, n] * s_Q[i, n, k, fs]
+              end
+            end
+          end
+        end
+      end
+
+      if filterinζ
+        @loop for k in (1:Nqk; threadIdx().z)
+          @loop for j in (1:Nq; threadIdx().y)
+            @loop for i in (1:Nq; threadIdx().x)
+              @unroll for fs = 1:nfilterstates
+                s_Q[i, j, k, fs] = l_Qfiltered[fs, i, j, k]
+                (l_Qfiltered[fs, i, j, k] = zero(DFloat))
+              end
+            end
+          end
+        end
+      end
+    end
+
+    if filterinζ
+      @synchronize
+      @loop for k in (1:Nqk; threadIdx().z)
+        @loop for j in (1:Nq; threadIdx().y)
+          @loop for i in (1:Nq; threadIdx().x)
+            @unroll for n = 1:Nq
+              @unroll for fs = 1:nfilterstates
+                l_Qfiltered[fs, i, j, k] += s_filter[k, n] * s_Q[i, j, n, fs]
+              end
+            end
+          end
+        end
+      end
+    end
+
+    # Store result
+    @loop for k in (1:Nqk; threadIdx().z)
+      @loop for j in (1:Nq; threadIdx().y)
+        @loop for i in (1:Nq; threadIdx().x)
+          ijk = i + Nq * ((j-1) + Nq * (k-1))
+          @unroll for fs = 1:nfilterstates
+            Q[ijk, states[fs], e] = l_Qfiltered[fs, i, j, k]
           end
         end
       end
     end
 
     @synchronize
-    @unroll for s = 5
-      meanQ = mean(Q[:,s,e])
-      @loop for k in (1:Nqk; threadIdx().z)
-        @loop for j in (1:Nq; threadIdx().y)
-          @loop for i in (1:Nq; threadIdx().x)
-            ijk = i + Nq * ((j-1) + Nq * (k-1))
-            MJI = vgeo[ijk, _MI, e]
-            for n = 1:Nq
-              Dni = s_Dinviscid[n, i]
-              Dnj = s_Dinviscid[n, j]
-              Nqk > 1 && (Dnk = s_Dinviscid[n, k])
-              # ξ-grid lines
-              l_res[s, i, j, k] += MJI * Dni * s_Finviscid[1, n, j, k, s]
-              # η-grid lines
-              l_res[s, i, j, k] += MJI * Dnj * s_Finviscid[2, i, n, k, s]
-              # ζ-grid lines
-              Nqk > 1 && (l_res[s, i, j, k] += MJI * Dnk * s_Finviscid[3, i, j, n, s])
-              # compute residuals and difference from mean state
-              l_res[s, i, j, k] = abs(l_res[s, i, j, k])
-              diff = abs(l_Qinviscid[s] - meanQ)
-              l_diff[s, i, j, k] = diff 
-              l_dynvis[5, i, j, k] = l_res[5, i, j, k] / l_diff[5, i, j, k] 
-            end
-          end
-        end
-      end
-      #@show((s,maximum(l_res[5,:,:,:]),maximum(l_diff[5,:,:,:,])))
-    end
   end
-  @synchronize
-  return maximum(l_dynvis[5,:,:,:])
+  nothing
 end
-

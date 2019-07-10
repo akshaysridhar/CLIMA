@@ -36,8 +36,8 @@
 # ### Preliminaries
 # Load in modules needed for solving the problem
 using MPI
-using CLIMA.Topologies
-using CLIMA.Grids
+using CLIMA.Mesh.Topologies
+using CLIMA.Mesh.Grids
 using CLIMA.DGBalanceLawDiscretizations
 using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
@@ -265,7 +265,7 @@ let
   # thus this defines the CFL restriction
   CFL = h / (2π)
   dt = CFL / polynomialorder^2
-  lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
+  lsrk = LSRK54CarpenterKennedy(spatialdiscretization, Q; dt = dt, t0 = 0)
   finaltime = 1.0
   if (parse(Bool, lowercase(get(ENV,"TRAVIS","false")))       #src
       && "Test" == get(ENV,"TRAVIS_BUILD_STAGE_NAME","")) ||  #src
@@ -346,7 +346,7 @@ let
       parse(Bool, lowercase(get(ENV,"APPVEYOR","false")))       #src
       finaltime = 2dt                                           #src
     end                                                         #src
-    lsrk = LowStorageRungeKutta(spatialdiscretization, Q; dt = dt, t0 = 0)
+    lsrk = LSRK54CarpenterKennedy(spatialdiscretization, Q; dt = dt, t0 = 0)
 
     solve!(Q, lsrk; timeend = finaltime)
 

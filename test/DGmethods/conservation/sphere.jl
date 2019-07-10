@@ -12,8 +12,8 @@ The boundary conditions are `p = q` when `dot(n, u) > 0` and
 
 using MPI
 using CLIMA
-using CLIMA.Topologies
-using CLIMA.Grids
+using CLIMA.Mesh.Topologies
+using CLIMA.Mesh.Grids
 using CLIMA.DGBalanceLawDiscretizations
 using CLIMA.DGBalanceLawDiscretizations.NumericalFluxes
 using CLIMA.MPIStateArrays
@@ -117,7 +117,7 @@ function run(mpicomm, ArrayType, N, Nhorz, Rrange, timeend, DFloat, dt)
   end
   Q = MPIStateArray(spacedisc, initialcondition!)
 
-  lsrk = LowStorageRungeKutta(spacedisc, Q; dt = dt, t0 = 0)
+  lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
 
   eng0 = norm(Q)
   sum0 = weightedsum(Q)
