@@ -684,7 +684,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     spl_thetainit= Spline1D(zinit, thetainit; k=1) #sensible T (K)
     spl_qinit    = Spline1D(zinit, qinit; k=1) #sensible T (K)
     
-
+    # Set type of filter 
+    filter_dycoms = CLIMA.Mesh.Grids.CutoffFilter(spacedisc.grid)
 
     initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x...)
     Q = MPIStateArray(spacedisc, initialcondition)
@@ -720,7 +721,18 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     postnames = ("LWP", "u", "v", "w", "_q_liq", "T")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
+
+
+
+    cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
+        DGBalanceLawDiscretizations.apply!(Q, 1:_nstate, spacedisc,
+                                           filter_dycoms;
+                                           horizontal=true,
+                                           vertical=true)
+        nothing
+      end
     step = [0]
+
     cbvtk = GenericCallbacks.EveryXSimulationSteps(2) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
         @inbounds let
@@ -757,7 +769,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
   # Initialise the integration computation. Kernels calculate this at every timestep?? 
   @timeit to "initial integral" integral_computation(spacedisc, Q, 0) 
-  @timeit to "solve" solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+  @timeit to "solve" solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk,cbfilter))
 
 
   @info @sprintf """Finished...
