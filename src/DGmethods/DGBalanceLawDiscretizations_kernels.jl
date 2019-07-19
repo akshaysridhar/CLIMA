@@ -570,7 +570,7 @@ function initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
       dx = 1/2hypot(ξx,ηx,ζx) 
       dy = 1/2hypot(ξy,ηy,ζy) 
       dz = 1/2hypot(ξz,ηz,ζz) 
-      auxstatefun!(l_aux, x, y, z, dx, dy, dz)
+      auxstatefun!(l_aux, x, y, z)
       
       @unroll for s = 1:nauxstate
         auxstate[n, s, e] = l_aux[s]

@@ -53,7 +53,7 @@ const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _�
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
 
 const _nauxstate = 15
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air = 1:_nauxstate
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_μ_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air = 1:_nauxstate
 
 if !@isdefined integration_testing
   const integration_testing =
@@ -68,8 +68,6 @@ end
 
 # Random number seed
 const seed = MersenneTwister(0)
-
-
 
 function global_max(A::MPIStateArray, states=1:size(A, 2))
   host_array = Array ∈ typeof(A).parameters
@@ -92,9 +90,9 @@ const numdims = 2
 const Npoly = 4
 
 # Define grid size 
-Δx    = 15
-Δy    = 2.5
-Δz    = 2.5
+Δx    = 5
+Δy    = 5
+Δz    = 5
 
 #
 # OR:
@@ -104,8 +102,8 @@ const Npoly = 4
 (Nex, Ney, Nez) = (5, 5, 5)
 
 # Physical domain extents 
-const (xmin, xmax) = (0,  200)
-const (ymin, ymax) = (0, 1500)
+const (xmin, xmax) = (0,  500)
+const (ymin, ymax) = (0, 2000)
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -138,8 +136,8 @@ DoFstorage = (Nex*Ney*Nez)*(Npoly+1)^numdims*(_nstate + _nviscstates + _nauxstat
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
 @parameter C_smag 0.15 "C_smag"
 # Equivalent grid-scale
-#Δ = (Δx * Δy * Δz)^(1/3)
-Δ = min(Δx, Δy)
+Δ = (Δx * Δy)^(1/2)
+#Δ = min(Δx, Δy)
 const Δsqr = Δ * Δ
 
 # -------------------------------------------------------------------------
@@ -166,7 +164,7 @@ end
 # max eigenvalue
 @inline function wavespeed(n, Q, aux, t, u, v, w)
   @inbounds begin
-    (n[1] * u + n[2] * v + n[3] * w) + aux[_a_soundspeed_air]
+    abs(n[1] * u + n[2] * v + n[3] * w) + aux[_a_soundspeed_air]
   end
 end
 
@@ -232,14 +230,14 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     SijSij = VF[_SijSij]
 
     #Dynamic eddy viscosity from Smagorinsky:
-    ν_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr
-    D_e = ν_e / Prandtl_t
+    μ_e = ρ * sqrt(2SijSij) * C_smag^2 * Δsqr
+    D_e = μ_e / Prandtl_t
 
     # Multiply stress tensor by viscosity coefficient:
-    τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22]* ν_e, VF[_τ33] * ν_e
-    τ12 = τ21 = VF[_τ12] * ν_e
-    τ13 = τ31 = VF[_τ13] * ν_e
-    τ23 = τ32 = VF[_τ23] * ν_e
+    τ11, τ22, τ33 = VF[_τ11] * μ_e, VF[_τ22]* μ_e, VF[_τ33] * μ_e
+    τ12 = τ21 = VF[_τ12] * μ_e
+    τ13 = τ31 = VF[_τ13] * μ_e
+    τ23 = τ32 = VF[_τ23] * μ_e
 
     # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
@@ -247,9 +245,9 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[1, _W] -= τ31; F[2, _W] -= τ32; F[3, _W] -= τ33
 
     # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
-    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * ν_e
-    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * ν_e
-    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * ν_e
+    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * μ_e
+    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
+    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * μ_e
 
     F[3, _E] += F_rad
     # Viscous contributions to mass flux terms
@@ -275,10 +273,10 @@ gradient_vars!(gradient_list, Q, aux, t, _...) = gradient_vars!(gradient_list, Q
   @inbounds begin
     T = aux[_a_T]
     θ = aux[_a_θ]
-    ρ, QT =Q[_ρ], Q[_QT]
+    ρ, QT = Q[_ρ], Q[_QT]
     # ordering should match states_for_gradient_transform
     gradient_list[1], gradient_list[2], gradient_list[3] = u, v, w
-    gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT, T
+    gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT/ρ, T
   end
 end
 
@@ -347,7 +345,7 @@ end
     F_0 = 70
     F_1 = 22
     α_z = 1
-    ρ_i = DFloat(1.22)
+    ρ_i = DFloat(1.13)
     D_subsidence = DFloat(3.75e-6)
     term1 = F_0 * exp(-z_to_inf) 
     term2 = F_1 * exp(-zero_to_z)
@@ -387,14 +385,14 @@ end
       sponge_type = 2
       if sponge_type == 1
           
-          top_sponge  = DFloat(0.85) * domain_top          
+          top_sponge  = DFloat(0.75) * domain_top          
           if xvert >= top_sponge
               ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
           end
           
       elseif sponge_type == 2
           
-          alpha_coe = 0.5
+          alpha_coe = 1.0
           bc_zscale = 300.0
           zd        = domain_top - bc_zscale
           
@@ -403,7 +401,7 @@ end
           # first layer: damp lee waves
           #
           ctop = 0.0
-          ct   = 0.2
+          ct   = 0.75
           if xvert >= zd
               zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
               if zid >= 0.0 && zid <= 0.5
@@ -429,7 +427,6 @@ end
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, uM, vM, wM)
     @inbounds begin
 
-        
         x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
         xvert = y
         ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
@@ -439,23 +436,23 @@ end
         QP[_U] = UM - 2 * nM[1] * UnM
         QP[_V] = VM - 2 * nM[2] * UnM
         QP[_W] = WM - 2 * nM[3] * UnM
-        #QP[_ρ] = ρM
-        #QP[_QT] = QTM
+        QP[_ρ] = ρM
+        QP[_QT] = QTM
         VFP .= VFM
 
-     #=  if xvert < 0.0001
-        #if bctype  CODE_BOTTOM_BOUNDARY  FIXME: THIS NEEDS TO BE CHANGED TO CODE-BASED B.C. FOR TOPOGRAPHY
-            #Dirichelt on T:
-            SST    = 292.5            
-            q_tot  = QP[_QT]/QP[_ρ]
-            q_liq  = auxM[_a_q_liq]
-            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
-            e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
-            e_pot  = grav*xvert
-            E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
-            QP[_E] = E
+        if xvert < 0.0001
+          #if bctype  CODE_BOTTOM_BOUNDARY  FIXME: THIS NEEDS TO BE CHANGED TO CODE-BASED B.C. FOR TOPOGRAPHY
+          #Dirichlet on T:
+          SST    = 292.5            
+          q_tot  = QP[_QT]/QP[_ρ]
+          q_liq  = auxM[_a_q_liq]
+          e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
+          e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
+          e_pot  = grav*xvert
+          E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
+          QP[_E] = E
         end
-        =#
+     
         nothing
     end
 end
@@ -501,7 +498,6 @@ const Ω = Omega
         U = Q[_U]
         V = Q[_V]        
         W = Q[_W]
-        
         S[_U] -= f_coriolis * (U - ρ*u_geostrophic)
         S[_V] -= f_coriolis * (V - ρ*v_geostrophic)
     end
@@ -546,7 +542,6 @@ function preodefun!(disc, Q, t)
       T = air_temperature(TS)
       P = air_pressure(TS) # Test with dry atmosphere
       q_liq = PhasePartition(TS).liq
-
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
@@ -589,34 +584,22 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     xvert  = y
     P      = spl_pinit(xvert)     #P
     θ_l    = spl_thetainit(xvert) #θ_l
-    q_tot  = spl_qinit(xvert)     #qtot
+    q_tot  = 0.0 #spl_qinit(xvert)     #qtot
     T      = spl_tinit(xvert)    #T
     
-    zi = 840.0
-    #if ( xvert <= zi)
-    #    θ_lx   = 289.0;
-    #    q_totx = 9.0e-3; #specific humidity
-    #else
-    #    θ_lx   = 297.5 + (xvert - zi)^(1/3);
-    #    q_totx = 1.5e-3; #kg/kg  specific humidity --> approx. to mixing ratio is ok
-    #end  
+    zi = 800.0
     
     q_liq = 0.0
-    if xvert >= 600.0 && xvert <= 840.0
-        q_liq = (xvert - 600)*0.00045/200.0 
+    if xvert >= 600.0 && xvert <= zi
+        q_liq = 0.0 #(xvert - 600)*0.00045/200.0 
     end
-    #if ( xvert > 10 && xvert <= 200)
-    #    θ_l   += randnum1 * θ_l
-    #    q_tot += randnum2 * q_tot
-    #end
     
     q_partition = PhasePartition(q_tot, q_liq, 0.0)
     e_int  = internal_energy(T, q_partition)
     
     ρ  = air_density(T, P, q_partition)
 
-    u, v, w = 7.0, 0.0, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
-    #u, v, w = 7.0, -5.5, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
+    u, v, w = 7.0, 0.0, 0.0 #geostrophic. 
     
     e_kin = (u^2 + v^2 + w^2) / 2
     e_pot = grav * xvert
@@ -625,7 +608,6 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     U, V, W = ρ * u, ρ * v, ρ * w
     
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
-    #try the filter
 end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
@@ -723,16 +705,17 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     postnames = ("LWP", "u", "v", "w", "_q_liq", "T")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
-    cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
-        DGBalanceLawDiscretizations.apply!(Q, 1:_nstate, spacedisc,
-                                           filter_dycoms;
-                                           horizontal=true,
-                                           vertical=true)
-        nothing
-    end
+    #cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
+    #    DGBalanceLawDiscretizations.apply!(Q, 1:_nstate, spacedisc,
+    #                                       filter_dycoms;
+    #                                       horizontal=true,
+    #                                       vertical=true)
+    #    nothing
+    #end
      
+    mkpath("/central/scratch/asridhar/vtk-dry-dycoms-test")
     step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(3000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(12500) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
         @inbounds let
           u, v, w = preflux(Q, QV, aux)
@@ -745,7 +728,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
       end
 
-      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-visc-2d-dt0dot01/dy_%dD_mpirank%04d_step%04d", dim,
+      outprefix = @sprintf("/central/scratch/asridhar/vtk-dry-dycoms-test/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,
@@ -788,7 +771,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.00125
+  dt = 0.0008
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
