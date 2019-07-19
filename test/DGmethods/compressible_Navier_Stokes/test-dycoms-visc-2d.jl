@@ -90,9 +90,9 @@ const numdims = 2
 const Npoly = 4
 
 # Define grid size 
-Δx    = 5
-Δy    = 5
-Δz    = 5
+Δx    = 2.5
+Δy    = 2.5
+Δz    = 2.5
 
 #
 # OR:
@@ -416,12 +416,10 @@ end
           bc_zscale = 500.0
           zd        = domain_top - bc_zscale
           
-          #
           # top damping
           # first layer: damp lee waves
-          #
           ctop = 0.0
-          ct   = 0.02
+          ct   = 0.75
           if xvert >= zd
               ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
           end
@@ -596,14 +594,14 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     xvert  = y
     P      = spl_pinit(xvert)     #P
     θ_l    = spl_thetainit(xvert) #θ_l
-    q_tot  = 0.0 #spl_qinit(xvert)     #qtot
+    q_tot  = spl_qinit(xvert)     #qtot
     T      = spl_tinit(xvert)    #T
     
-    zi = 800.0
+    zi = 840.0
     
     q_liq = 0.0
     if xvert >= 600.0 && xvert <= zi
-        q_liq = 0.0 #(xvert - 600)*0.00045/200.0 
+        q_liq = (xvert - 600)*0.00045/240.0 
     end
     
     q_partition = PhasePartition(q_tot, q_liq, 0.0)
@@ -727,7 +725,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     #    nothing
     #end
      
-    mkpath("/central/scratch/asridhar/vtk-dry-dycoms-test")
+    mkpath("/central/scratch/asridhar/vtk-HR-moist-dycoms-test")
     step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(12500) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
@@ -742,7 +740,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
       end
 
-      outprefix = @sprintf("/central/scratch/asridhar/vtk-dry-dycoms-test/dy_%dD_mpirank%04d_step%04d", dim,
+      outprefix = @sprintf("/central/scratch/asridhar/vtk-HR-moist-dycoms-test/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,
@@ -785,7 +783,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.0008
+  dt = 0.0005
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
