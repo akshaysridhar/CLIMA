@@ -382,7 +382,7 @@ end
 
    
       #Vertical sponge:
-      sponge_type = 2
+      sponge_type = 3
       if sponge_type == 1
           
           top_sponge  = DFloat(0.75) * domain_top          
@@ -392,7 +392,6 @@ end
           
       elseif sponge_type == 2
           
-          alpha_coe = 1.0
           bc_zscale = 300.0
           zd        = domain_top - bc_zscale
           
@@ -405,19 +404,32 @@ end
           if xvert >= zd
               zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
               if zid >= 0.0 && zid <= 0.5
-                  abstaud = alpha_coe*(1.0 - cos(zid*pi))
+                  ctop = ct*(1.0 - cos(zid*pi))
 
               else
-                  abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
-
+                  ctop = ct*( 1.0 + ((zid - 0.5)*pi) )
               end
-              ctop = ct*abstaud
+          end
+
+      elseif sponge_type == 3
+          
+          bc_zscale = 500.0
+          zd        = domain_top - bc_zscale
+          
+          #
+          # top damping
+          # first layer: damp lee waves
+          #
+          ctop = 0.0
+          ct   = 0.02
+          if xvert >= zd
+              ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
           end
       end
-
-    beta  = 1 - (1 - ctop) #*(1.0 - csleft)*(1.0 - csright)*(1.0 - csfront)*(1.0 - csback)
-    beta  = min(beta, 1)
-    aux[_a_sponge] = beta
+      
+      beta  = 1 - (1 - ctop) #*(1.0 - csleft)*(1.0 - csright)*(1.0 - csfront)*(1.0 - csback)
+      beta  = min(beta, 1)
+      aux[_a_sponge] = beta
   end
 end
 
