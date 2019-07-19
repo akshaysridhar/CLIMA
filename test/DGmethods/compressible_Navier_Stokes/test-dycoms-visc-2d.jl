@@ -612,8 +612,10 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-  brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
+    # = grid_stretching_1d(ymin, ymax, Ne[2], "dycoms")
+    
+    brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
+                  range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
     
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
