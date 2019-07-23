@@ -103,7 +103,7 @@ function diffusive!(::EquilMoist, diffusive::Vars, ∇transform::Grad, state::Va
   # FIXME
   I_vap = cv_v * (T - T_0) + e_int_v0
   I_liq = cv_l * (T - T_0)
-  I_ice = cv_v * (T - T_0) - e_int_i0
+  I_ice = cv_i * (T - T_0) - e_int_i0
   e_kin = 0.5 * sum(abs2,u)
   e_pot = grav * aux.coord.z
   e_tot_vap = e_kin + e_pot + I_vap
