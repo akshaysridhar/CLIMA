@@ -45,8 +45,8 @@ const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 # Viscous state labels
-const _nviscstates = 22
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _qlx, _qly, _qlz, _qvx, _qvy, _qvz = 1:_nviscstates
+const _nviscstates = 23
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _qlx, _qly, _qlz, _qvx, _qvy, _qvz, _ν_e = 1:_nviscstates
 
 # Gradient state labels
 # Gradient state labels
@@ -243,7 +243,8 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     SijSij = VF[_SijSij]
 
     #Dynamic eddy viscosity from Smagorinsky:
-    μ_e = ρ * sqrt(2SijSij) * C_smag^2 * Δsqr
+    #μ_e = ρ * sqrt(2SijSij) * C_smag^2 * Δsqr
+    μ_e = VF[_ν_e] * ρ
     D_e = μ_e / Prandtl_t
 
     #ql_fx = D_e * vqlx * e_tot_liq
@@ -346,11 +347,34 @@ end
     S13 = (dudz + dwdx) / 2
     S23 = (dvdz + dwdy) / 2
     # --------------------------------------------
-    # SMAGORINSKY COEFFICIENT COMPONENTS
+    # VREMAN COEFFICIENT COMPONENTS
     # --------------------------------------------
     SijSij = S11^2 + S22^2 + S33^2 + 2S12^2 + 2S13^2 + 2S23^2
+    
+    Dij = SMatrix{3,3}(dudx, dudy, dudz, 
+                       dvdx, dvdy, dvdz,
+                       dwdx, dwdy, dwdz)
+    
+    DF = eltype(SijSij)
+    αij = MMatrix{3,3}(DF(0) ,DF(0), DF(0),
+                       DF(0), DF(0), DF(0),
+                       DF(0), DF(0), DF(0))
 
-    #--------------------------------------------
+    for ii = 1:3
+      for jj = 1:3
+        αij[ii,jj] += Dij[jj,ii] 
+      end
+    end
+    
+    DISS = sum(Dij .^ 2)
+    βij = similar(αij)
+    βij = Δsqr .* αij
+    
+    Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
+    Bβ = max(0, Bβ)
+    ν_e = (C_smag^2 * 2.5) * sqrt(Bβ/(DISS+1e-16))
+    VF[_ν_e] = ν_e
+    # -----------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
     VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
@@ -590,7 +614,7 @@ function preodefun!(disc, Q, t)
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
-      R[_a_q_vap] = 1-q_tot-q_liq
+      R[_a_q_vap] = q_tot-q_liq
       R[_a_soundspeed_air] = soundspeed_air(TS)
       R[_a_θ] = virtual_pottemp(TS)
     end
@@ -812,7 +836,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.0005
+  dt = 0.001
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
