@@ -36,7 +36,7 @@ end
 # and consider the dry equation set to be the same as the moist equations but
 # with total specific humidity = 0. 
 using CLIMA.MoistThermodynamics
-using CLIMA.PlanetParameters
+using CLIMA.PlanetParameters: R_d, cp_d, grav, cv_d, MSLP, T_0, Omega
 
 # State labels 
 const _nstate = 6
@@ -45,15 +45,15 @@ const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 # Viscous state labels
-const _nviscstates = 23
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _qlx, _qly, _qlz, _qvx, _qvy, _qvz, _ν_e = 1:_nviscstates
+const _nviscstates = 16
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij = 1:_nviscstates
 
 # Gradient state labels
 # Gradient state labels
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
 
-const _nauxstate = 16
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_μ_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air, _a_q_vap = 1:_nauxstate
+const _nauxstate = 15
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air = 1:_nauxstate
 
 if !@isdefined integration_testing
   const integration_testing =
@@ -68,6 +68,40 @@ end
 
 # Random number seed
 const seed = MersenneTwister(0)
+
+
+#------------------------------------------------------------------------------------
+# START functions from AS https://github.com/asraero/CLIMA/blob/as-sgsturbulence/src/Atmos/Parameterizations/SubgridScaleTurbulence/SubgridScaleTurbulence.jl
+#------------------------------------------------------------------------------------
+function anisotropic_lengthscale_3D(Δ1, Δ2, Δ3)
+    # Arguments are the lengthscales in each of the coordinate directions
+    # For a cube: this is the edge length
+    # For a sphere: the arc length provides one approximation of many
+    Δ = cbrt(Δ1 * Δ2 * Δ3)
+    Δ_sorted = sort([Δ1, Δ2, Δ3])  
+    # Get smallest two dimensions
+    Δ_s1 = Δ_sorted[1]
+    Δ_s2 = Δ_sorted[2]
+    a1 = Δ_s1 / max(Δ1,Δ2,Δ3) 
+    a2 = Δ_s2 / max(Δ1,Δ2,Δ3) 
+    # In 3D we compute a scaling factor for anisotropic grids
+    f_anisotropic = 1 + 2/27 * ((log(a1))^2 - log(a1)*log(a2) + (log(a2))^2)
+    Δ = Δ*f_anisotropic
+    Δsqr = Δ * Δ
+    return Δsqr
+end
+
+
+function buoyancy_correction(normSij, θv, dθvdz)
+    # Brunt-Vaisala frequency
+    inv_Pr_t = 3
+    N2 = grav / θv * dθvdz 
+    # Richardson number
+    Richardson = N2 / (2 * normSij + eps(normSij))
+    # Buoyancy correction factor
+    buoyancy_factor = N2 <=0 ? 1 : sqrt(max(0.0, 1 - inv_Pr_t * Richardson))
+    return buoyancy_factor
+end
 
 function global_max(A::MPIStateArray, states=1:size(A, 2))
   host_array = Array ∈ typeof(A).parameters
@@ -84,15 +118,19 @@ function global_mean(A::MPIStateArray, states=1:size(A,2))
   localsum = sum(view(h_A, :, states, A.realelems)) 
   MPI.Allreduce([localsum], MPI.SUM, A.mpicomm)[1] / numpts 
 end
+#------------------------------------------------------------------------------------
+# END functions from AS https://github.com/asraero/CLIMA/blob/as-sgsturbulence/src/Atmos/Parameterizations/SubgridScaleTurbulence/SubgridScaleTurbulence.jl
+#------------------------------------------------------------------------------------
+
 
 # User Input
-const numdims = 2
+const numdims = 3
 const Npoly = 4
 
 # Define grid size 
-Δx    = 40
+Δx    = 10
 Δy    = 10
-Δz    = 2.5
+Δz    = 5
 
 #
 # OR:
@@ -102,8 +140,8 @@ const Npoly = 4
 (Nex, Ney, Nez) = (5, 5, 5)
 
 # Physical domain extents 
-const (xmin, xmax) = (0, 1000)
-const (ymin, ymax) = (0, 2000)
+const (xmin, xmax) = (0,  820)
+const (ymin, ymax) = (0,  820)
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -133,12 +171,13 @@ DoFstorage = (Nex*Ney*Nez)*(Npoly+1)^numdims*(_nstate + _nviscstates + _nauxstat
              (Nex*Ney*Nez)*(Npoly+1)^(numdims-1)*2^numdims*(CLIMA.Mesh.Grids._nsgeo)
 
 
+
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-@parameter C_smag 0.23 "C_smag"
+@parameter C_smag 0.15 "C_smag"
 # Equivalent grid-scale
-Δ = (Δx * Δy)^(1/2)
-#Δ = min(Δx, Δy)
-const Δsqr = Δx^2
+#Δ = (Δx * Δy * Δz)^(1/3)
+#const Δsqr = Δ * Δ
+const Δsqr = anisotropic_lengthscale_3D(Δx, Δy, Δz)
 
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
@@ -209,10 +248,10 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     D_subsidence = 3.75e-6
     ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
     P = aux[_a_P]
-    xvert = aux[_a_y]
+    θv = aux[_a_θ]
+    xvert = aux[_a_z]
     v -= D_subsidence * xvert
     V = v*ρ
-
     # Inviscid contributions
     F[1, _ρ],  F[2, _ρ],  F[3, _ρ]  = U          , V          , W
     F[1, _U],  F[2, _U],  F[3, _U]  = u * U  + P , v * U      , w * U
@@ -221,51 +260,26 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[1, _E],  F[2, _E],  F[3, _E]  = u * (E + P), v * (E + P), w * (E + P)
     F[1, _QT], F[2, _QT], F[3, _QT] = u * QT     , v * QT     , w * QT
 
-    T = aux[_a_T]
-    I_vap = cv_v * (T - T_0) + e_int_v0
-    I_liq = cv_l * (T - T_0)
-    I_ice = cv_i * (T - T_0) - e_int_i0
-    e_kin = 0.5 * (u^2 +v^2)
-    e_pot = grav * xvert
-    e_tot_vap = e_kin + e_pot + I_vap
-    e_tot_liq = e_kin + e_pot + I_liq
-    e_tot_ice = e_kin + e_pot + I_ice
-    
     #Derivative of T and Q:
-    vqx, vqy, vqz       = VF[_qx], VF[_qy], VF[_qz]
-    vqlx, vqly, vqlz    = VF[_qlx], VF[_qly], VF[_qlz]
-    vqvx, vqvy, vqvz    = VF[_qvx], VF[_qvy], VF[_qvz]
-    vTx, vTy, vTz       = VF[_Tx], VF[_Ty], VF[_Tz]
+    vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
+    vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
+    vθx, vθy, vθz = VF[_θx], VF[_θy], VF[_θz]
 
     # Radiation contribution
-    F_rad = radiation(aux)
+    F_rad = ρ * radiation(aux)
 
     SijSij = VF[_SijSij]
 
     #Dynamic eddy viscosity from Smagorinsky:
-    #μ_e = ρ * sqrt(2SijSij) * C_smag^2 * Δsqr
-    μ_e = VF[_ν_e] * ρ
-    D_e = μ_e / Prandtl_t
+    bf  = buoyancy_correction(SijSij, θv, vθz)
+    ν_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr * bf
+    D_e = ν_e / Prandtl_t
 
-    #ql_fx = D_e * vqlx * e_tot_liq
-    #ql_fy = D_e * vqly * e_tot_liq
-    #ql_fz = D_e * vqlz * e_tot_liq
-    #qv_fx = D_e * vqvx * (e_tot_vap + R_v * T)
-    #qv_fy = D_e * vqvy * (e_tot_vap + R_v * T)
-    #qv_fz = D_e * vqvz * (e_tot_vap + R_v * T)
-
-    ql_fx = 0.0 
-    ql_fy = 0.0 
-    ql_fz = 0.0 
-    qv_fx = 0.0 
-    qv_fy = 0.0 
-    qv_fz = 0.0 
-    
     # Multiply stress tensor by viscosity coefficient:
-    τ11, τ22, τ33 = VF[_τ11] * μ_e, VF[_τ22]* μ_e, VF[_τ33] * μ_e
-    τ12 = τ21 = VF[_τ12] * μ_e
-    τ13 = τ31 = VF[_τ13] * μ_e
-    τ23 = τ32 = VF[_τ23] * μ_e
+    τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22]* ν_e, VF[_τ33] * ν_e
+    τ12 = τ21 = VF[_τ12] * ν_e
+    τ13 = τ31 = VF[_τ13] * ν_e
+    τ23 = τ32 = VF[_τ23] * ν_e
 
     # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
     F[1, _U] -= τ11; F[2, _U] -= τ12; F[3, _U] -= τ13
@@ -273,25 +287,18 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     F[1, _W] -= τ31; F[2, _W] -= τ32; F[3, _W] -= τ33
 
     # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
-    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * μ_e
-    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
-    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * μ_e
+    F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * ν_e
+    F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * ν_e
+    F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * ν_e
 
     F[3, _E] += F_rad
     # Viscous contributions to mass flux terms
-    F[1, _ρ]  -=  vqx * D_e 
+    F[1, _ρ]  -=  vqx * D_e
     F[2, _ρ]  -=  vqy * D_e
     F[3, _ρ]  -=  vqz * D_e
     F[1, _QT] -=  vqx * D_e
     F[2, _QT] -=  vqy * D_e
     F[3, _QT] -=  vqz * D_e
-    
-    F[1, _E] -=  ql_fx* D_e
-    F[1, _E] -=  ql_fy* D_e
-    F[2, _E] -=  ql_fz* D_e
-    F[3, _E] -=  qv_fx* D_e
-    F[2, _E] -=  qv_fy* D_e
-    F[3, _E] -=  qv_fz* D_e
   end
 end
 
@@ -302,18 +309,16 @@ end
 #md # in some cases. 
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
-const _ngradstates = 8
+const _ngradstates = 6
 gradient_vars!(gradient_list, Q, aux, t, _...) = gradient_vars!(gradient_list, Q, aux, t, preflux(Q,~,aux)...)
 @inline function gradient_vars!(gradient_list, Q, aux, t, u, v, w)
   @inbounds begin
     T = aux[_a_T]
     θ = aux[_a_θ]
-    ρ, QT = Q[_ρ], Q[_QT]
-    q_vap, q_liq = aux[_a_q_vap], aux[_a_q_liq]
+    ρ, QT =Q[_ρ], Q[_QT]
     # ordering should match states_for_gradient_transform
     gradient_list[1], gradient_list[2], gradient_list[3] = u, v, w
-    gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT/ρ, T
-    gradient_list[5], gradient_list[6], = q_vap, q_liq
+    gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT, T
   end
 end
 
@@ -333,8 +338,6 @@ end
     dθdx, dθdy, dθdz = grad_mat[1, 4], grad_mat[2, 4], grad_mat[3, 4]
     dqdx, dqdy, dqdz = grad_mat[1, 5], grad_mat[2, 5], grad_mat[3, 5]
     dTdx, dTdy, dTdz = grad_mat[1, 6], grad_mat[2, 6], grad_mat[3, 6]
-    dqvdx, dqvdy, dqvdz = grad_mat[1,7], grad_mat[2, 7], grad_mat[3, 7]
-    dqldx, dqldy, dqldz = grad_mat[1,8], grad_mat[2, 8], grad_mat[3, 8]
     # virtual potential temperature gradient: for richardson calculation
     # strains
     # --------------------------------------------
@@ -347,34 +350,12 @@ end
     S13 = (dudz + dwdx) / 2
     S23 = (dvdz + dwdy) / 2
     # --------------------------------------------
-    # VREMAN COEFFICIENT COMPONENTS
+    # SMAGORINSKY COEFFICIENT COMPONENTS
     # --------------------------------------------
+    # FIXME: Grab functions from module SubgridScaleTurbulence 
     SijSij = S11^2 + S22^2 + S33^2 + 2S12^2 + 2S13^2 + 2S23^2
-    
-    Dij = SMatrix{3,3}(dudx, dudy, dudz, 
-                       dvdx, dvdy, dvdz,
-                       dwdx, dwdy, dwdz)
-    
-    DF = eltype(SijSij)
-    αij = MMatrix{3,3}(DF(0) ,DF(0), DF(0),
-                       DF(0), DF(0), DF(0),
-                       DF(0), DF(0), DF(0))
 
-    for ii = 1:3
-      for jj = 1:3
-        αij[ii,jj] += Dij[jj,ii] 
-      end
-    end
-    
-    DISS = sum(Dij .^ 2)
-    βij = similar(αij)
-    βij = Δsqr .* αij
-    
-    Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
-    Bβ = max(0, Bβ)
-    ν_e = (C_smag^2 * 2.5) * sqrt(Bβ/(DISS+1e-16))
-    VF[_ν_e] = ν_e
-    # -----------------------------------------
+    #--------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
     VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
@@ -384,9 +365,8 @@ end
     VF[_τ13] = 2 * S13
     VF[_τ23] = 2 * S23
 
+    # TODO: Viscous stresse come from SubgridScaleTurbulence module
     VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
-    VF[_qvx], VF[_qvy], VF[_qvz] = dqvdx, dqvdy, dqvdz
-    VF[_qlx], VF[_qly], VF[_qlz] = dqldx, dqldy, dqldz
     VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
     VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
     VF[_SijSij] = SijSij
@@ -394,23 +374,25 @@ end
 end
 # -------------------------------------------------------------------------
 @inline function radiation(aux)
-  @inbounds begin
+    @inbounds begin
+        
     DFloat = eltype(aux)
-    xvert = aux[_a_y]     
+    xvert = aux[_a_z]
     zero_to_z = aux[_a_02z]
     z_to_inf = aux[_a_z2inf]
+    z = xvert
     z_i = 840  # Start with constant inversion height of 840 meters then build in check based on q_tot
-    Δz_i = max(xvert - z_i, zero(DFloat))
+    Δz_i = max(z - z_i, zero(DFloat))
     # Constants
     F_0 = 70
     F_1 = 22
     α_z = 1
-    ρ_i = DFloat(1.13)
+    ρ_i = DFloat(1.22)
     D_subsidence = DFloat(3.75e-6)
-    cloud_top_cooling = F_0 * exp(-z_to_inf) 
-    cloud_base_warming = F_1 * exp(-zero_to_z)
-    troposphere_cooling = ρ_i * cp_d * D_subsidence * α_z * (DFloat(0.25) * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
-    F_rad = cloud_top_cooling + cloud_base_warming + troposphere_cooling  
+    term1 = F_0 * exp(-z_to_inf) 
+    term2 = F_1 * exp(-zero_to_z)
+    term3 = ρ_i * cp_d * D_subsidence * α_z * (DFloat(0.25) * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
+    F_rad = term1 + term2 + term3  
   end
 end
 
@@ -425,8 +407,8 @@ end
 @inline function auxiliary_state_initialization!(aux, x, y, z)
   @inbounds begin
     DFloat = eltype(aux)
-    xvert = y
-    aux[_a_y] = xvert
+    xvert = z
+    aux[_a_z] = xvert
 
     #Sponge 
     ctop    = zero(DFloat)
@@ -437,15 +419,14 @@ end
   
     domain_bott  = 0
     domain_top   = ymax
-
     #END User modification on domain parameters.
 
    
       #Vertical sponge:
-      sponge_type = 3
+      sponge_type = 2
       if sponge_type == 1
           
-          top_sponge  = DFloat(0.75) * domain_top          
+          top_sponge  = DFloat(0.85) * domain_top          
           if xvert >= top_sponge
               ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
           end
@@ -460,7 +441,7 @@ end
           # first layer: damp lee waves
           #
           ctop = 0.0
-          ct   = 0.75
+          ct   = 0.2
           if xvert >= zd
               zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
               if zid >= 0.0 && zid <= 0.5
@@ -476,10 +457,12 @@ end
           bc_zscale = 500.0
           zd        = domain_top - bc_zscale
           
+          #
           # top damping
           # first layer: damp lee waves
+          #
           ctop = 0.0
-          ct   = 0.75
+          ct   = 0.02
           if xvert >= zd
               ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
           end
@@ -497,8 +480,9 @@ end
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, uM, vM, wM)
     @inbounds begin
 
+        
         x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
-        xvert = y
+        xvert = z
         ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
         # No flux boundary conditions
         # No shear on walls (free-slip condition)
@@ -506,23 +490,23 @@ end
         QP[_U] = UM - 2 * nM[1] * UnM
         QP[_V] = VM - 2 * nM[2] * UnM
         QP[_W] = WM - 2 * nM[3] * UnM
-        QP[_ρ] = ρM
-        QP[_QT] = QTM
-        VFP .= 0
+        #QP[_ρ] = ρM
+        #QP[_QT] = QTM
+        VFP .= VFM
 
         if xvert < 0.0001
-          #if bctype  CODE_BOTTOM_BOUNDARY  FIXME: THIS NEEDS TO BE CHANGED TO CODE-BASED B.C. FOR TOPOGRAPHY
-          #Dirichlet on T:
-          SST    = 292.5            
-          q_tot  = QP[_QT]/QP[_ρ]
-          q_liq  = auxM[_a_q_liq]
-          e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
-          e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
-          e_pot  = grav*xvert
-          E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
-          QP[_E] = E
+            #if bctype  CODE_BOTTOM_BOUNDARY  FIXME: THIS NEEDS TO BE CHANGED TO CODE-BASED B.C. FOR TOPOGRAPHY
+            #Dirichelt on T:
+            SST    = 292.5            
+            q_tot  = QP[_QT]/QP[_ρ]
+            q_liq  = auxM[_a_q_liq]
+            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
+            e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
+            e_pot  = grav*xvert
+            E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
+            QP[_E] = E
         end
-     
+        
         nothing
     end
 end
@@ -547,10 +531,11 @@ end
   # Initialise the final block source term 
   S .= 0
 
+  # Typically these sources are imported from modules
   @inbounds begin
     source_geopot!(S, Q, aux, t)
     source_sponge!(S, Q, aux, t)
-    source_geostrophic!(S, Q, aux, t)
+    #source_geostrophic!(S, Q, aux, t)
   end
 end
 
@@ -567,8 +552,9 @@ const Ω = Omega
         U = Q[_U]
         V = Q[_V]        
         W = Q[_W]
+        
         S[_U] -= f_coriolis * (U - ρ*u_geostrophic)
-        #S[_W] -= f_coriolis * (V - ρ*v_geostrophic)
+        S[_V] -= f_coriolis * (V - ρ*v_geostrophic)
     end
 end
 
@@ -577,7 +563,7 @@ end
     U, V, W  = Q[_U], Q[_V], Q[_W]
     beta     = aux[_a_sponge]
     #S[_U] -= beta * U
-    S[_V] -= beta * V
+    #S[_V] -= beta * V
     S[_W] -= beta * W
   end
 end
@@ -604,17 +590,17 @@ function preodefun!(disc, Q, t)
   DGBalanceLawDiscretizations.dof_iteration!(disc.auxstate, disc, Q) do R, Q, QV, aux
     @inbounds let
       ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-      xvert = aux[_a_y]
+      xvert = aux[_a_z]
       e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * xvert) / ρ
       q_tot = QT / ρ
       TS = PhaseEquil(e_int, q_tot, ρ)
       T = air_temperature(TS)
-      P = air_pressure(TS)
+      P = air_pressure(TS) # Test with dry atmosphere
       q_liq = PhasePartition(TS).liq
+
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
-      R[_a_q_vap] = q_tot-q_liq
       R[_a_soundspeed_air] = soundspeed_air(TS)
       R[_a_θ] = virtual_pottemp(TS)
     end
@@ -651,17 +637,32 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     randnum1   = rand(seed, DFloat) / 100
     randnum2   = rand(seed, DFloat) / 100
     
-    xvert  = y
+    xvert  = z
     P      = spl_pinit(xvert)     #P
+    T      = spl_tinit(xvert)    #T    
     θ_l    = spl_thetainit(xvert) #θ_l
     q_tot  = spl_qinit(xvert)     #qtot
-    T      = spl_tinit(xvert)    #T
     
     zi = 840.0
+    #if ( xvert <= zi)
+    #    θ_l   = 289.0;
+    #    q_tot = 9.0e-3; #specific humidity
+    #else
+    #    θ_l   = 297.5 + (xvert - zi)^(1/3);
+    #    q_tot = 1.5e-3; #kg/kg  specific humidity --> approx. to mixing ratio is ok
+    #end 
     
     q_liq = 0.0
-    if xvert >= 600.0 && xvert <= zi
-        q_liq = (xvert - 600)*0.00045/240.0 
+    q_liq_max = 0.00045
+    z1_qliq = 600.0
+    z2_qliq = zi
+    Δz_qliq = abs(z2_qliq - z1_qliq)
+    if xvert >= z1_qliq && xvert <= z2_qliq
+        q_liq = (xvert - z1_qliq)*q_liq_max/Δz_qliq
+    end
+    if ( xvert > 100 && xvert <= 200)
+        θ_l   += randnum1 * θ_l
+        q_tot += randnum2 * q_tot
     end
     
     q_partition = PhasePartition(q_tot, q_liq, 0.0)
@@ -669,7 +670,7 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     
     ρ  = air_density(T, P, q_partition)
 
-    u, v, w = 7.0, 0.0, 0.0 #geostrophic. 
+    u, v, w = 7.0, -5.5, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
     
     e_kin = (u^2 + v^2 + w^2) / 2
     e_pot = grav * xvert
@@ -678,6 +679,7 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     U, V, W = ρ * u, ρ * v, ρ * w
     
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
+    #try the filter
 end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
@@ -685,11 +687,12 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # = grid_stretching_1d(ymin, ymax, Ne[2], "dycoms")
     
     brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                  range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)))
+                  range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)),
+                  range(DFloat(zmin), length=Ne[3]+1, DFloat(zmax)))
     
   # User defined periodicity in the topl assignment
   # brickrange defines the domain extents
-  @timeit to "Topo init" topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,false))
+  @timeit to "Topo init" topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,true,false))
 
   @timeit to "Grid init" grid = DiscontinuousSpectralElementGrid(topl,
                                                                  FloatType = DFloat,
@@ -772,14 +775,21 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
       end
     end
       
-    npoststates = 7
-    _o_P, _o_LWP, _o_u, _o_v, _o_w, _o_q_liq, _o_T = 1:npoststates
-    postnames = ("P","LWP", "u", "v", "w", "_q_liq", "T")
+    npoststates = 6
+    _o_LWP, _o_u, _o_v, _o_w, _o_q_liq, _o_T = 1:npoststates
+    postnames = ("LWP", "u", "v", "w", "_q_liq", "T")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
+
+    cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
+        DGBalanceLawDiscretizations.apply!(Q, 1:_nstate, spacedisc,
+                                           filter_dycoms;
+                                           horizontal=true,
+                                           vertical=true)
+        nothing
+    end
      
-    mkpath("/central/scratch/asridhar/vtk-dycoms-test")
     step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(12500) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
         @inbounds let
           u, v, w = preflux(Q, QV, aux)
@@ -789,11 +799,10 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
           R[_o_w] = w
           R[_o_q_liq] = aux[_a_q_liq]
           R[_o_T] = aux[_a_T]
-          R[_o_P] = aux[_a_P]
         end
       end
 
-      outprefix = @sprintf("/central/scratch/asridhar/vtk-dycoms-test/dy_%dD_mpirank%04d_step%04d", dim,
+      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-visc-3d/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,
@@ -835,8 +844,8 @@ let
   # User defined timestep estimate
   # User defined simulation end time
   # User defined polynomial order 
-  numelem = (Nex, Ney)
-  dt = 0.001
+  numelem = (Nex, Ney, Nez)
+  dt = 0.00125
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
