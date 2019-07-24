@@ -108,8 +108,8 @@ const _a_x, _a_y, _a_z, _a_dx, _a_dy, _a_Δsqr = 1:_nauxstate
         aux[_a_x] = x
         aux[_a_y] = y
         aux[_a_z] = z
-        aux[_a_dx] = dx
-        aux[_a_dy] = dy
+        aux[_a_dx] = Δx
+        aux[_a_dy] = Δy
         aux[_a_Δsqr] = SubgridScaleTurbulence.anisotropic_lengthscale_2D(aux[_a_dx],aux[_a_dy]) 
     end
 end

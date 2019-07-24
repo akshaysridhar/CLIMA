@@ -254,12 +254,12 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     #qv_fy = D_e * vqvy * (e_tot_vap + R_v * T)
     #qv_fz = D_e * vqvz * (e_tot_vap + R_v * T)
 
-    ql_fx = 0.0 
-    ql_fy = 0.0 
-    ql_fz = 0.0 
-    qv_fx = 0.0 
-    qv_fy = 0.0 
-    qv_fz = 0.0 
+    #ql_fx = 0.0 
+    #ql_fy = 0.0 
+    #ql_fz = 0.0 
+    #qv_fx = 0.0 
+    #qv_fy = 0.0 
+    #qv_fz = 0.0 
     
     # Multiply stress tensor by viscosity coefficient:
     τ11, τ22, τ33 = VF[_τ11] * μ_e, VF[_τ22]* μ_e, VF[_τ33] * μ_e
@@ -313,7 +313,7 @@ gradient_vars!(gradient_list, Q, aux, t, _...) = gradient_vars!(gradient_list, Q
     # ordering should match states_for_gradient_transform
     gradient_list[1], gradient_list[2], gradient_list[3] = u, v, w
     gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT/ρ, T
-    gradient_list[5], gradient_list[6], = q_vap, q_liq
+    gradient_list[7], gradient_list[8], = q_vap, q_liq
   end
 end
 

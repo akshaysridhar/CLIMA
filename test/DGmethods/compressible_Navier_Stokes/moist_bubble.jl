@@ -451,23 +451,9 @@ end
         QP[_U] = UM - 2 * nM[1] * UnM
         QP[_V] = VM - 2 * nM[2] * UnM
         QP[_W] = WM - 2 * nM[3] * UnM
-        #QP[_ρ] = ρM
-        #QP[_QT] = QTM
+        QP[_ρ] = ρM
+        QP[_QT] = QTM
         VFP .= VFM
-
-     #=  if xvert < 0.0001
-        #if bctype  CODE_BOTTOM_BOUNDARY  FIXME: THIS NEEDS TO BE CHANGED TO CODE-BASED B.C. FOR TOPOGRAPHY
-            #Dirichelt on T:
-            SST    = 292.5            
-            q_tot  = QP[_QT]/QP[_ρ]
-            q_liq  = auxM[_a_q_liq]
-            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
-            e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
-            e_pot  = grav*xvert
-            E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
-            QP[_E] = E
-        end
-        =#
         nothing
     end
 end
@@ -576,20 +562,24 @@ end
     This function specifies the initial conditions
     for the dycoms driver.
 """
-# NEW FUNCTION
 # NEW FUNCTION 
 function moist_bubble!(dim, Q, t, x, y, z, _...)
-
+      
     DFloat                = eltype(Q)
-    R_gas::DFloat         = R_d
-    c_p::DFloat           = cp_d
-    c_v::DFloat           = cv_d
+    
+    q_tot::DFloat         = 0.0196
+    q_liq::DFloat         = 0.0
+    q_ice::DFloat         = 0.0
+    
+    # PhasePartition Object Creation ( No thermo equations here) 
+    q_partition           = PhasePartition(q_tot, q_liq, q_ice)
+    
+    R_gas::DFloat         = gas_constant_air(q_partition)
+    c_p::DFloat           = cp_m(q_partition)
+    c_v::DFloat           = cv_m(q_partition)
     p0::DFloat            = MSLP
     gravity::DFloat       = grav
     # initialise with dry domain 
-    q_tot::DFloat         = 0.0192
-    q_liq::DFloat         = 0.0
-    q_ice::DFloat         = 0.0
 
     xvert = y
     
@@ -599,20 +589,18 @@ function moist_bubble!(dim, Q, t, x, y, z, _...)
     xc                    = 0.5*(xmin + xmax)
     yc                    =  2000.0
     r                     = sqrt( (x - xc)^2/rx^2 + (y - yc)^2/ry^2)
-    θ_ref::DFloat         = 320.0
+    θ_ref::DFloat         = 300.0
     θ_c::DFloat           =   2.0
 
     Δθ::DFloat            =   0.0
+
     if r <= 1
-        Δθ = θ_c * (1 + cospi(r))/2
+      Δθ = θ_c * cos(0.5 * π * r)*cos(0.5 * π * r)
     end
-    θ           = θ_ref + Δθ # potential temperature
-    
-    q_partition = PhasePartition(q_tot, q_liq, q_ice)
-    
+
+    θ                     = θ_ref + Δθ # potential temperature
     π_exner               = 1.0 - gravity / (c_p * θ) * xvert # exner pressure
     ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
-    
     P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
     T                     = P / (ρ * R_gas) # temperature
     U, V, W               = 0.0 , 0.0 , 0.0  # momentum components
@@ -623,7 +611,6 @@ function moist_bubble!(dim, Q, t, x, y, z, _...)
     e_pot                 = gravity * xvert
     e_int                 = internal_energy(T, q_partition)
     
-    TS                    = PhaseEquil(e_int, q_tot, ρ)
     E                     = ρ * (e_int + e_kin + e_pot)  #* total_energy(e_kin, e_pot, T, q_tot, q_liq, q_ice)
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
     
@@ -714,7 +701,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
       end
 
-      outprefix = @sprintf("./CLIMA-output-scratch/moist-bubble/dy_%dD_mpirank%04d_step%04d", dim,
+      mkpath("/central/scratch/asridhar/moist-bubble")
+      outprefix = @sprintf("/central/scratch/asridhar/moist-bubble/mtb_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,

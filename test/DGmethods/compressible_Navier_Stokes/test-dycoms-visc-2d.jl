@@ -232,7 +232,7 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
     SijSij = VF[_SijSij]
 
     #Dynamic eddy viscosity from Smagorinsky:
-    ν_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # VF[_ν_e]
+    ν_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr # VF[_ν_e] 
     D_e = ν_e / Prandtl_t
 
     # Multiply stress tensor by viscosity coefficient:
@@ -311,7 +311,7 @@ end
     S13 = (dudz + dwdx) / 2
     S23 = (dvdz + dwdy) / 2
     # --------------------------------------------
-    # SMAGORINSKY COEFFICIENT COMPONENTS
+    # SMAG / VREMAN COEFFICIENT COMPONENTS
     # --------------------------------------------
     # FIXME: Grab functions from module SubgridScaleTurbulence 
     SijSij = S11^2 + S22^2 + S33^2 + 2S12^2 + 2S13^2 + 2S23^2
@@ -360,7 +360,7 @@ end
     z_i = 840  # Start with constant inversion height of 840 meters then build in check based on q_tot
     Δz_i = max(z - z_i, zero(DFloat))
     # Constants
-    F_0 = 48 #70
+    F_0 = 70
     F_1 = 22
     α_z = 1
     ρ_i = DFloat(1.22)
@@ -368,7 +368,7 @@ end
     term1 = F_0 * exp(-z_to_inf) 
     term2 = F_1 * exp(-zero_to_z)
     term3 = ρ_i * cp_d * D_subsidence * α_z * (DFloat(0.25) * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
-    F_rad = term1 + term2*0 + term3*0  
+    F_rad = term1 + term2 + term3
   end
 end
 
@@ -456,7 +456,6 @@ end
 
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t, uM, vM, wM)
     @inbounds begin
-
         
         x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
         xvert = y
@@ -770,8 +769,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
       end
 
-      mkpath("/central/scratch/asridhar/dycoms-visc-2d-largedomain-smag/")
-      outprefix = @sprintf("/central/scratch/asridhar/dycoms-visc-2d-largedomain-smag/dy_%dD_mpirank%04d_step%04d", dim,
+      mkpath("/central/scratch/asridhar/dycoms-visc-2d-ld-smag/")
+      outprefix = @sprintf("/central/scratch/asridhar/dycoms-visc-2d-ld-smag/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,

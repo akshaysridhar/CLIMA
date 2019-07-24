@@ -225,6 +225,19 @@ cns_flux!(F, Q, VF, aux, t) = cns_flux!(F, Q, VF, aux, t, preflux(Q,VF, aux)...)
         vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
         vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
 
+        DijDij = dudx^2 + dvdy^2 + dwdz^2 + dudy^2 + dudz^2 + dvdx^2 + dvdz^2 + dwdx^2 + dwdy^2
+        Dij = SMatrix{3,3}(dudx, dudy, dudz, 
+                           dvdx, dvdy, dvdz,
+                           dwdx, dwdy, dwdz)
+        for jj = 1:3
+          for ii = 1:3
+            αα[ii,jj] += Dij[ii,jj] 
+          end
+        end
+        DISS[ii,jj] = sum(Dij .^ 2) 
+        βij = Δsqr .* αα
+        Bβ = βij[1,1]*βij[2,2] - β[1,2]^2*β[1,2]^2 + β[1,1]*β[3,3] - β[1,3]^2 + β[2,2]*β[3,3] - β[2,3]^2 
+        ν_e = 0.23 * sqrt(Bβ/(αα))
         
         SijSij = VF[_SijSij]
 
@@ -430,21 +443,6 @@ function preodefun!(disc, Q, t)
       R[_a_θ] = virtual_pottemp(TS)
     end
   end
-
-  integral_computation(disc, Q, t)
-end
-
-function integral_computation(disc, Q, t)
-  DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integrand, Q,
-                                                         (_a_02z, _a_LWP_02z))
-    
-  DGBalanceLawDiscretizations.reverse_indefinite_stack_integral!(disc,
-                                                                 _a_z2inf,
-                                                                 _a_02z)
-
-  DGBalanceLawDiscretizations.reverse_indefinite_stack_integral!(disc,
-                                                                 _a_LWP_z2inf,
-                                                                 _a_LWP_02z)
 end
 
 # initial condition
@@ -602,7 +600,6 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     norm(Q) = %25.16e""" norm(Q)
 
   # Initialise the integration computation. Kernels calculate this at every timestep?? 
-  @timeit to "initial integral" integral_computation(spacedisc, Q, 0) 
   @timeit to "solve" solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 

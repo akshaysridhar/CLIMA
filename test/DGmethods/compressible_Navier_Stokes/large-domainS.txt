@@ -1,0 +1,115 @@
+┌ Info: Update
+│ simtime = 1.5461400000001015e+02
+└ runtime = 00:06:31
+┌ Info: Update
+│ simtime = 1.5881600000003021e+02
+└ runtime = 00:06:41
+  Updating registry at `~/.julia/registries/General`
+  Updating git-repo `https://github.com/JuliaRegistries/General.git`
+[?25l[2K[?25hPrecompiling project...
+Precompiling CuArrays
+┌ Info: Update
+│ simtime = 1.6297200000005006e+02
+└ runtime = 00:06:51
+┌ Warning: Module MacroTools with build ID 1371895794078917 is missing from the cache.
+│ This may mean MacroTools [1914dd2f-81c6-5fcd-8719-6d5c9610ff09] does not support precompilation but is imported by a module that does.
+└ @ Base loading.jl:1000
+┌ Info: Update
+│ simtime = 1.6715400000007003e+02
+└ runtime = 00:07:01
+┌ Info: Update
+│ simtime = 1.7135000000009006e+02
+└ runtime = 00:07:11
+[ Info:  ------------------------------------------------------
+[ Info:    ______ _      _____ __  ________                    
+[ Info:   |  ____| |    |_   _|  ...  |  __  |                 
+[ Info:   | |    | |      | | |   .   | |  | |                 
+[ Info:   | |    | |      | | | |   | | |__| |                 
+[ Info:   | |____| |____ _| |_| |   | | |  | |                 
+[ Info:   | _____|______|_____|_|   |_|_|  |_|                 
+[ Info:                                                        
+[ Info:  ------------------------------------------------------
+[ Info:  Dycoms                                                
+[ Info:    Resolution:                                         
+[ Info:      (Δx, Δy, Δz)   = (3.50e+01, 1.50e+01, 5.00e+00)               
+[ Info:      (Nex, Ney, Nez) = (11, 25, 75)                    
+[ Info:      DoF = 3093750                                          
+[ Info:      Minimum necessary memory to run this test: 0.235125 GBs 
+[ Info:      Time step dt: 2.00e-03                                
+[ Info:      End time  t : 1.44e+04                                
+[ Info:  ------------------------------------------------------
+┌ Info: Update
+│ simtime = 1.7551800000010996e+02
+└ runtime = 00:07:21
+┌ Info: Update
+│ simtime = 1.7974600000013015e+02
+└ runtime = 00:07:31
+┌ Info: Update
+│ simtime = 1.8391800000015007e+02
+└ runtime = 00:07:41
+┌ Info: Update
+│ simtime = 1.8812200000017015e+02
+└ runtime = 00:07:51
+┌ Info: Update
+│ simtime = 1.9233000000019024e+02
+└ runtime = 00:08:01
+┌ Info: Starting...
+└ norm(Q) =    5.5702075473544747e+07
+┌ Info: Update
+│ simtime = 1.9654000000021034e+02
+└ runtime = 00:08:11
+┌ Info: Update
+│ simtime = 2.0075600000023047e+02
+└ runtime = 00:08:21
+slurmstepd: error: *** JOB 5926388 ON hpc-89-36 CANCELLED AT 2019-07-24T10:41:47 ***
+┌ Info: Update
+│ simtime = 2.0000000000000000e-03
+└ runtime = 00:00:19
+┌ Info: Update
+│ simtime = 4.3259999999997456e+00
+└ runtime = 00:00:29
+┌ Info: Update
+│ simtime = 8.6679999999995641e+00
+└ runtime = 00:00:39
+┌ Info: Update
+│ simtime = 1.3026000000001019e+01
+└ runtime = 00:00:49
+┌ Info: Update
+│ simtime = 1.7276000000001304e+01
+└ runtime = 00:00:59
+┌ Info: Update
+│ simtime = 2.1587999999998914e+01
+└ runtime = 00:01:09
+┌ Info: Update
+│ simtime = 2.5929999999996507e+01
+└ runtime = 00:01:19
+┌ Info: Update
+│ simtime = 3.0275999999994099e+01
+└ runtime = 00:01:29
+┌ Info: Update
+│ simtime = 3.4635999999996365e+01
+└ runtime = 00:01:39
+┌ Info: Update
+│ simtime = 3.8426000000000997e+01
+└ runtime = 00:01:49
+┌ Info: Update
+│ simtime = 4.1080000000004240e+01
+└ runtime = 00:01:59
+┌ Info: Update
+│ simtime = 4.3702000000007445e+01
+└ runtime = 00:02:09
+┌ Info: Update
+│ simtime = 4.6204000000010502e+01
+└ runtime = 00:02:19
+┌ Info: Update
+│ simtime = 4.8696000000013548e+01
+└ runtime = 00:02:29
+┌ Info: Update
+│ simtime = 5.1190000000016596e+01
+└ runtime = 00:02:39
+┌ Info: Update
+│ simtime = 5.3650000000019602e+01
+└ runtime = 00:02:49
+┌ Info: Update
+│ simtime = 5.6272000000022807e+01
+└ runtime = 00:02:59
