@@ -555,11 +555,11 @@ end
     This function specifies the initial conditions
     for the dry_benchmark driver.
 """
+const seed = MersenneTwister(0)
 # NEW FUNCTION 
 function dry_benchmark!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y, z, _...)
     
     DFloat     = eltype(Q)
-    seed = MersenneTwister(0)
     randnum1   = rand(seed, DFloat) / 100
     p0::DFloat = MSLP
     
@@ -567,7 +567,7 @@ function dry_benchmark!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qini
     P           = DFloat(101325)
     q_tot       = DFloat(0)
     Th_ref::DFloat = 300
-    Th::DFloat  = Th_ref + randnum1 * Th_ref * 3 
+    Th::DFloat  = Th_ref + randnum1 * Th_ref 
     Tc::DFloat  = 275 
     T           = 0.5 * (Th + Tc)
     
@@ -752,7 +752,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 1e-4
+  dt = 1e-6
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
