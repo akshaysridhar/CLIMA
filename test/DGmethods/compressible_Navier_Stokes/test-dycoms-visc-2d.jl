@@ -551,12 +551,12 @@ end
             
             Cd, Ch, Cq = 0.0011, 0.0011, 0.0011 #Drag coefficients
             h = first_node #Layer thickness
-            
+            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
+            e_int_sat  = internal_energy_sat(T, ρ, q_tot)
             S[_U] -= ρ*Cd*(u^2 + v^2 + w^2)*u/h
-            S[_V] -= ρ*Cd*(u^2 + v^2 + w^2)*v/h
-                        
             qv_saturation =  q_vap_saturation(SST, ρ, q_partition)
-            S[_QT]       -= ρ*Cd*sqrt(u^2 + v^2 + 0*w^2)*(q_tot - qv_saturation)/h
+            S[_QT]      -= ρ*Cd*sqrt(u^2 + v^2 + 0*w^2)*(q_tot - qv_saturation)/h
+            S[_E]       -= ρ*Cd*sqrt(u^2 + v^2 + 0*w^2)*(e_int - e_int_sat)/h
         end
     end
 end
