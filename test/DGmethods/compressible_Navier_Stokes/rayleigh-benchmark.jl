@@ -444,7 +444,8 @@ end
         QP[_QT] = QTM 
       if bctype == 3
         y = auxM[_a_y]
-        T = Th 
+        x = auxM[_a_x]
+        T = Th + sin(x)
         QP[_E] = internal_energy(T, PhasePartition(DFloat(0))) + grav * y
       elseif bctype == 4
         y = auxM[_a_y]
