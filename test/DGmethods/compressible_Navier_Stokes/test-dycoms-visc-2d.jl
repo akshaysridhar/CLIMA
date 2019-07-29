@@ -93,14 +93,14 @@ const Npoly = 4
 
 # Define grid size 
 const Δx    = 35
-const Δy    = 5
+const Δy    = 200
 const Δz    = 5
 
 const stretch_coe = 2.25
 
 # Physical domain extents 
-const (xmin, xmax) = (0, 1000)
-const (ymin, ymax) = (0, 1500)
+const (xmin, xmax) = (0,  1000)
+const (ymin, ymax) = (0, 20000)
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -125,19 +125,20 @@ DoFstorage = (Nex*Ney*Nez)*(Npoly+1)^numdims*(_nstate + _nviscstates + _nauxstat
 @parameter C_smag 0.23 "C_smag"
 # Equivalent grid-scale
 #Δ = (Δx * Δy * Δz)^(1/3)
-Δ = max(Δx, Δy)
+#Δ = min(Δx, Δy)
 #Δ = sqrt(Δx*Δy)
+Δ = sqrt(Δx^2 + Δy^2)
 const Δsqr = Δ * Δ
 
 # Surface values to calculate surface fluxes:
-const SST         = 292.5
-const p_sfc       = 1017.8e2      # Pa
-const q_tot_sfc   = 13.84e-3      # qs(sst) using Teten's formula
-const ρ_sfc       = 1.22          #kg/m^3
-const ft          =  15.0
-const fq          = 115.0
-const Cd          = 0.0011        #Drag coefficient
-const first_node_level   = 0.5*Δy
+const SST        = 292.5
+const psfc       = 1017.8e2      # Pa
+const qtot_sfc   = 13.84e-3      # qs(sst) using Teten's formula
+const ρsfc       = 1.22          #kg/m^3
+const ft         =  15.0
+const fq         = 115.0
+const Cd         = 0.0011        #Drag coefficient
+const first_node_level   = 0.0001
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
 # DG RHS (but not explicitly solved for as a prognostic variable)
@@ -253,7 +254,7 @@ end
     F[2, _E] += u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
     F[3, _E] += u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * μ_e
 
-    F[numdims, _E] += F_rad
+    #F[numdims, _E] += F_rad
 
     # Viscous contributions to mass flux terms
     F[1, _ρ]  -=  vqx * D_e
@@ -421,7 +422,7 @@ end
         cs_front_back = zero(DFloat)
         ct            = DFloat(0.75)
         
-        domain_bott  = 0
+        domain_bott  = ymin
         domain_top   = ymax
         #END User modification on domain parameters.
 
@@ -437,14 +438,14 @@ end
             
         elseif sponge_type == 2
             
-            bc_zscale = 300.0
+            bc_zscale = 5000.0
             zd        = domain_top - bc_zscale           
             #
             # top damping
             # first layer: damp lee waves
             #
             alpha_coe = 0.5
-            ct        = 10.0
+            ct        = 0.5
             ctop      = 0.0
             if xvert >= zd
                 zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
@@ -453,7 +454,7 @@ end
 
                 else
                     abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
-
+                    
                 end
                 ctop = ct*abstaud
             end
@@ -489,32 +490,39 @@ end
         x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
         xvert = y
         ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
+        uM, vM, wM = UM/ρM, VM/ρM, WM/ρM
+        qtM = QM[_QT]/QM[_ρ]
+        
         # No flux boundary conditions
         # No shear on walls (free-slip condition)
         UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-        QP[_U] = UM - 2 * nM[1] * UnM
-        QP[_V] = VM - 2 * nM[2] * UnM
-        QP[_W] = WM - 2 * nM[3] * UnM
-        QP[_ρ] = ρM
+        QP[_U]  = UM - 2 * nM[1] * UnM
+        QP[_V]  = VM - 2 * nM[2] * UnM
+        QP[_W]  = WM - 2 * nM[3] * UnM
+        QP[_ρ]  = ρM
+        QP[_E]  = EM
         QP[_QT] = QTM
-        if xvert < first_node_level
-            VFP .= VFM
-        else
-            VFP .= 0
-        end
         
-        #=if xvert < first_node_level
-            SST    = 295.0 #292.5
-            q_tot  = QP[_QT]/QP[_ρ]
-            q_liq  = auxM[_a_q_liq]
-            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
-            e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
-            e_pot  = grav*xvert
-            E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
-            QP[_E] = E
+        #if bctype == 3
+        if xvert < 0.0001
+            windspeed = sqrt(uM^2 + 0*vM^2)
+
+            #2D
+            #VFP[_τ12] = -Cd * windspeed * uM
+            #VFP[_τ22] = 0.0
             
-        end=#
-        
+            #Fixt sfc T to SST:
+            Tsfc   = SST
+            q_tot  = qtM
+            q_liq  = auxM[_a_q_liq]
+            e_int  = internal_energy(Tsfc, PhasePartition(q_tot, q_liq, 0.0))
+            e_kin  = 0.5*windspeed^2
+            e_pot  = grav*xvert            
+            E      = ρsfc * total_energy(e_kin, e_pot, Tsfc, PhasePartition(q_tot, q_liq, 0.0))
+            #QP[_ρ] = ρsfc
+            #QP[_E] = E           
+        end
+                
         nothing
     end
 end
@@ -543,9 +551,59 @@ end
   @inbounds begin
     source_geopot!(S, Q, aux, t)
     source_sponge!(S, Q, aux, t)
-    #source_geostrophic!(S, Q, aux, t)    
+      #source_geostrophic!(S, Q, aux, t)
+
+      #
+      # Surface evaporation effects:
+      #
+      xvert = aux[_a_y]
+      #if xvert < 0.0001
+      #    source_boundary_evaporation!(S,Q,aux,t)
+      #end
   end
 end
+
+@inline function source_boundary_evaporation!(S,Q,aux,t)
+    @inbounds begin
+
+        xvert = aux[_a_y]
+        
+        ρ     = Q[_ρ]
+        U     = Q[_U]
+        V     = Q[_V]
+        W     = Q[_W]   
+        q_tot = Q[_QT]/ρ
+
+        u, v, w = U/ρ, V/ρ, W/ρ
+        
+        h_first_layer = Δy
+        
+        #Evaporative flux: (eq 29 in CLIMA-doc)
+        windspeed = sqrt(u^2 + 0*v^2)
+        q_liq  = aux[_a_q_liq]
+        e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
+        e_kin  = 0.5*windspeed^2
+        e_pot  = grav*xvert
+        TS     = PhaseEquil(e_int, q_tot, ρ)
+        T      = air_temperature(TS)
+        
+
+        #Evaporative flux of total specific humidity
+        Lv        =   latent_heat_vapor(SST)
+        qv_star   =   q_vap_saturation(SST, ρsfc, PhasePartition(q_tot, q_liq, 0.0))
+        Evap_flux = - Lv * Cd * windspeed * (q_tot - qv_star) / h_first_layer
+        
+        #Evaporative flux of total specific humidity
+        cpm    =   cp_m(PhasePartition(q_tot, q_liq, 0.0))
+        
+        SHF    = - Cd * windspeed * (cpm*(T - SST) + grav * (xvert - ymin)) / h_first_layer
+
+        #Update energy source
+        S[_E] += Evap_flux + SHF
+        
+    end
+end
+
 
 """
     Geostrophic wind forcing
@@ -568,24 +626,16 @@ end
 
 @inline function source_sponge!(S,Q,aux,t)
     @inbounds begin
-        U, V, W  = Q[_U], Q[_V], Q[_W]
+        U, V, W, E  = Q[_U], Q[_V], Q[_W], Q[_E]
         beta     = aux[_a_sponge]
         #S[_U] -= beta * U
-        S[_V] -= beta * V             
+        S[_V] -= beta * V     
+        #S[_E] -= beta * E
     end
 end
 
 @inline function source_geopot!(S,Q,aux,t)
   @inbounds S[_V] += - Q[_ρ] * grav
-end
-
-@inline function source_surface_drag_evaporation!(S,Q,aux,t)
-    @inbounds begin
-
-        ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-        u, v, w           = U/ρ, V/ρ, W/ρ    
-        xvert             = aux[_a_y]       
-    end
 end
 
 
@@ -659,6 +709,8 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     θ_l    = spl_thetainit(xvert) #θ_l
     q_tot  = spl_qinit(xvert)     #qtot
     T      = spl_tinit(xvert)    #T
+
+    q_tot = 0.0
     
     zi = 840.0
     #if ( xvert <= zi)
@@ -668,7 +720,8 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     #    θ_lx   = 297.5 + (xvert - zi)^(1/3);
     #    q_totx = 1.5e-3; #kg/kg  specific humidity --> approx. to mixing ratio is ok
     #end  
-    
+
+    #=
     rx           = 500
     ry           = 250
     xc           = 0.5*(xmin + xmax)
@@ -680,14 +733,14 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     if r <= 1
         Δθ = θ_c * (1 + cospi(r))/2
     end
-    #θ_l += Δθ
-    #T   += Δθ
+    θ_l += Δθ
+    T   += Δθ=#
     
     q_liq = 0.0
     if xvert >= 600.0 && xvert <= 840.0
         q_liq = (xvert - 600)*0.00045/240.0
     end
-    if xvert > 50.0 && xvert <= 200.0
+    if xvert <= 200.0
         θ_l   += randnum1 * θ_l
         q_tot += randnum2 * q_tot
     end
@@ -698,7 +751,7 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     ρ  = air_density(T, P, q_partition)
 
     #u, v, w = 7.0, 0.0, 0.0 #geostrophic
-    u, v, w = 7.0, 0.0, 0.0
+    u, v, w = 5.0, 0.0, 0.0
     
     e_kin = (u^2 + v^2 + w^2) / 2
     e_pot = grav * xvert
@@ -717,7 +770,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # "top_stretching" --> node clustering by the top wall
     # "interior_stretching" --> node clustering around the coordinate of the `attractor_value`
     
-    y_range     = grid_stretching_1d(zmin, zmax, Ne[end], stretch_coe, "none")    
+    y_range     = grid_stretching_1d(zmin, zmax, Ne[end], stretch_coe, "boundary_stretching")    
     brickrange  = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                   y_range)
     
@@ -816,7 +869,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
     
     step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
         @inbounds let
           u, v, w     = preflux(Q, aux)
@@ -875,7 +928,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.002
+  dt = 0.0005
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
