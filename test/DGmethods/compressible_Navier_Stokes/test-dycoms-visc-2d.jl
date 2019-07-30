@@ -52,8 +52,8 @@ const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _�
 # Gradient state labels
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
 
-const _nauxstate = 15
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air = 1:_nauxstate
+const _nauxstate = 22
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air,_a_ρ_fn, _a_U_fn, _a_V_fn, _a_W_fn, _a_E_fn, _a_QT_fn, _a_y_fn = 1:_nauxstate
 
 if !@isdefined integration_testing
   const integration_testing =
@@ -96,10 +96,13 @@ const Δx    = 35
 const Δy    = 10
 const Δz    = 5
 
+const h_first_layer = Δy
+
+
 const stretch_coe = 2.25
 
 # Physical domain extents 
-const (xmin, xmax) = (0,  1000)
+const (xmin, xmax) = (0, 1000)
 const (ymin, ymax) = (0, 2000)
 const (zmin, zmax) = (0, 1500)
 
@@ -135,7 +138,7 @@ const SST        = 292.5
 const psfc       = 1017.8e2      # Pa
 const qtot_sfc   = 13.84e-3      # qs(sst) using Teten's formula
 const ρsfc       = 1.22          #kg/m^3
-const ft         = 15.0
+const ft         =  15.0
 const fq         = 115.0
 const Cd         = 0.0011        #Drag coefficient
 const first_node_level   = 0.0001
@@ -214,8 +217,9 @@ end
     P = aux[_a_P]
       
     xvert = aux[_a_y]
-    v -= D_subsidence * xvert
-    V = v*ρ
+    #v -= D_subsidence * xvert
+    #V = v*ρ
+      
     # Inviscid contributions
     F[1, _ρ],  F[2, _ρ],  F[3, _ρ]  = U          , V          , W
     F[1, _U],  F[2, _U],  F[3, _U]  = u * U  + P , v * U      , w * U
@@ -243,7 +247,7 @@ end
     τ12 = τ21 = VF[_τ12] * μ_e
     τ13 = τ31 = VF[_τ13] * μ_e
     τ23 = τ32 = VF[_τ23] * μ_e
-
+      
     # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
     F[1, _U] += τ11; F[2, _U] += τ12; F[3, _U] += τ13
     F[1, _V] += τ21; F[2, _V] += τ22; F[3, _V] += τ23
@@ -262,7 +266,7 @@ end
     F[3, _ρ]  -=  vqz * D_e
     F[1, _QT] -=  vqx * D_e
     F[2, _QT] -=  vqy * D_e
-    F[3, _QT] -=  vqz * D_e
+    F[3, _QT] -=  vqz * D_e    
 
   end
 end
@@ -389,6 +393,7 @@ end
         DFloat = eltype(aux)
         xvert = y
         aux[_a_y] = xvert
+
         #Sponge 
         ctop    = zero(DFloat)
 
@@ -455,50 +460,31 @@ end
     end
 end
 
+
 # -------------------------------------------------------------------------
 # generic bc for 2d , 3d
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t)
-    @inbounds begin
-
-        
-        x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
-        xvert = y
-        ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
-        uM, vM, wM = UM/ρM, VM/ρM, WM/ρM
-        qtM = QM[_QT]/QM[_ρ]
-        
-        # No flux boundary conditions
-        # No shear on walls (free-slip condition)
-        UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-        QP[_U]  = UM - 2 * nM[1] * UnM
-        QP[_V]  = VM - 2 * nM[2] * UnM
-        QP[_W]  = WM - 2 * nM[3] * UnM
-        QP[_ρ]  = ρM
-        QP[_E]  = EM
-        QP[_QT] = QTM
-        
-        #if bctype == 3
-        if xvert < 0.0001
-            windspeed = sqrt(uM^2 + 0*vM^2)
-
-            #2D
-            VFP[_τ12] = -Cd * windspeed * uM
-            VFP[_τ22] = 0.0
-            
-            #Fixt sfc T to SST:
-            Tsfc   = SST
-            q_tot  = qtM
-            q_liq  = auxM[_a_q_liq]
-            e_int  = internal_energy(Tsfc, PhasePartition(q_tot, q_liq, 0.0))
-            e_kin  = 0.5*windspeed^2
-            e_pot  = grav*xvert            
-            E      = ρsfc * total_energy(e_kin, e_pot, Tsfc, PhasePartition(q_tot, q_liq, 0.0))
-            #QP[_ρ] = ρsfc
-            #QP[_E] = E           
-        end
-                
-        nothing
+  @inbounds begin
+    x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
+    xvert = y
+    ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
+    uM, vM, wM = UM/ρM, VM/ρM, WM/ρM
+    UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
+    QP[_U]  = UM - 2 * nM[1] * UnM
+    QP[_V]  = VM - 2 * nM[2] * UnM
+    QP[_W]  = WM - 2 * nM[3] * UnM
+    # No flux boundary conditions
+    # No shear on walls (free-slip condition)
+    if t < 0.0005 
+      QP[_E]  = EM
+      QP[_QT] = QTM        
     end
+    if xvert > 0.0001 
+      QP[_E]  = EM
+      QP[_QT] = QTM        
+    end
+    nothing
+  end
 end
 
 # -------------------------------------------------------------------------
@@ -525,57 +511,82 @@ end
   @inbounds begin
     source_geopot!(S, Q, aux, t)
     source_sponge!(S, Q, aux, t)
-      #source_geostrophic!(S, Q, aux, t)
+    #source_geostrophic!(S, Q, aux, t)
 
-      #
-      # Surface evaporation effects:
-      #
-      xvert = aux[_a_y]
-      if xvert < 0.0001
-        source_boundary_evaporation!(S,Q,aux,t)
-      end
+    # Surface evaporation effects:
+    xvert = aux[_a_y]
+    if xvert < 0.0001 && t > 0.0005 
+      source_boundary_evaporation!(S,Q,aux,t)
+    end
   end
 end
 
 @inline function source_boundary_evaporation!(S,Q,aux,t)
-    @inbounds begin
+  @inbounds begin
+      x, y, z = aux[_a_x], aux[_a_y], aux[_a_z]
+      xvert = y
+    if xvert < 0.0001
+      # ------------------------------
+      # First node quantities (first-model level here represents the first node)
+      # ------------------------------
+      xvert_FN         = aux[_a_y_fn]
+      ρ_FN             = aux[_a_ρ_fn]
+      U_FN             = aux[_a_U_fn]
+      V_FN             = aux[_a_V_fn]
+      W_FN             = aux[_a_W_fn]
+      E_FN             = aux[_a_E_fn]
+      @show(E_FN, Q[_E])
+      u_FN, v_FN, w_FN = U_FN/ρ_FN, V_FN/ρ_FN, W_FN/ρ_FN
+      windspeed_FN     = sqrt(u_FN^2 + 0*v_FN^2)
+      q_tot_FN         = aux[_a_QT_fn] / ρ_FN
+      e_int_FN         = E_FN/ρ_FN - 0.5*windspeed_FN^2 - grav*xvert_FN
+      TS_FN            = PhaseEquil(e_int_FN, q_tot_FN, ρ_FN)           #themordynamic state at first node
+      T_FN             = air_temperature(TS_FN)
+      # -----------------------------------
+      # Bottom boundary quantities 
+      # -----------------------------------
+      ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+      u, v, w     = U/ρ, V/ρ, W/ρ
+      q_tot       = Q[_QT]/Q[_ρ]
+      q_liq       = aux[_a_q_liq]
+      e_int       = E/ρ - 0.5*windspeed^2 - grav*xvert
+      TS          = PhaseEquil(e_int, q_tot, ρ)           #themordynamic state at first node        
+      q_vap       = PhasePartition(TS).vap
+      T           = air_temperature(TS)
+      # ------------------------------------
+      #Momentum
+      # ------------------------------------
+      #2D
+      dτ12dn = dτ12dn = -Cd * windspeed_FN * u_FN / h_first_layer
+      dτ22dn       =  0 #-Cd * windspeed_FN * v_FN
+      # ------------------------------------
+      #Water flux: (eq 29 in CLIMA-doc)
+      # ------------------------------------
+      Lv         = latent_heat_vapor(SST)
+      q_vap_FN   = PhasePartition(TS_FN).vap
+      q_vap_star = q_vap_saturation(SST, ρ, PhasePartition(q_tot, q_liq, 0.0))
+      Evap_flux  = - Cd * windspeed_FN * (q_vap_FN - q_vap_star) / h_first_layer
 
-        xvert = aux[_a_y]
-        
-        ρ     = Q[_ρ]
-        U     = Q[_U]
-        V     = Q[_V]
-        W     = Q[_W]   
-        q_tot = Q[_QT]/ρ
-
-        u, v, w = U/ρ, V/ρ, W/ρ
-        
-        h_first_layer = Δy
-        
-        #Evaporative flux: (eq 29 in CLIMA-doc)
-        windspeed = sqrt(u^2 + 0*v^2)
-        q_liq  = aux[_a_q_liq]
-        e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
-        e_kin  = 0.5*windspeed^2
-        e_pot  = grav*xvert
-        TS     = PhaseEquil(e_int, q_tot, ρ)
-        T      = air_temperature(TS)
-        
-
-        #Evaporative flux of total specific humidity
-        Lv        =   latent_heat_vapor(SST)
-        qv_star   =   q_vap_saturation(SST, ρsfc, PhasePartition(q_tot, q_liq, 0.0))
-        Evap_flux = - Lv * Cd * windspeed * (q_tot - qv_star) / h_first_layer
-        
-        #Evaporative flux of total specific humidity
-        cpm    =   cp_m(PhasePartition(q_tot, q_liq, 0.0))
-        
-        SHF    = - Cd * windspeed * (cpm*(T - SST) + grav * (xvert - ymin)) / h_first_layer
-
-        #Update energy source
-        S[_E] += Evap_flux + SHF
-        
+      # --------------------------------------
+      #Energy flux associate with evaporation: (eq 30 in CLIMA-doc)
+      # --------------------------------------
+      cpv        =   cp_v(PhasePartition(q_tot, q_liq, 0.0))
+      n_D_sfc  =   (cp_v*(T - T_0) + Lv_0 + grav * xvert) * Evap_flux
+      
+      # ---------------------------------------
+      #Sensible heat flux: (eq 31 in CLIMA-doc)
+      # ---------------------------------------
+      q_liq_FN         = PhasePartition(TS_FN).liq
+      cpm    =   cp_m(PhasePartition(q_tot, q_liq, 0.0))            
+      SHF    = - Cd * windspeed_FN * (cpm*(T_FN - SST) + grav * (xvert_FN - ymin)) / h_first_layer
+      
+      S[_U] += dτ12dn 
+      S[_V] += dτ22dn
+      S[_E] += SHF + n_D_sfc
+      S[_QT] += Evap_flux
     end
+    nothing
+  end
 end
 
 
@@ -638,7 +649,6 @@ function preodefun!(disc, Q, t)
       T = air_temperature(TS)
       P = air_pressure(TS) # Test with dry atmosphere
       q_liq = PhasePartition(TS).liq
-
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
@@ -647,9 +657,16 @@ function preodefun!(disc, Q, t)
     end
   end
 
+  firstnode_info(disc,Q,t)
   integral_computation(disc, Q, t)
 end
 
+function firstnode_info(disc,Q,t) 
+  DGBalanceLawDiscretizations.aux_firstnode_values!(disc, Q,
+                                                    (_a_y_fn), (_a_y))
+  DGBalanceLawDiscretizations.state_firstnode_values!(disc, Q,
+                                                    (_a_ρ_fn, _a_U_fn, _a_V_fn, _a_W_fn, _a_E_fn, _a_QT_fn), (_ρ, _U, _V, _W, _E, _QT))
+end
 function integral_computation(disc, Q, t)
   DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integrand, Q,
                                                          (_a_02z, _a_LWP_02z))
@@ -684,8 +701,6 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     q_tot  = spl_qinit(xvert)     #qtot
     T      = spl_tinit(xvert)    #T
 
-    q_tot = 0.0
-    
     zi = 840.0
     #if ( xvert <= zi)
     #    θ_lx   = 289.0;
@@ -694,21 +709,6 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     #    θ_lx   = 297.5 + (xvert - zi)^(1/3);
     #    q_totx = 1.5e-3; #kg/kg  specific humidity --> approx. to mixing ratio is ok
     #end  
-
-    #=
-    rx           = 500
-    ry           = 250
-    xc           = 0.5*(xmin + xmax)
-    yc           = 255
-    r            = sqrt( (x - xc)^2/rx^2 + (y - yc)^2/ry^2)
-    θ_c::DFloat  = 5.0
-    Δθ::DFloat   = 0.0
-    
-    if r <= 1
-        Δθ = θ_c * (1 + cospi(r))/2
-    end
-    θ_l += Δθ
-    T   += Δθ=#
     
     q_liq = 0.0
     if xvert >= 600.0 && xvert <= 840.0
@@ -903,7 +903,7 @@ let
   # User defined polynomial order 
   numelem = (Nex, Ney)
   dt = 0.0005
-  timeend = 2*dt
+  timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
   dim = numdims
@@ -937,4 +937,4 @@ end
 
 isinteractive() || MPI.Finalize()
 
-nothing
+Nothing
