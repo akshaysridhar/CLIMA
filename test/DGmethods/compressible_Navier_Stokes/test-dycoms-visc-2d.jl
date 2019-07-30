@@ -93,14 +93,14 @@ const Npoly = 4
 
 # Define grid size 
 const Δx    = 35
-const Δy    = 200
+const Δy    = 10
 const Δz    = 5
 
 const stretch_coe = 2.25
 
 # Physical domain extents 
 const (xmin, xmax) = (0,  1000)
-const (ymin, ymax) = (0, 20000)
+const (ymin, ymax) = (0, 2000)
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -135,7 +135,7 @@ const SST        = 292.5
 const psfc       = 1017.8e2      # Pa
 const qtot_sfc   = 13.84e-3      # qs(sst) using Teten's formula
 const ρsfc       = 1.22          #kg/m^3
-const ft         =  15.0
+const ft         = 15.0
 const fq         = 115.0
 const Cd         = 0.0011        #Drag coefficient
 const first_node_level   = 0.0001
@@ -254,7 +254,7 @@ end
     F[2, _E] += u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
     F[3, _E] += u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * μ_e
 
-    #F[numdims, _E] += F_rad
+    F[numdims, _E] += F_rad
 
     # Viscous contributions to mass flux terms
     F[1, _ρ]  -=  vqx * D_e
@@ -264,31 +264,6 @@ end
     F[2, _QT] -=  vqy * D_e
     F[3, _QT] -=  vqz * D_e
 
-      #
-      # Surface fluxes:
-      #
-      if xvert < first_node_level #FIX ME: identify the surface 
-
-          T          = aux[_a_T]
-          windspeed  = sqrt(u^2 + v^2)
-
-          #Surface flux of momentum
-          F[numdims, _U]   -= ρ*Cd*windspeed*u
-
-          #Surface flux of Qt
-          q_liq            = aux[_a_q_liq]
-          #q_part_sfc       = PhasePartition(q_tot_sfc, q_liq, 0.0) ##NOT SURE ABOUT THIS!
-          q_part_sfc       = PhasePartition(q_tot_sfc, q_liq, 0.0) ##NOT SURE ABOUT THIS!
-          q_tot            = Q[_QT]/ρ
-          qv_star          = q_vap_saturation(SST, ρ, q_part_sfc)
-          F[numdims, _QT] -= ρ*Cd*windspeed*(q_tot - qv_star)
-
-          #DSurface flux of e_int (called `I` in the design doc)
-          e_kin            = 0.5*windspeed
-          e_int            = E/ρ - e_kin
-          e_int_star       = internal_energy_sat(SST, ρ, q_tot_sfc)
-          F[numdims, _E]  -= ρ*Cd*windspeed*(e_int - e_int_star)
-      end      
   end
 end
 
@@ -414,7 +389,6 @@ end
         DFloat = eltype(aux)
         xvert = y
         aux[_a_y] = xvert
-
         #Sponge 
         ctop    = zero(DFloat)
 
@@ -508,8 +482,8 @@ end
             windspeed = sqrt(uM^2 + 0*vM^2)
 
             #2D
-            #VFP[_τ12] = -Cd * windspeed * uM
-            #VFP[_τ22] = 0.0
+            VFP[_τ12] = -Cd * windspeed * uM
+            VFP[_τ22] = 0.0
             
             #Fixt sfc T to SST:
             Tsfc   = SST
@@ -557,9 +531,9 @@ end
       # Surface evaporation effects:
       #
       xvert = aux[_a_y]
-      #if xvert < 0.0001
-      #    source_boundary_evaporation!(S,Q,aux,t)
-      #end
+      if xvert < 0.0001
+        source_boundary_evaporation!(S,Q,aux,t)
+      end
   end
 end
 
@@ -929,7 +903,7 @@ let
   # User defined polynomial order 
   numelem = (Nex, Ney)
   dt = 0.0005
-  timeend = 14400
+  timeend = 2*dt
   polynomialorder = Npoly
   DFloat = Float64
   dim = numdims
