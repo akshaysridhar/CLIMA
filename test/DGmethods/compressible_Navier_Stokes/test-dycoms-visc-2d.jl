@@ -93,7 +93,7 @@ const Npoly = 4
 
 # Define grid size 
 const Δx    = 35
-const Δy    = 10
+const Δy    = 15
 const Δz    = 5
 
 const h_first_layer = Δy
@@ -103,7 +103,7 @@ const stretch_coe = 2.25
 
 # Physical domain extents 
 const (xmin, xmax) = (0, 1000)
-const (ymin, ymax) = (0, 2000)
+const (ymin, ymax) = (0, 1500)
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -239,8 +239,8 @@ end
     SijSij = VF[_SijSij]
     
     #Dynamic eddy viscosity
-    #μ_e = ρ*VF[_ν_e] #Vreman
-    μ_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # Smagorinsky 
+    #μ_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # Smagorinsky 
+    μ_e = ρ*VF[_ν_e] #Vreman
     D_e = μ_e / Prandtl_t
 
     # Multiply stress tensor by viscosity coefficient:
@@ -258,7 +258,14 @@ end
     F[1, _E] += u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * μ_e
     F[2, _E] += u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
     
-    T = aux[_a_T]
+    if t > 0.0005
+      T = aux[_a_T]
+    else
+      e_int = E/ρ - 0.5 * (u^2 + v^2 + w^2) - grav * xvert
+      TS = PhaseEquil(e_int, QT/ρ, ρ)
+      T = air_temperature(TS)
+    end
+
     I_vap = cv_v * (T - T_0) + e_int_v0
     I_liq = cv_l * (T - T_0)
     I_ice = cv_i * (T - T_0) - e_int_i0
@@ -299,7 +306,7 @@ end
 #md # in some cases. 
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
-const _ngradstates = 6
+const _ngradstates = 8
 @inline function gradient_vars!(gradient_list, Q, aux, t)
   @inbounds begin
     u, v, w = preflux(Q,aux)
@@ -378,7 +385,6 @@ end
     VF[_τ13] = -2 * S13
     VF[_τ23] = -2 * S23
 
-
     # TODO: Viscous stresse come from SubgridScaleTurbulence module
     VF[_qx], VF[_qy], VF[_qz] = -dqdx, -dqdy, -dqdz
     VF[_qvx], VF[_qvy], VF[_qvz] = -dqvdx, -dqvdy, -dqvdz
@@ -404,10 +410,10 @@ end
     α_z = 1
     ρ_i = DFloat(1.22)
     D_subsidence = DFloat(3.75e-6)
-    term1 = F_0 * exp(-z_to_inf) 
-    term2 = F_1 * exp(-zero_to_z)
-    term3 = ρ_i * cp_d * D_subsidence * α_z * (DFloat(0.25) * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
-    F_rad = term1 + term2 + term3
+    cloud_top_cooling = F_0 * exp(-z_to_inf) 
+    cloud_base_warming = F_1 * exp(-zero_to_z)
+    free_troposphere_cooling = ρ_i * cp_d * D_subsidence * α_z * (DFloat(0.25) * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
+    F_rad = cloud_top_cooling + cloud_base_warming + free_troposphere_cooling
   end
 end
 
@@ -430,13 +436,11 @@ end
 
         cs_left_right = zero(DFloat)
         cs_front_back = zero(DFloat)
-        ct            = DFloat(0.75)
         
         domain_bott  = ymin
         domain_top   = ymax
         #END User modification on domain parameters.
 
-        
         #Vertical sponge:
         sponge_type = 2
 
@@ -449,13 +453,13 @@ end
             
         elseif sponge_type == 2
             
-            bc_zscale = 300.0
+            bc_zscale = 450.0
             zd        = domain_top - bc_zscale           
             #
             # top damping
             # first layer: damp lee waves
             #
-            alpha_coe = 0.5
+            alpha_coe = 1.0
             ct        = 0.90
             ctop      = 0.0
             if xvert >= zd
@@ -507,14 +511,16 @@ end
     QP[_W]  = WM - 2 * nM[3] * UnM
     # No flux boundary conditions
     # No shear on walls (free-slip condition)
-    if t < 0.0005 
-      QP[_E]  = EM
-      QP[_QT] = QTM        
-      QP[_ρ] = ρM      
-    end
+    
+    #if t < 0.0005 
+    #  QP[_E]  = EM
+    #  QP[_QT] = QTM        
+    #  QP[_ρ] = ρM      
+    #end
     QP[_E]  = EM
     QP[_QT] = QTM        
-    QP[_ρ] = ρM      
+    QP[_ρ] = ρM 
+    VFP .= VFM
     nothing
   end
 end
@@ -543,7 +549,7 @@ end
   @inbounds begin
     source_geopot!(S, Q, aux, t)
     source_sponge!(S, Q, aux, t)
-    #source_geostrophic!(S, Q, aux, t)
+    source_geostrophic!(S, Q, aux, t)
 
     # Surface evaporation effects:
     xvert = aux[_a_y]
@@ -595,14 +601,13 @@ end
       #Water flux: (eq 29 in CLIMA-doc)
       # ------------------------------------
       q_vap_FN   = q_tot_FN - PhasePartition(TS_FN).liq
-      Lv         = latent_heat_vapor(SST)
       q_vap_star = q_vap_saturation(SST, ρ, PhasePartition(q_tot, q_liq, 0.0))
       Evap_flux  = - Cd * windspeed_FN * (q_vap_FN - q_vap_star) / h_first_layer
 
       # --------------------------------------
       #Energy flux associate with evaporation: (eq 30 in CLIMA-doc)
       # --------------------------------------
-      n_D_sfc  =   (cp_v*(T - T_0) + LH_v0 + grav * xvert) * Evap_flux # LH_v0
+      LHF =   (cp_v*(T - T_0) + LH_v0 + grav * xvert) * Evap_flux # LH_v0
       
       # ---------------------------------------
       #Sensible heat flux: (eq 31 in CLIMA-doc)
@@ -613,7 +618,7 @@ end
       
       S[_U] += dτ12dn 
       S[_V] += dτ22dn
-      S[_E] += SHF + n_D_sfc
+      S[_E] += SHF + LHF
       S[_QT] += Evap_flux
     end
     nothing
@@ -634,7 +639,6 @@ const Ω = Omega
         U = Q[_U]
         V = Q[_V]        
         W = Q[_W]
-        
         S[_U] -= f_coriolis * (U - ρ*u_geostrophic)
         #S[_V] -= f_coriolis * (V - ρ*v_geostrophic)
     end
@@ -644,7 +648,7 @@ end
     @inbounds begin
         U, V, W, E  = Q[_U], Q[_V], Q[_W], Q[_E]
         beta     = aux[_a_sponge]
-        #S[_U] -= beta * U
+        S[_U] -= beta * U
         S[_V] -= beta * V     
         #S[_E] -= beta * E
     end
@@ -775,7 +779,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # "top_stretching" --> node clustering by the top wall
     # "interior_stretching" --> node clustering around the coordinate of the `attractor_value`
     
-    y_range     = grid_stretching_1d(zmin, zmax, Ne[end], stretch_coe, "boundary_stretching")    
+    y_range     = grid_stretching_1d(ymin, ymax, Ne[end], stretch_coe, "none")    
     brickrange  = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
                   y_range)
     
@@ -933,7 +937,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.001
+  dt = 0.0007
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
