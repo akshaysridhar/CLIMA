@@ -45,15 +45,15 @@ const stateid = (ρid = _ρ, Uid = _U, Vid = _V, Wid = _W, Eid = _E, QTid = _QT)
 const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 # Viscous state labels
-const _nviscstates = 17
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _ν_e = 1:_nviscstates
+const _nviscstates = 23
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _ν_e, _qvx, _qvy, _qvz, _qlx, _qly, _qlz = 1:_nviscstates
 
 # Gradient state labels
 # Gradient state labels
 const _states_for_gradient_transform = (_ρ, _U, _V, _W, _E, _QT)
 
 const _nauxstate = 22
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air,_a_ρ_fn, _a_U_fn, _a_V_fn, _a_W_fn, _a_E_fn, _a_QT_fn, _a_y_fn = 1:_nauxstate
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air,_a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN, _a_y_FN = 1:_nauxstate
 
 if !@isdefined integration_testing
   const integration_testing =
@@ -217,8 +217,8 @@ end
     P = aux[_a_P]
       
     xvert = aux[_a_y]
-    #v -= D_subsidence * xvert
-    #V = v*ρ
+    v -= D_subsidence * xvert
+    V = v*ρ
       
     # Inviscid contributions
     F[1, _ρ],  F[2, _ρ],  F[3, _ρ]  = U          , V          , W
@@ -229,14 +229,15 @@ end
     F[1, _QT], F[2, _QT], F[3, _QT] = u * QT     , v * QT     , w * QT
 
     #Derivative of T and Q:
-    vqx, vqy, vqz = VF[_qx], VF[_qy], VF[_qz]
-    vTx, vTy, vTz = VF[_Tx], VF[_Ty], VF[_Tz]
+    vqx, vqy, vqz       = VF[_qx], VF[_qy], VF[_qz]
+    vTx, vTy, vTz       = VF[_Tx], VF[_Ty], VF[_Tz]
+    vqlx, vqly, vqlz    = VF[_qlx], VF[_qly], VF[_qlz]
+    vqvx, vqvy, vqvz    = VF[_qvx], VF[_qvy], VF[_qvz]
 
     # Radiation contribution
     F_rad = radiation(aux)
-
     SijSij = VF[_SijSij]
-
+    
     #Dynamic eddy viscosity
     #μ_e = ρ*VF[_ν_e] #Vreman
     μ_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # Smagorinsky 
@@ -256,9 +257,29 @@ end
     # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
     F[1, _E] += u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * μ_e
     F[2, _E] += u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
-    F[3, _E] += u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * μ_e
+    
+    T = aux[_a_T]
+    I_vap = cv_v * (T - T_0) + e_int_v0
+    I_liq = cv_l * (T - T_0)
+    I_ice = cv_i * (T - T_0) - e_int_i0
+    e_kin = 0.5 * (u^2 +v^2)
+    e_pot = grav * xvert
+    e_tot_vap = e_kin + e_pot + I_vap
+    e_tot_liq = e_kin + e_pot + I_liq
+    e_tot_ice = e_kin + e_pot + I_ice
+
+    ql_fx = D_e * vqlx * e_tot_liq
+    ql_fy = D_e * vqly * e_tot_liq
+    ql_fz = D_e * vqlz * e_tot_liq
+    qv_fx = D_e * vqvx * (e_tot_vap + R_v * T)
+    qv_fy = D_e * vqvy * (e_tot_vap + R_v * T)
+    qv_fz = D_e * vqvz * (e_tot_vap + R_v * T)
 
     F[numdims, _E] += F_rad
+    
+    F[1, _E] += ql_fx + qv_fx 
+    F[2, _E] += ql_fy + qv_fy 
+    F[3, _E] += ql_fz + qv_fz 
 
     # Viscous contributions to mass flux terms
     F[1, _ρ]  -=  vqx * D_e
@@ -285,9 +306,13 @@ const _ngradstates = 6
     T = aux[_a_T]
     θ = aux[_a_θ]
     ρ, QT =Q[_ρ], Q[_QT]
+    q_tot = QT/ρ
+    q_liq = aux[_a_q_liq]
+    q_vap = q_tot - q_liq
     # ordering should match states_for_gradient_transform
     gradient_list[1], gradient_list[2], gradient_list[3] = u, v, w
     gradient_list[4], gradient_list[5], gradient_list[6] = θ, QT/ρ, T
+    gradient_list[7], gradient_list[8] = q_vap, q_liq
   end
 end
 
@@ -307,6 +332,8 @@ end
     dθdx, dθdy, dθdz = grad_mat[1, 4], grad_mat[2, 4], grad_mat[3, 4]
     dqdx, dqdy, dqdz = grad_mat[1, 5], grad_mat[2, 5], grad_mat[3, 5]
     dTdx, dTdy, dTdz = grad_mat[1, 6], grad_mat[2, 6], grad_mat[3, 6]
+    dqvdx, dqvdy, dqvdz = grad_mat[1, 7], grad_mat[2, 7], grad_mat[3, 7]
+    dqldx, dqldy, dqldz = grad_mat[1, 8], grad_mat[2, 8], grad_mat[3, 8]
     # virtual potential temperature gradient: for richardson calculation
     # strains
     # --------------------------------------------
@@ -340,6 +367,7 @@ end
     Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
     ν_e = max(0,(C_smag^2 * 2.5) * sqrt(abs(Bβ/(DISS+1e-16)))) 
     VF[_ν_e] = ν_e
+    
     #--------------------------------------------
     # deviatoric stresses
     # Fix up index magic numbers
@@ -350,8 +378,11 @@ end
     VF[_τ13] = -2 * S13
     VF[_τ23] = -2 * S23
 
+
     # TODO: Viscous stresse come from SubgridScaleTurbulence module
     VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
+    VF[_qvx], VF[_qvy], VF[_qvz] = -dqvdx, -dqvdy, -dqvdz
+    VF[_qlx], VF[_qly], VF[_qlz] = -dqldx, -dqldy, -dqldz
     VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
     VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
     VF[_SijSij] = SijSij
@@ -408,6 +439,7 @@ end
         
         #Vertical sponge:
         sponge_type = 2
+
         if sponge_type == 1
             
             top_sponge  = DFloat(0.85) * domain_top          
@@ -417,14 +449,14 @@ end
             
         elseif sponge_type == 2
             
-            bc_zscale = 5000.0
+            bc_zscale = 300.0
             zd        = domain_top - bc_zscale           
             #
             # top damping
             # first layer: damp lee waves
             #
             alpha_coe = 0.5
-            ct        = 0.5
+            ct        = 0.90
             ctop      = 0.0
             if xvert >= zd
                 zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
@@ -479,10 +511,8 @@ end
       QP[_E]  = EM
       QP[_QT] = QTM        
     end
-    if xvert > 0.0001 
-      QP[_E]  = EM
-      QP[_QT] = QTM        
-    end
+    QP[_E]  = EM
+    QP[_QT] = QTM        
     nothing
   end
 end
@@ -529,16 +559,15 @@ end
       # ------------------------------
       # First node quantities (first-model level here represents the first node)
       # ------------------------------
-      xvert_FN         = aux[_a_y_fn]
-      ρ_FN             = aux[_a_ρ_fn]
-      U_FN             = aux[_a_U_fn]
-      V_FN             = aux[_a_V_fn]
-      W_FN             = aux[_a_W_fn]
-      E_FN             = aux[_a_E_fn]
-      @show(E_FN, Q[_E])
+      xvert_FN         = aux[_a_y_FN]
+      ρ_FN             = aux[_a_ρ_FN]
+      U_FN             = aux[_a_U_FN]
+      V_FN             = aux[_a_V_FN]
+      W_FN             = aux[_a_W_FN]
+      E_FN             = aux[_a_E_FN]
       u_FN, v_FN, w_FN = U_FN/ρ_FN, V_FN/ρ_FN, W_FN/ρ_FN
       windspeed_FN     = sqrt(u_FN^2 + 0*v_FN^2)
-      q_tot_FN         = aux[_a_QT_fn] / ρ_FN
+      q_tot_FN         = aux[_a_QT_FN] / ρ_FN
       e_int_FN         = E_FN/ρ_FN - 0.5*windspeed_FN^2 - grav*xvert_FN
       TS_FN            = PhaseEquil(e_int_FN, q_tot_FN, ρ_FN)           #themordynamic state at first node
       T_FN             = air_temperature(TS_FN)
@@ -549,9 +578,10 @@ end
       u, v, w     = U/ρ, V/ρ, W/ρ
       q_tot       = Q[_QT]/Q[_ρ]
       q_liq       = aux[_a_q_liq]
+      windspeed   = sqrt(u^2)
       e_int       = E/ρ - 0.5*windspeed^2 - grav*xvert
-      TS          = PhaseEquil(e_int, q_tot, ρ)           #themordynamic state at first node        
-      q_vap       = PhasePartition(TS).vap
+      TS          = PhaseEquil(e_int, q_tot, ρ)           #thermodynamic state at first node        
+      q_vap       = q_tot - PhasePartition(TS).liq
       T           = air_temperature(TS)
       # ------------------------------------
       #Momentum
@@ -562,23 +592,22 @@ end
       # ------------------------------------
       #Water flux: (eq 29 in CLIMA-doc)
       # ------------------------------------
+      q_vap_FN   = q_tot_FN - PhasePartition(TS_FN).liq
       Lv         = latent_heat_vapor(SST)
-      q_vap_FN   = PhasePartition(TS_FN).vap
       q_vap_star = q_vap_saturation(SST, ρ, PhasePartition(q_tot, q_liq, 0.0))
       Evap_flux  = - Cd * windspeed_FN * (q_vap_FN - q_vap_star) / h_first_layer
 
       # --------------------------------------
       #Energy flux associate with evaporation: (eq 30 in CLIMA-doc)
       # --------------------------------------
-      cpv        =   cp_v(PhasePartition(q_tot, q_liq, 0.0))
-      n_D_sfc  =   (cp_v*(T - T_0) + Lv_0 + grav * xvert) * Evap_flux
+      n_D_sfc  =   (cp_v*(T - T_0) + Lv + grav * xvert) * Evap_flux # LH_v0
       
       # ---------------------------------------
       #Sensible heat flux: (eq 31 in CLIMA-doc)
       # ---------------------------------------
-      q_liq_FN         = PhasePartition(TS_FN).liq
-      cpm    =   cp_m(PhasePartition(q_tot, q_liq, 0.0))            
-      SHF    = - Cd * windspeed_FN * (cpm*(T_FN - SST) + grav * (xvert_FN - ymin)) / h_first_layer
+      q_liq_FN = PhasePartition(TS_FN).liq
+      cpm      =   cp_m(PhasePartition(q_tot, q_liq, 0.0))            
+      SHF      = - Cd * windspeed_FN * (cpm*(T_FN - SST) + grav * (xvert_FN - ymin)) / h_first_layer
       
       S[_U] += dτ12dn 
       S[_V] += dτ22dn
@@ -663,9 +692,9 @@ end
 
 function firstnode_info(disc,Q,t) 
   DGBalanceLawDiscretizations.aux_firstnode_values!(disc, Q,
-                                                    (_a_y_fn), (_a_y))
+                                                    (_a_y_FN), (_a_y))
   DGBalanceLawDiscretizations.state_firstnode_values!(disc, Q,
-                                                    (_a_ρ_fn, _a_U_fn, _a_V_fn, _a_W_fn, _a_E_fn, _a_QT_fn), (_ρ, _U, _V, _W, _E, _QT))
+                                                    (_a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN), (_ρ, _U, _V, _W, _E, _QT))
 end
 function integral_computation(disc, Q, t)
   DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integrand, Q,
@@ -902,7 +931,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.0005
+  dt = 0.00075
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
