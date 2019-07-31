@@ -282,12 +282,12 @@ end
     F[3, _E] += ql_fz + qv_fz 
 
     # Viscous contributions to mass flux terms
-    F[1, _ρ]  -=  vqx * D_e
-    F[2, _ρ]  -=  vqy * D_e
-    F[3, _ρ]  -=  vqz * D_e
-    F[1, _QT] -=  vqx * D_e
-    F[2, _QT] -=  vqy * D_e
-    F[3, _QT] -=  vqz * D_e    
+    F[1, _ρ]  +=  vqx * D_e
+    F[2, _ρ]  +=  vqy * D_e
+    F[3, _ρ]  +=  vqz * D_e
+    F[1, _QT] +=  vqx * D_e
+    F[2, _QT] +=  vqy * D_e
+    F[3, _QT] +=  vqz * D_e    
 
   end
 end
@@ -380,7 +380,7 @@ end
 
 
     # TODO: Viscous stresse come from SubgridScaleTurbulence module
-    VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
+    VF[_qx], VF[_qy], VF[_qz] = -dqdx, -dqdy, -dqdz
     VF[_qvx], VF[_qvy], VF[_qvz] = -dqvdx, -dqvdy, -dqvdz
     VF[_qlx], VF[_qly], VF[_qlz] = -dqldx, -dqldy, -dqldz
     VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
@@ -510,9 +510,11 @@ end
     if t < 0.0005 
       QP[_E]  = EM
       QP[_QT] = QTM        
+      QP[_ρ] = ρM      
     end
     QP[_E]  = EM
     QP[_QT] = QTM        
+    QP[_ρ] = ρM      
     nothing
   end
 end
@@ -600,7 +602,7 @@ end
       # --------------------------------------
       #Energy flux associate with evaporation: (eq 30 in CLIMA-doc)
       # --------------------------------------
-      n_D_sfc  =   (cp_v*(T - T_0) + Lv + grav * xvert) * Evap_flux # LH_v0
+      n_D_sfc  =   (cp_v*(T - T_0) + LH_v0 + grav * xvert) * Evap_flux # LH_v0
       
       # ---------------------------------------
       #Sensible heat flux: (eq 31 in CLIMA-doc)
@@ -931,7 +933,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.00075
+  dt = 0.001
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
