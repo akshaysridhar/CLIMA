@@ -125,7 +125,7 @@ DoFstorage = (Nex*Ney*Nez)*(Npoly+1)^numdims*(_nstate + _nviscstates + _nauxstat
 
 
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-@parameter C_smag 0.23 "C_smag"
+@parameter C_smag 0.18 "C_smag"
 # Equivalent grid-scale
 #Δ = (Δx * Δy * Δz)^(1/3)
 #Δ = min(Δx, Δy)
@@ -239,8 +239,8 @@ end
     SijSij = VF[_SijSij]
     
     #Dynamic eddy viscosity
-    #μ_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # Smagorinsky 
-    μ_e = ρ*VF[_ν_e] #Vreman
+    μ_e = ρ*sqrt(2SijSij) * C_smag^2 * Δsqr  # Smagorinsky 
+    #μ_e = ρ*VF[_ν_e] #Vreman
     D_e = μ_e / Prandtl_t
 
     # Multiply stress tensor by viscosity coefficient:
@@ -426,76 +426,74 @@ end
 #md # where a local Richardson number via potential temperature gradient is required)
 # -------------------------------------------------------------------------
 @inline function auxiliary_state_initialization!(aux, x, y, z)
-    @inbounds begin
-        DFloat = eltype(aux)
-        xvert = y
-        aux[_a_y] = xvert
+  @inbounds begin
+    DFloat = eltype(aux)
+    xvert = y
+    aux[_a_y] = xvert
 
-        #Sponge 
-        ctop    = zero(DFloat)
+    #Sponge 
+    ctop    = zero(DFloat)
 
-        cs_left_right = zero(DFloat)
-        cs_front_back = zero(DFloat)
+    cs_left_right = zero(DFloat)
+    cs_front_back = zero(DFloat)
+    
+    domain_bott  = ymin
+    domain_top   = ymax
+    #END User modification on domain parameters.
+
+    #Vertical sponge:
+    sponge_type = 2
+
+    if sponge_type == 1
         
-        domain_bott  = ymin
-        domain_top   = ymax
-        #END User modification on domain parameters.
-
-        #Vertical sponge:
-        sponge_type = 2
-
-        if sponge_type == 1
-            
-            top_sponge  = DFloat(0.85) * domain_top          
-            if xvert >= top_sponge
-                ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
-            end
-            
-        elseif sponge_type == 2
-            
-            bc_zscale = 450.0
-            zd        = domain_top - bc_zscale           
-            #
-            # top damping
-            # first layer: damp lee waves
-            #
-            alpha_coe = 1.0
-            ct        = 0.90
-            ctop      = 0.0
-            if xvert >= zd
-                zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
-                if zid >= 0.0 && zid <= 0.5
-                    abstaud = alpha_coe*(1.0 - cos(zid*pi))
-
-                else
-                    abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
-                    
-                end
-                ctop = ct*abstaud
-            end
-            
-        elseif sponge_type == 3
-            
-            bc_zscale = 500.0
-            zd        = domain_top - bc_zscale
-            
-            #
-            # top damping
-            # first layer: damp lee waves
-            #
-            ctop = 0.0
-            ct   = 0.02
-            if xvert >= zd
-                ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
-            end
+        top_sponge  = DFloat(0.85) * domain_top          
+        if xvert >= top_sponge
+            ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
         end
         
-        beta  = 1 - (1 - ctop) #*(1.0 - csleft)*(1.0 - csright)*(1.0 - csfront)*(1.0 - csback)
-        beta  = min(beta, 1)
-        aux[_a_sponge] = beta
-    end
-end
+    elseif sponge_type == 2
+        
+        bc_zscale = 450.0
+        zd        = domain_top - bc_zscale           
+        #
+        # top damping
+        # first layer: damp lee waves
+        #
+        alpha_coe = 1.0
+        ct        = 0.90
+        ctop      = 0.0
+        if xvert >= zd
+            zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
+            if zid >= 0.0 && zid <= 0.5
+                abstaud = alpha_coe*(1.0 - cos(zid*pi))
 
+            else
+                abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
+                
+            end
+            ctop = ct*abstaud
+        end
+        
+    elseif sponge_type == 3
+        
+        bc_zscale = 500.0
+        zd        = domain_top - bc_zscale
+        
+        #
+        # top damping
+        # first layer: damp lee waves
+        #
+        ctop = 0.0
+        ct   = 0.02
+        if xvert >= zd
+            ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
+        end
+    end
+    beta  = 1 - (1 - ctop) #*(1.0 - csleft)*(1.0 - csright)*(1.0 - csfront)*(1.0 - csback)
+    beta  = min(beta, 1)
+    aux[_a_sponge] = beta
+  end
+end
 
 # -------------------------------------------------------------------------
 # generic bc for 2d , 3d
@@ -517,10 +515,8 @@ end
     #  QP[_QT] = QTM        
     #  QP[_ρ] = ρM      
     #end
-    QP[_E]  = EM
     QP[_QT] = QTM        
     QP[_ρ] = ρM 
-    VFP .= VFM
     nothing
   end
 end
@@ -554,7 +550,7 @@ end
     # Surface evaporation effects:
     xvert = aux[_a_y]
     if xvert < 0.0001 && t > 0.0005 
-      source_boundary_evaporation!(S,Q,aux,t)
+      #source_boundary_evaporation!(S,Q,aux,t)
     end
   end
 end
@@ -753,6 +749,8 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
         θ_l   += randnum1 * θ_l
         q_tot += randnum2 * q_tot
     end
+    q_tot = 0.0
+    q_liq = 0.0
     
     q_partition = PhasePartition(q_tot, q_liq, 0.0)
     e_int  = internal_energy(T, q_partition)
@@ -937,7 +935,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.0007
+  dt = 0.0005
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
