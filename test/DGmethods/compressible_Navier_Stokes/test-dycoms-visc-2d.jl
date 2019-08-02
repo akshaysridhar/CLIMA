@@ -93,7 +93,11 @@ const Npoly = 4
 
 # Define grid size 
 const Δx    = 35
+<<<<<<< HEAD
 const Δy    = 15
+=======
+const Δy    = 10
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
 const Δz    = 5
 
 const h_first_layer = Δy
@@ -103,7 +107,11 @@ const stretch_coe = 2.25
 
 # Physical domain extents 
 const (xmin, xmax) = (0, 1000)
+<<<<<<< HEAD
 const (ymin, ymax) = (0, 1500)
+=======
+const (ymin, ymax) = (0, 2000)
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
 const (zmin, zmax) = (0, 1500)
 
 #Get Nex, Ney from resolution
@@ -258,6 +266,7 @@ end
     F[1, _E] += u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * μ_e
     F[2, _E] += u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * μ_e
     
+<<<<<<< HEAD
     if t > 0.0005
       T = aux[_a_T]
     else
@@ -266,6 +275,9 @@ end
       T = air_temperature(TS)
     end
 
+=======
+    T = aux[_a_T]
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
     I_vap = cv_v * (T - T_0) + e_int_v0
     I_liq = cv_l * (T - T_0)
     I_ice = cv_i * (T - T_0) - e_int_i0
@@ -289,12 +301,21 @@ end
     F[3, _E] += ql_fz + qv_fz 
 
     # Viscous contributions to mass flux terms
+<<<<<<< HEAD
     F[1, _ρ]  +=  vqx * D_e
     F[2, _ρ]  +=  vqy * D_e
     F[3, _ρ]  +=  vqz * D_e
     F[1, _QT] +=  vqx * D_e
     F[2, _QT] +=  vqy * D_e
     F[3, _QT] +=  vqz * D_e    
+=======
+    F[1, _ρ]  -=  vqx * D_e
+    F[2, _ρ]  -=  vqy * D_e
+    F[3, _ρ]  -=  vqz * D_e
+    F[1, _QT] -=  vqx * D_e
+    F[2, _QT] -=  vqy * D_e
+    F[3, _QT] -=  vqz * D_e    
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
 
   end
 end
@@ -385,8 +406,13 @@ end
     VF[_τ13] = -2 * S13
     VF[_τ23] = -2 * S23
 
+
     # TODO: Viscous stresse come from SubgridScaleTurbulence module
+<<<<<<< HEAD
     VF[_qx], VF[_qy], VF[_qz] = -dqdx, -dqdy, -dqdz
+=======
+    VF[_qx], VF[_qy], VF[_qz] = dqdx, dqdy, dqdz
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
     VF[_qvx], VF[_qvy], VF[_qvz] = -dqvdx, -dqvdy, -dqvdz
     VF[_qlx], VF[_qly], VF[_qlz] = -dqldx, -dqldy, -dqldz
     VF[_Tx], VF[_Ty], VF[_Tz] = dTdx, dTdy, dTdz
@@ -446,6 +472,7 @@ end
 
     if sponge_type == 1
         
+<<<<<<< HEAD
         top_sponge  = DFloat(0.85) * domain_top          
         if xvert >= top_sponge
             ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
@@ -470,6 +497,54 @@ end
             else
                 abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
                 
+=======
+        #Vertical sponge:
+        sponge_type = 2
+
+        if sponge_type == 1
+            
+            top_sponge  = DFloat(0.85) * domain_top          
+            if xvert >= top_sponge
+                ctop = ct * (sinpi((z - top_sponge)/2/(domain_top - top_sponge)))^4
+            end
+            
+        elseif sponge_type == 2
+            
+            bc_zscale = 300.0
+            zd        = domain_top - bc_zscale           
+            #
+            # top damping
+            # first layer: damp lee waves
+            #
+            alpha_coe = 0.5
+            ct        = 0.90
+            ctop      = 0.0
+            if xvert >= zd
+                zid = (xvert - zd)/(domain_top - zd) # normalized coordinate
+                if zid >= 0.0 && zid <= 0.5
+                    abstaud = alpha_coe*(1.0 - cos(zid*pi))
+
+                else
+                    abstaud = alpha_coe*( 1.0 + ((zid - 0.5)*pi) )
+                    
+                end
+                ctop = ct*abstaud
+            end
+            
+        elseif sponge_type == 3
+            
+            bc_zscale = 500.0
+            zd        = domain_top - bc_zscale
+            
+            #
+            # top damping
+            # first layer: damp lee waves
+            #
+            ctop = 0.0
+            ct   = 0.02
+            if xvert >= zd
+                ctop = ct * sinpi(0.5 * (1.0 - (domain_top - xvert) / bc_zscale))^2.0
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
             end
             ctop = ct*abstaud
         end
@@ -495,6 +570,7 @@ end
   end
 end
 
+
 # -------------------------------------------------------------------------
 # generic bc for 2d , 3d
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t)
@@ -509,6 +585,7 @@ end
     QP[_W]  = WM - 2 * nM[3] * UnM
     # No flux boundary conditions
     # No shear on walls (free-slip condition)
+<<<<<<< HEAD
     
     #if t < 0.0005 
     #  QP[_E]  = EM
@@ -517,6 +594,14 @@ end
     #end
     QP[_QT] = QTM        
     QP[_ρ] = ρM 
+=======
+    if t < 0.0005 
+      QP[_E]  = EM
+      QP[_QT] = QTM        
+    end
+    QP[_E]  = EM
+    QP[_QT] = QTM        
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
     nothing
   end
 end
@@ -545,12 +630,20 @@ end
   @inbounds begin
     source_geopot!(S, Q, aux, t)
     source_sponge!(S, Q, aux, t)
+<<<<<<< HEAD
     source_geostrophic!(S, Q, aux, t)
+=======
+    #source_geostrophic!(S, Q, aux, t)
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
 
     # Surface evaporation effects:
     xvert = aux[_a_y]
     if xvert < 0.0001 && t > 0.0005 
+<<<<<<< HEAD
       #source_boundary_evaporation!(S,Q,aux,t)
+=======
+      source_boundary_evaporation!(S,Q,aux,t)
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
     end
   end
 end
@@ -603,7 +696,11 @@ end
       # --------------------------------------
       #Energy flux associate with evaporation: (eq 30 in CLIMA-doc)
       # --------------------------------------
+<<<<<<< HEAD
       LHF =   (cp_v*(T - T_0) + LH_v0 + grav * xvert) * Evap_flux # LH_v0
+=======
+      n_D_sfc  =   (cp_v*(T - T_0) + LH_v0 + grav * xvert) * Evap_flux
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
       
       # ---------------------------------------
       #Sensible heat flux: (eq 31 in CLIMA-doc)
@@ -614,7 +711,11 @@ end
       
       S[_U] += dτ12dn 
       S[_V] += dτ22dn
+<<<<<<< HEAD
       S[_E] += SHF + LHF
+=======
+      S[_E] += SHF + n_D_sfc
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
       S[_QT] += Evap_flux
     end
     nothing
@@ -867,14 +968,6 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     postnames = ("LWP", "u", "v", "w", "_q_liq", "T", "THETA", "SPONGE")
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
-    cbfilter = GenericCallbacks.EveryXSimulationSteps(1) do
-        DGBalanceLawDiscretizations.apply!(Q, 1:_nstate, spacedisc,
-                                           filter_dycoms;
-                                           horizontal=true,
-                                           vertical=true)
-        nothing
-    end
-    
     step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
@@ -935,7 +1028,7 @@ let
   # User defined simulation end time
   # User defined polynomial order 
   numelem = (Nex, Ney)
-  dt = 0.0005
+  dt = 0.00075
   timeend = 14400
   polynomialorder = Npoly
   DFloat = Float64
@@ -971,3 +1064,44 @@ end
 isinteractive() || MPI.Finalize()
 
 Nothing
+<<<<<<< HEAD
+=======
+
+#=
+
+# -------------------------------------------------------------------------
+# generic bc for 2d , 3d
+@inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t)
+    @inbounds begin
+
+        DFloat = eltype(QP)
+        x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
+        xvert = z
+        ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
+        # No flux boundary conditions
+        # No shear on walls (free-slip condition)
+        UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
+        QP[_U] = UM - 2 * nM[1] * UnM
+        QP[_V] = VM - 2 * nM[2] * UnM
+        QP[_W] = WM - 2 * nM[3] * UnM
+        QP[_ρ] = ρM
+        QP[_QT] = QTM        
+        QP[_E] = EM
+        
+        if xvert < h_first_layer && t < 0.0025
+            
+            SST    = 292.5
+            q_tot  = QP[_QT]/QP[_ρ]
+            q_liq  = auxM[_a_q_liq]
+            e_int  = internal_energy(SST, PhasePartition(q_tot, q_liq, 0.0))
+            e_kin  = 0.5*(QP[_U]^2/ρM^2 + QP[_V]^2/ρM^2 + QP[_W]^2/ρM^2)
+            e_pot  = grav*xvert
+            E      = ρM * total_energy(e_kin, e_pot, SST, PhasePartition(q_tot, q_liq, 0.0))
+            QP[_E] = E       
+        end
+        nothing
+    end
+end
+
+=#
+>>>>>>> 0803c345c33659eb6c35fd66aab7cf96a7b8730c
