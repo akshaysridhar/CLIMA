@@ -883,6 +883,8 @@ end
                                            ) where {dim, N, nstate, nauxstate,
                                                     outstate, nvertelem}
 
+Allows user to specify list of prognostic states for which values at the first DG node are 
+required. 
 See [`DGBalanceLaw`](@ref) for usage.
 """
 function knl_state_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
@@ -938,6 +940,9 @@ end
                                             elems, ::Val{outstate}
                                            ) where {dim, N, nstate, nauxstate,
                                                     outstate, nvertelem}
+Allows user to specify list of aux states for which values at the first DG node are 
+required. (Currently we may not need access to all aux states so this is separated from the
+state kernel)
 
 See [`DGBalanceLaw`](@ref) for usage.
 """
