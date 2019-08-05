@@ -808,16 +808,13 @@ end
     This function specifies the initial conditions
     for the dycoms driver. 
     """
-#=
 function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y, z, _...)
     
     DFloat     = eltype(Q)
     p0::DFloat = MSLP
     
-    #randnum1   = rand(seed, DFloat) / 100
-    #randnum2   = rand(seed, DFloat) / 100
-    randnum1   = rand(1)[1] / 100
-    randnum2   = rand(1)[1] / 100
+    randnum1   = rand(seed, DFloat) / 100
+    randnum2   = rand(seed, DFloat) / 100
     
     xvert  = z
     P      = spl_pinit(xvert)     #P
@@ -848,8 +845,7 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     
     ρ  = air_density(T, P, q_partition)
 
-    #u, v, w = 7.0, 0.0, 0.0 #geostrophic
-    u, v, w = 5.0, 0.0, 0.0
+    u, v, w = 7.0, -5.5, 0.0
     
     e_kin = (u^2 + v^2 + w^2) / 2
     e_pot = grav * xvert
@@ -858,8 +854,8 @@ function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y
     U, V, W = ρ * u, ρ * v, ρ * w
     
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
-    #try the filter
-end=#
+end
+#= 
 function dycoms!(dim, Q, t, spl_tinit, spl_qinit, spl_uinit, spl_vinit,
                  spl_pinit, x, y, z, _...)
     
@@ -924,7 +920,7 @@ function dycoms!(dim, Q, t, spl_tinit, spl_qinit, spl_uinit, spl_vinit,
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
     
 end
-
+=#
 
 # ------------------------------------------------------------------
 # -------------END DEF SOURCES-------------------------------------# 
