@@ -916,10 +916,9 @@ function knl_state_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
         @unroll for s = 1:nout
           l_V[s] = Q[ijk, instate[s], e]
         end
-        # Store out to memory and reset the background value for next element
+        # Store (accessible via auxstate)
         @unroll for k in 1:2
           ijk = i + Nq * ((j-1) + Nqj * (k-1))
-          x, y, z = vgeo[ijk, _x, e], vgeo[ijk, _y, e], vgeo[ijk, _z, e]
           @unroll for s = 1:nout
             P[ijk, outstate[s], e] = l_V[s]
           end
@@ -970,7 +969,7 @@ function knl_aux_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
         # loop up the pencil
         k = 2 
         ijk = i + Nq * ((j-1) + Nqj * (k-1))
-        # local storage for `first-node` values of the state Q
+        # local storage for `first-node` values of the auxstate
         @unroll for s = 1:nout
           l_V[s] = auxstate[ijk, instate[s], e]
         end
