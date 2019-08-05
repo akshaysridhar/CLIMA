@@ -41,10 +41,10 @@ const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 # Viscous state labels
 const _nviscstates = 23
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _Tx, _Ty, _Tz, _θx, _θy, _θz, _SijSij, _ν_e, _qvx, _qvy, _qvz, _qlx, _qly, _qlz = 1:_nviscstates
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qx, _qy, _qz, _JplusDx, _JplusDy, _JplusDz, _θx, _θy, _θz, _SijSij, _ν_e, _qvx, _qvy, _qvz, _qlx, _qly, _qlz = 1:_nviscstates
 
 const _nauxstate = 22
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq,_a_θ, _a_P,_a_T, _a_soundspeed_air, _a_z_FN, _a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN = 1:_nauxstate
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq, _a_θ, _a_P,_a_T, _a_soundspeed_air, _a_z_FN, _a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN = 1:_nauxstate
 
 if !@isdefined integration_testing
     const integration_testing =
@@ -91,8 +91,8 @@ const h_first_layer = Δz
 (Nex, Ney, Nez) = (10, 10, 1)
 
 # Physical domain extents 
-const (xmin, xmax) = (0, 840)
-const (ymin, ymax) = (0, 840)
+const (xmin, xmax) = (0, 2000)
+const (ymin, ymax) = (0, 2000)
 const (zmin, zmax) = (0, 1500)
 
 const zi = 840
@@ -146,6 +146,27 @@ const first_node_level   = 0.0001
 
 const D_subsidence = 3.75e-6
 
+# Random number seed
+const seed = MersenneTwister(0)
+
+
+function global_max(A::MPIStateArray, states=1:size(A, 2))
+    host_array = Array ∈ typeof(A).parameters
+    h_A = host_array ? A : Array(A)
+    locmax = maximum(view(h_A, :, states, A.realelems)) 
+    MPI.Allreduce([locmax], MPI.MAX, A.mpicomm)[1]
+end
+
+function global_mean(A::MPIStateArray, states=1:size(A,2))
+    host_array = Array ∈ typeof(A).parameters
+    h_A = host_array ? A : Array(A) 
+    (Np, nstate, nelem) = size(A) 
+    numpts = (nelem * Np) + 1
+    localsum = sum(view(h_A, :, states, A.realelems)) 
+    MPI.Allreduce([localsum], MPI.SUM, A.mpicomm)[1] / numpts 
+end
+
+
 # -------------------------------------------------------------------------
 # Preflux calculation: This function computes parameters required for the 
 # DG RHS (but not explicitly solved for as a prognostic variable)
@@ -157,22 +178,40 @@ const D_subsidence = 3.75e-6
 # Modules: NumericalFluxes.jl 
 # functions: wavespeed, cns_flux!, bcstate!
 # -------------------------------------------------------------------------
+@inline function preflux(Q,aux)
+    R_gas::eltype(Q) = R_d
+    @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+    ρinv = 1 / ρ
+    x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
+    u, v, w = ρinv * U, ρinv * V, ρinv * W
+    e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
+    q_tot = QT / ρ
+    # Establish the current thermodynamic state using the prognostic variables
+    TS = PhaseEquil(e_int, q_tot, ρ)
+    T = air_temperature(TS)
+    Rm = gas_constant_air(TS)
+
+    
+    P = air_pressure(TS) # Test with dry atmosphere
+    q_liq = PhasePartition(TS).liq
+    θ = virtual_pottemp(TS)
+    (P, u, v, w, ρinv, q_liq,T, θ, Rm)
+end
+
 #-------------------------------------------------------------------------
 #md # Soundspeed computed using the thermodynamic state TS
 # max eigenvalue
 @inline function wavespeed(n, Q, aux, t)
-  @inbounds begin 
-    P = aux[_a_P]
-    T = aux[_a_T]
-    ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-    x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
-    ρinv = 1/ρ
-    u, v, w = ρinv * U, ρinv * V, ρinv * W
-    e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
-    q_tot = QT / ρ
-    TS = PhaseEquil(e_int, q_tot, ρ)
-    (n[1] * u + n[2] * v + n[3] * w) + soundspeed_air(TS)
-  end
+    @inbounds begin 
+        (P, u, v, w, ρinv, q_liq,T,θ) = preflux(Q,aux)
+        ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+        x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
+        u, v, w = ρinv * U, ρinv * V, ρinv * W
+        e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) / ρ
+        q_tot = QT / ρ
+        TS = PhaseEquil(e_int, q_tot, ρ)
+        (n[1] * u + n[2] * v + n[3] * w) + soundspeed_air(TS)
+    end
 end
 
 
@@ -190,7 +229,7 @@ end
 function read_sounding()
     #read in the original squal sounding
     fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_TEST1.dat"))
-    #fsounding  = open(joinpath(@__DIR__, "../soundings/sounding_DYCOMS_from_PyCles.dat"))
+    #fsounding  = open(joinpath(@__DIR__, "../soundings/SOUNDING_PYCLES_Z_T_P.dat"))
     sounding = readdlm(fsounding)
     close(fsounding)
     (nzmax, ncols) = size(sounding)
@@ -209,17 +248,29 @@ end
 #md # and $\boldsymbol{S}$ contains source terms.
 #md # Note that the preflux calculation is splatted at the end of the function call
 #md # to cns_flux!
-# -------------------------------------------------------------------------
+# ------------------------------------------------------------------------
+function buoyancy_correction(normSij, θv, dθvdz)
+    # Brunt-Vaisala frequency
+    N2 = grav / θv * dθvdz
+    
+    # Richardson number
+    Richardson = N2 / (2 * normSij + eps(normSij))
+    
+    # Buoyancy correction factor
+    buoyancy_factor = N2 <=0 ? 1 : sqrt(max(0.0, 1 - Richardson/Prandtl_t))
+    
+    return buoyancy_factor
+end
+
 @inline function cns_flux!(F, Q, VF, aux, t)
     @inbounds begin
-        P = aux[_a_P]
-        T = aux[_a_T]
+        (P, u, v, w, ρinv, q_liq,T,θ) = preflux(Q,aux)
         ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-        u, v, w = U/ρ, V/ρ, W/ρ        
-        
+
         xvert = aux[_a_z]
+        θ     = aux[_a_θ]
         w -= D_subsidence * xvert
-        W = w*ρ
+        W  = w*ρ
         
         # Inviscid contributions
         F[1, _ρ], F[2, _ρ], F[3, _ρ] = U          , V          , W
@@ -227,31 +278,31 @@ end
         F[1, _V], F[2, _V], F[3, _V] = u * V      , v * V + P  , w * V
         F[1, _W], F[2, _W], F[3, _W] = u * W      , v * W      , w * W + P
         F[1, _E], F[2, _E], F[3, _E] = u * (E + P), v * (E + P), w * (E + P)
-        F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT
-           
-        #Derivative of T and Q:
-        vqx, vqy, vqz    = VF[_qx], VF[_qy], VF[_qz]        
-        vTx, vTy, vTz    = VF[_Tx], VF[_Ty], VF[_Tz]
-        vθy              = VF[_θy]
-        vqvx, vqvy, vqvz = VF[_qvx], VF[_qvy], VF[_qvz]
-        vqlx, vqly, vqlz = VF[_qlx], VF[_qly], VF[_qlz]
+        F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
 
-        
+        #Derivative of T and Q:
+        vqx, vqy, vqz    = VF[_qx],  VF[_qy],  VF[_qz]
+        vqvx, vqvy, vqvz = VF[_qvx], VF[_qvy], VF[_qvz]
+        vqlx, vqly, vqlz = VF[_qlx], VF[_qly], VF[_qlz]    
+        vJplusDx, vJplusDy, vJplusDz    = VF[_JplusDx], VF[_JplusDy], VF[_JplusDz]
+        vθz = VF[_θz]
+      
         # Radiation contribution 
         F_rad = ρ * radiation(aux)  
+        aux[_a_rad] = F_rad
        
         SijSij = VF[_SijSij]
-        f_R = 1.0# buoyancy_correction_smag(SijSij, θ, dθdy)
+        f_R = buoyancy_correction(SijSij, θ, vθz)
 
         #Dynamic eddy viscosity from Smagorinsky:
-        ν_e = ρ * sqrt(2.0 * SijSij) * C_smag^2 * Δsqr
-        D_e = ν_e / Prandtl_t
+        μ_e = ρ * sqrt(2.0 * SijSij) * C_smag^2 * Δsqr
+        D_e = μ_e / Prandtl_t
         
         # Multiply stress tensor by viscosity coefficient:
-        τ11, τ22, τ33 = VF[_τ11] * ν_e, VF[_τ22]* ν_e, VF[_τ33] * ν_e
-        τ12 = τ21 = VF[_τ12] * ν_e 
-        τ13 = τ31 = VF[_τ13] * ν_e               
-        τ23 = τ32 = VF[_τ23] * ν_e
+        τ11, τ22, τ33 = VF[_τ11] * μ_e, VF[_τ22]* μ_e, VF[_τ33] * μ_e
+        τ12 = τ21 = VF[_τ12] * μ_e 
+        τ13 = τ31 = VF[_τ13] * μ_e               
+        τ23 = τ32 = VF[_τ23] * μ_e
         
         # Viscous velocity flux (i.e. F^visc_u in Giraldo Restelli 2008)
         F[1, _U] -= τ11 * f_R ; F[2, _U] -= τ12 * f_R ; F[3, _U] -= τ13 * f_R
@@ -259,12 +310,10 @@ end
         F[1, _W] -= τ31 * f_R ; F[2, _W] -= τ32 * f_R ; F[3, _W] -= τ33 * f_R
         
         # Viscous Energy flux (i.e. F^visc_e in Giraldo Restelli 2008)
-        F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + cp_over_prandtl * vTx * ν_e
-        F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + cp_over_prandtl * vTy * ν_e
-        F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + cp_over_prandtl * vTz * ν_e
+        F[1, _E] -= u * τ11 + v * τ12 + w * τ13 + vJplusDx * D_e  #dTd should not be diffused.
+        F[2, _E] -= u * τ21 + v * τ22 + w * τ23 + vJplusDy * D_e
+        F[3, _E] -= u * τ31 + v * τ32 + w * τ33 + vJplusDz * D_e
         
-        F[1, _E] += 0
-        F[2, _E] += 0
         F[3, _E] += F_rad
         
         # Viscous contributions to mass flux terms
@@ -274,29 +323,8 @@ end
         F[1, _QT] -=  vqx * D_e
         F[2, _QT] -=  vqy * D_e
         F[3, _QT] -=  vqz * D_e
-
-        #Terms for Eq. () in CLIMA-doc
-        T = aux[_a_T]
-
-        I_vap = cv_v * (T - T_0) + e_int_v0
-        I_liq = cv_l * (T - T_0)
-        I_ice = cv_i * (T - T_0) - e_int_i0
-        e_kin = 0.5 * (u^2 +v^2 + w^2)
-        e_pot = grav * xvert
-        e_tot_vap = e_kin + e_pot + I_vap
-        e_tot_liq = e_kin + e_pot + I_liq
-        e_tot_ice = e_kin + e_pot + I_ice
-
-        ql_fx = -D_e * vqlx * e_tot_liq
-        ql_fy = -D_e * vqly * e_tot_liq
-        ql_fz = -D_e * vqlz * e_tot_liq
-        qv_fx = -D_e * vqvx * (e_tot_vap + R_v * T)
-        qv_fy = -D_e * vqvy * (e_tot_vap + R_v * T)
-        qv_fz = -D_e * vqvz * (e_tot_vap + R_v * T)        
-          
-        F[1, _E] += ql_fx + qv_fx 
-        F[2, _E] += ql_fy + qv_fy 
-        F[3, _E] += ql_fz + qv_fz  
+   
+        #END NOMORE
         
     end
 end
@@ -309,23 +337,15 @@ end
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
 # Gradient state labels
-const _ngradstates = 9
-@inline function gradient_vars!(gradient_list, Q, aux, t)
+const _ngradstates = 7
+@inline function gradient_vars!(vel, Q, aux, t)
   @inbounds begin
-    θ = aux[_a_θ]
-    P = aux[_a_P]
-    T = aux[_a_T]
-    ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
-    ρinv = 1/ρ
-    u, v, w = U*ρinv, V*ρinv, W*ρinv
-    q_tot = QT/ρ
-    q_liq = aux[_a_q_liq]
-    q_vap = q_tot - q_liq
-    
-    gradient_list[1], gradient_list[2], gradient_list[3] = u, v, w
-    gradient_list[4], gradient_list[5], gradient_list[6] = E, QT, T
-    gradient_list[7] = θ
-    gradient_list[8], gradient_list[9] = q_vap, q_liq
+      (P, u, v, w, ρinv, q_liq,T,θ,Rm) = preflux(Q,aux)
+      ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
+     
+      vel[1], vel[2], vel[3] = u, v, w
+      vel[4], vel[5], vel[6] = E, QT/ρ, E/ρ + Rm*T
+      vel[7] = θ
   end
 end
 
@@ -340,6 +360,7 @@ end
   F_1 = 22
   α_z = 1
   ρ_i = 1.22
+  D_subsidence = 3.75e-6
   term1 = F_0 * exp(-z_to_inf) 
   term2 = F_1 * exp(-zero_to_z)
   term3 = ρ_i * cp_d * D_subsidence * α_z * (0.25 * (cbrt(Δz_i))^4 + z_i * cbrt(Δz_i))
@@ -354,57 +375,54 @@ end
 #md # populate the viscous flux array VF. SijSij is calculated in addition
 #md # to facilitate implementation of the constant coefficient Smagorinsky model
 #md # (pending)
-@inline function compute_stresses!(VF, grad_mat, _...)
-  @inbounds begin
-    dudx, dudy, dudz = grad_mat[1, 1], grad_mat[2, 1], grad_mat[3, 1]
-    dvdx, dvdy, dvdz = grad_mat[1, 2], grad_mat[2, 2], grad_mat[3, 2]
-    dwdx, dwdy, dwdz = grad_mat[1, 3], grad_mat[2, 3], grad_mat[3, 3]
-    # compute gradients of moist vars and temperature
-    dqdx, dqdy, dqdz = grad_mat[1, 5], grad_mat[2, 5], grad_mat[3, 5]
-    dTdx, dTdy, dTdz = grad_mat[1, 6], grad_mat[2, 6], grad_mat[3, 6]
-    dθdx, dθdy, dθdz = grad_mat[1, 7], grad_mat[2, 7], grad_mat[3, 7]
-    dqvdx, dqvdy, dqvdz = grad_mat[1, 8], grad_mat[2, 8], grad_mat[3, 8]
-    dqldx, dqldy, dqldz = grad_mat[1, 9], grad_mat[2, 9], grad_mat[3, 9]
-    # virtual potential temperature gradient: for richardson calculation
-    # strains
-    # --------------------------------------------
-    # SMAGORINSKY COEFFICIENT COMPONENTS
-    # --------------------------------------------
-    S11 = dudx
-    S22 = dvdy
-    S33 = dwdz
-    S12 = (dudy + dvdx) / 2
-    S13 = (dudz + dwdx) / 2
-    S23 = (dvdz + dwdy) / 2
-    # --------------------------------------------
-    # SMAGORINSKY COEFFICIENT COMPONENTS
-    # --------------------------------------------
-    # FIXME: Grab functions from module SubgridScaleTurbulence 
-    SijSij = (S11^2 + S22^2 + S33^2
-              + 2.0 * S12^2
-              + 2.0 * S13^2 
-              + 2.0 * S23^2) 
-    modSij = sqrt(2.0 * SijSij)
-    
-    #--------------------------------------------
-    # deviatoric stresses
-    # Fix up index magic numbers
-    VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
-    VF[_τ22] = 2 * (S22 - (S11 + S22 + S33) / 3)
-    VF[_τ33] = 2 * (S33 - (S11 + S22 + S33) / 3)
-    VF[_τ12] = 2 * S12
-    VF[_τ13] = 2 * S13
-    VF[_τ23] = 2 * S23
-    
-    # TODO: Viscous stresse come from SubgridScaleTurbulence module
-    VF[_qx], VF[_qy], VF[_qz]    = dqdx,  dqdy,  dqdz
-    VF[_qvx], VF[_qvy], VF[_qvz] = dqvdx, dqvdy, dqvdz
-    VF[_qlx], VF[_qly], VF[_qlz] = dqldx, dqldy, dqldz
-    VF[_Tx], VF[_Ty], VF[_Tz]    = dTdx,  dTdy,  dTdz
-    VF[_θx], VF[_θy], VF[_θz]    = dθdx,  dθdy,  dθdz
-      
-    VF[_SijSij] = SijSij
-  end
+@inline function compute_stresses!(VF, grad_vel, _...)
+    @inbounds begin
+        dudx, dudy, dudz = grad_vel[1, 1], grad_vel[2, 1], grad_vel[3, 1]
+        dvdx, dvdy, dvdz = grad_vel[1, 2], grad_vel[2, 2], grad_vel[3, 2]
+        dwdx, dwdy, dwdz = grad_vel[1, 3], grad_vel[2, 3], grad_vel[3, 3]
+        # compute gradients of moist vars and temperature
+        dqdx, dqdy, dqdz                = grad_vel[1, 5], grad_vel[2, 5], grad_vel[3, 5]
+        dJplusDdx, dJplusDdy, dJplusDdz = grad_vel[1, 6], grad_vel[2, 6], grad_vel[3, 6]
+        dθdx, dθdy, dθdz                = grad_vel[1, 7], grad_vel[2, 7], grad_vel[3, 7]
+        
+        # virtual potential temperature gradient: for richardson calculation
+        # strains
+        # --------------------------------------------
+        # SMAGORINSKY COEFFICIENT COMPONENTS
+        # --------------------------------------------
+        S11 = dudx
+        S22 = dvdy
+        S33 = dwdz
+        S12 = (dudy + dvdx) / 2
+        S13 = (dudz + dwdx) / 2
+        S23 = (dvdz + dwdy) / 2
+        # --------------------------------------------
+        # SMAGORINSKY COEFFICIENT COMPONENTS
+        # --------------------------------------------
+        # FIXME: Grab functions from module SubgridScaleTurbulence 
+        SijSij = (S11^2 + S22^2 + S33^2
+                  + 2.0 * S12^2
+                  + 2.0 * S13^2 
+                  + 2.0 * S23^2) 
+        modSij = sqrt(2.0 * SijSij)
+        
+        #--------------------------------------------
+        # deviatoric stresses
+        # Fix up index magic numbers
+        VF[_τ11] = 2 * (S11 - (S11 + S22 + S33) / 3)
+        VF[_τ22] = 2 * (S22 - (S11 + S22 + S33) / 3)
+        VF[_τ33] = 2 * (S33 - (S11 + S22 + S33) / 3)
+        VF[_τ12] = 2 * S12
+        VF[_τ13] = 2 * S13
+        VF[_τ23] = 2 * S23
+        
+        # TODO: Viscous stresse come from SubgridScaleTurbulence module
+        VF[_qx], VF[_qy], VF[_qz]    = dqdx,  dqdy,  dqdz        
+        VF[_JplusDx], VF[_JplusDy], VF[_JplusDz] = dJplusDdx, dJplusDdy, dJplusDdz
+        VF[_θx], VF[_θy], VF[_θz] = dθdx, dθdy, dθdz
+        VF[_SijSij] = SijSij
+        
+    end
 end
 # -------------------------------------------------------------------------
 # -------------------------------------------------------------------------
@@ -524,7 +542,7 @@ end
 
 # -------------------------------------------------------------------------
 # generic bc for 2d , 3d
-
+#
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t)
     @inbounds begin
         x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
@@ -546,7 +564,7 @@ end
         #QP[_QT] = QTM
         VFP .= 0
         
-        if xvert < 0.0001
+       #= if xvert < 0.0001
             UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
             QP[_W] = WM - 2 * nM[3] * UnM
             QP[_U] = QM[_U]
@@ -562,7 +580,7 @@ end
             e_int = internal_energy(T, PhasePartition(q_tot, q_liq, 0.0))
             E     = ρM * total_energy(e_kin, e_pot, T, PhasePartition(q_tot, q_liq, 0.0))
         end
-        
+        =#
         nothing
     end
 end
@@ -595,7 +613,7 @@ end
         
         # Surface evaporation effects:
         xvert = aux[_a_z]
-        if xvert < 0.0001 && t > 0.002
+        if xvert < 0.0001 && t > 0.004
             source_boundary_evaporation!(S,Q,aux,t)
         end
         
@@ -755,6 +773,7 @@ function preodefun!(disc, Q, t)
       T = air_temperature(TS)
       P = air_pressure(TS) # Test with dry atmosphere
       q_liq = PhasePartition(TS).liq
+
       R[_a_T] = T
       R[_a_P] = P
       R[_a_q_liq] = q_liq
@@ -774,12 +793,11 @@ function firstnode_info(disc,Q,t) #SM
                                                         (_a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN), (_ρ, _U, _V, _W, _E, _QT))
 end#END SM
 function integral_computation(disc, Q, t)
-    DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integral_knl, Q,
-                                                           (_a_02z))
-    DGBalanceLawDiscretizations.reverse_indefinite_stack_integral!(disc,
-                                                                   _a_z2inf,
-                                                                   _a_02z)
-    
+  DGBalanceLawDiscretizations.indefinite_stack_integral!(disc, integral_knl, Q,
+                                                         (_a_02z))
+  DGBalanceLawDiscretizations.reverse_indefinite_stack_integral!(disc,
+                                                                 _a_z2inf,
+                                                                 _a_02z)
 end
 
 # ------------------------------------------------------------------
@@ -791,7 +809,58 @@ end
     This function specifies the initial conditions
     for the dycoms driver. 
     """
-#function dycoms!(dim, Q, t, x, y, z, _...)
+#=
+function dycoms!(dim, Q, t, spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x, y, z, _...)
+    
+    DFloat     = eltype(Q)
+    p0::DFloat = MSLP
+    
+    #randnum1   = rand(seed, DFloat) / 100
+    #randnum2   = rand(seed, DFloat) / 100
+    randnum1   = rand(1)[1] / 100
+    randnum2   = rand(1)[1] / 100
+    
+    xvert  = z
+    P      = spl_pinit(xvert)     #P
+    θ_l    = spl_thetainit(xvert) #θ_l
+    q_tot  = spl_qinit(xvert)     #qtot
+    T      = spl_tinit(xvert)    #T
+
+    zi = 840.0
+    #if ( xvert <= zi)
+    #    θ_lx   = 289.0;
+    #    q_totx = 9.0e-3; #specific humidity
+    #else
+    #    θ_lx   = 297.5 + (xvert - zi)^(1/3);
+    #    q_totx = 1.5e-3; #kg/kg  specific humidity --> approx. to mixing ratio is ok
+    #end  
+    
+    q_liq = 0.0
+    if xvert >= 600.0 && xvert <= 840.0
+        q_liq = (xvert - 600)*0.00045/240.0
+    end
+    if xvert <= 200.0
+        θ_l   += randnum1 * θ_l
+        q_tot += randnum2 * q_tot
+    end
+    
+    q_partition = PhasePartition(q_tot, q_liq, 0.0)
+    e_int  = internal_energy(T, q_partition)
+    
+    ρ  = air_density(T, P, q_partition)
+
+    #u, v, w = 7.0, 0.0, 0.0 #geostrophic
+    u, v, w = 5.0, 0.0, 0.0
+    
+    e_kin = (u^2 + v^2 + w^2) / 2
+    e_pot = grav * xvert
+    E     = ρ * (e_int + e_kin + e_pot)
+
+    U, V, W = ρ * u, ρ * v, ρ * w
+    
+    @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
+    #try the filter
+end=#
 function dycoms!(dim, Q, t, spl_tinit, spl_qinit, spl_uinit, spl_vinit,
                  spl_pinit, x, y, z, _...)
     
@@ -808,27 +877,36 @@ function dycoms!(dim, Q, t, spl_tinit, spl_qinit, spl_uinit, spl_vinit,
     datav          = spl_vinit(xvert)
     datap          = spl_pinit(xvert)
     dataq          = dataq * 1.0e-3
+    P              = datap
     
     randnum1   = rand(1)[1] / 100
     randnum2   = rand(1)[1] / 100
 
-    q_liq = 0.0
-    q_ice = 0.0
-    if xvert >= 600.0 && xvert <= 840.0
-        q_liq = (xvert - 600)*0.00045/240.0
-    end
-    
     θ_liq = datat
     q_tot = dataq
     if xvert <= 200.0
         θ_liq += randnum1 * datat
         q_tot += randnum2 * dataq
     end
+
     
-    P     = datap
-    T     = air_temperature(P, PhasePartition(q_tot, q_liq, q_ice))
-    #T     = air_temperature_from_liquid_ice_pottemp(θ_liq, P, PhasePartition(q_tot, q_liq, q_ice))
-    ρ     = air_density(T, P)
+    q_liq = 0.0
+    q_ice = 0.0
+    if xvert > 600.0 && xvert <= 840.0
+        q_liq = (xvert - 600)*0.00045/240.0
+    end
+    
+    
+    PhPart = PhasePartition(q_tot, q_liq, q_ice)
+    T      = air_temperature_from_liquid_ice_pottemp(θ_liq, P, PhPart)
+    ρ      = air_density(T, P, PhPart)
+
+    #=
+    #using charlie non-equilibrium function
+    TS     = LiquidIcePotTempSHumNonEquil_no_ρ(θ_liq, PhPart, P)
+    T      = air_temperature(TS)
+    ρ      = air_density(TS)
+    =#
     
     # energy definitions
     u, v, w     = datau, datav, 0.0 #geostrophic. TO BE BUILT PROPERLY if Coriolis is considered
@@ -837,8 +915,12 @@ function dycoms!(dim, Q, t, spl_tinit, spl_qinit, spl_uinit, spl_vinit,
     W           = ρ * w
     e_kin       = 0.5 * (u^2 + v^2 + w^2)
     e_pot       = grav * xvert
-    e_int       = internal_energy(T, PhasePartition(q_tot, q_liq, q_ice))
-    E           = ρ * total_energy(e_kin, e_pot, T, PhasePartition(q_tot, q_liq, q_ice))
+    E           = ρ * total_energy(e_kin, e_pot, T, PhPart)
+
+    #=
+    #With charli version
+    E           = ρ * total_energy(e_kin, e_pot, TS)
+    =#
     
     @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
     
@@ -897,6 +979,10 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # height theta qv    u     v     pressure
     zinit, tinit, qinit, uinit, vinit, pinit  =
         sounding[:, 1], sounding[:, 2], sounding[:, 3], sounding[:, 4], sounding[:, 5], sounding[:, 6]
+    
+    #zinit, tinit, pinit = sounding[:, 1], sounding[:, 2], sounding[:, 3]
+    #thetainit, qinit = sounding[:, 4], sounding[:, 5]
+    
     #------------------------------------------------------
     # GET SPLINE FUNCTION
     #------------------------------------------------------
@@ -906,9 +992,18 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     spl_vinit    = Spline1D(zinit, vinit; k=1)
     spl_pinit    = Spline1D(zinit, pinit; k=1)
 
+    #spl_tinit    = Spline1D(zinit, tinit; k=1) #sensible T (K)
+    #spl_pinit    = Spline1D(zinit, pinit; k=1) #pressure P (Pa)
+    #spl_thetainit= Spline1D(zinit, thetainit; k=1) #sensible T (K)
+    #spl_qinit    = Spline1D(zinit, qinit; k=1) #sensible T (K)
+    
+
     initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), spl_tinit,
                                         spl_qinit, spl_uinit, spl_vinit,
                                         spl_pinit, x...)
+
+    #initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), spl_tinit, spl_pinit, spl_thetainit, spl_qinit, x...)
+    
     Q = MPIStateArray(spacedisc, initialcondition)     
     # This is a actual state/function that lives on the grid
     #initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), x...)
@@ -926,15 +1021,15 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         if s
             starttime[] = now()
         else
-            #energy = norm(Q)
-            #globmean = global_mean(Q, _ρ)
+            ql_max = global_max(spacedisc.auxstate, _a_q_liq)
             @info @sprintf("""Update
                          simtime = %.16e
-                         runtime = %s""",
+                         runtime = %s
+                         max(ql) = %.16e""",
                            ODESolvers.gettime(lsrk),
                            Dates.format(convert(Dates.DateTime,
                                                 Dates.now()-starttime[]),
-                                        Dates.dateformat"HH:MM:SS")) #, energy )#, globmean)
+                                        Dates.dateformat"HH:MM:SS"), ql_max)
         end
     end
 
@@ -944,18 +1039,18 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
     step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(1500) do (init=false)
       DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
         @inbounds let
-            R[_o_RAD]   = aux[_a_02z] + aux[_a_z2inf]
+            R[_o_RAD]   = aux[_a_z2inf] + aux[_a_02z]
             R[_o_q_liq] = aux[_a_q_liq]
             R[_o_T]     = aux[_a_T]
             R[_o_θ]     = aux[_a_θ]
         end
       end
         
-      mkpath("./CLIMA-output-scratch/dycoms-ref-ccde40ec/")
-      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-ref-ccde40ec/dy_%dD_mpirank%04d_step%04d", dim,
+      mkpath("./CLIMA-output-scratch/dycoms-ref-31d99214-ALL-TERMS-CLIMA-DOC-LATEST/")
+      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-ref-31d99214-ALL-TERMS-CLIMA-DOC-LATEST/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,
@@ -967,32 +1062,6 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     # Initialise the integration computation. Kernels calculate this at every timestep?? 
     integral_computation(spacedisc, Q, 0) 
     solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
-
-
-#=
-    # Print some end of the simulation information
-    engf = norm(Q)
-    if integration_testing
-        Qe = MPIStateArray(spacedisc,
-                           (Q, x...) -> initialcondition!(Val(dim), Q,
-                                                          DFloat(timeend), x...))
-        engfe = norm(Qe)
-        errf = euclidean_distance(Q, Qe)
-        @info @sprintf """Finished
-        norm(Q)                 = %.16e
-        norm(Q) / norm(Q₀)      = %.16e
-        norm(Q) - norm(Q₀)      = %.16e
-        norm(Q - Qe)            = %.16e
-        norm(Q - Qe) / norm(Qe) = %.16e
-        """ engf engf/eng0 engf-eng0 errf errf / engfe
-    else
-        @info @sprintf """Finished
-        norm(Q)            = %.16e
-        norm(Q) / norm(Q₀) = %.16e
-        norm(Q) - norm(Q₀) = %.16e""" engf engf/eng0 engf-eng0
-    end
-integration_testing ? errf : (engf / eng0)
-=#
 
 end
 
@@ -1018,7 +1087,7 @@ let
     # User defined simulation end time
     # User defined polynomial order 
     numelem = (Nex,Ney,Nez)
-    dt = 0.002
+    dt = 0.005
     timeend = 14400
     polynomialorder = Npoly
     DFloat = Float64
