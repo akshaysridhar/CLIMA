@@ -13,6 +13,7 @@ const _JcV = Grids._JcV
 
 const _nx, _ny, _nz = Grids._nx, Grids._ny, Grids._nz
 const _sM, _vMI = Grids._sM, Grids._vMI
+
 # }}}
 
 """
@@ -549,15 +550,26 @@ function initauxstate!(::Val{dim}, ::Val{N}, ::Val{nauxstate}, auxstatefun!,
   @inbounds @loop for e in (elems; blockIdx().x)
     @loop for n in (1:Np; threadIdx().x)
       x, y, z = vgeo[n, _x, e], vgeo[n, _y, e], vgeo[n, _z, e]
+      # Load the mesh metric terms to compute the local dx, dy, dz 
+      # horizontal and vertical spacings. Useful for filter definitions
+      # and computations for anisotropic gridscales.
+      ξx, ξy, ξz = vgeo[n, _ξx, e], vgeo[n, _ξy, e], vgeo[n, _ξz, e]
+      ηx, ηy, ηz = vgeo[n, _ηx, e], vgeo[n, _ηy, e], vgeo[n, _ηz, e]
+      ζx, ζy, ζz = vgeo[n, _ζx, e], vgeo[n, _ζy, e], vgeo[n, _ζz, e]
+      
       @unroll for s = 1:nauxstate
         l_aux[s] = auxstate[n, s, e]
       end
-
+      
+      dx = 1/2hypot(ξx,ηx,ζx) 
+      dy = 1/2hypot(ξy,ηy,ζy) 
+      dz = 1/2hypot(ξz,ηz,ζz) 
       auxstatefun!(l_aux, x, y, z)
-
+      
       @unroll for s = 1:nauxstate
         auxstate[n, s, e] = l_aux[s]
       end
+    
     end
   end
 end
@@ -855,6 +867,121 @@ function knl_indefinite_stack_integral!(::Val{dim}, ::Val{N}, ::Val{nstate},
               P[ijk, s, e] = l_int[ind_out, k, i, j]
               l_int[ind_out, k, i, j] = l_int[ind_out, Nq, i, j]
             end
+          end
+        end
+      end
+    end
+  end
+  nothing
+end
+
+"""
+    knl_state_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                                            ::Val{nauxstate}, ::Val{nvertelem},
+                                            int_knl!, Q, auxstate, vgeo, Imat,
+                                            elems, ::Val{outstate}
+                                           ) where {dim, N, nstate, nauxstate,
+                                                    outstate, nvertelem}
+
+Allows user to specify list of prognostic states for which values at the first DG node are 
+required. 
+See [`DGBalanceLaw`](@ref) for usage.
+"""
+function knl_state_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                                        ::Val{nauxstate}, ::Val{nvertelem},
+                                        P, Q, auxstate, vgeo,
+                                        elems, ::Val{outstate},
+                                        ::Val{instate}
+                                       ) where {dim, N, nstate, nauxstate,
+                                                outstate, instate, nvertelem}
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+  Nqj = dim == 2 ? 1 : Nq
+
+  nout = length(outstate)
+
+  l_Q = MArray{Tuple{nstate}, DFloat}(undef)
+  # note that k is the second not 4th index (since this is scratch memory and k
+  # needs to be persistent across threads)
+  l_V = MArray{Tuple{nout}, DFloat}(undef)
+  
+  @inbounds @loop for eh in (elems; blockIdx().x)
+    # Loop up the first element along all horizontal elements
+    ev = 1  
+    e = ev + (eh - 1) * nvertelem
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        # loop up the pencil
+        k = 2  
+        ijk = i + Nq * ((j-1) + Nqj * (k-1))
+        # local storage for `first-node` values of the state Q
+        @unroll for s = 1:nout
+          l_V[s] = Q[ijk, instate[s], e]
+        end
+        # Store out to memory and reset the background value for next element
+        @unroll for k in 1:2
+          ijk = i + Nq * ((j-1) + Nqj * (k-1))
+          x, y, z = vgeo[ijk, _x, e], vgeo[ijk, _y, e], vgeo[ijk, _z, e]
+          @unroll for s = 1:nout
+            P[ijk, outstate[s], e] = l_V[s]
+          end
+        end
+      end
+    end
+  end
+  nothing
+end
+
+"""
+    knl_aux_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                                            ::Val{nauxstate}, ::Val{nvertelem},
+                                            int_knl!, Q, auxstate, vgeo, Imat,
+                                            elems, ::Val{outstate}
+                                           ) where {dim, N, nstate, nauxstate,
+                                                    outstate, nvertelem}
+Allows user to specify list of aux states for which values at the first DG node are 
+required. (Currently we may not need access to all aux states so this is separated from the
+state kernel)
+
+See [`DGBalanceLaw`](@ref) for usage.
+"""
+function knl_aux_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
+                                        ::Val{nauxstate}, ::Val{nvertelem},
+                                        P, Q, auxstate, vgeo,
+                                        elems, ::Val{outstate},
+                                        ::Val{instate}
+                                       ) where {dim, N, nstate, nauxstate,
+                                                outstate, instate, nvertelem}
+  DFloat = eltype(Q)
+
+  Nq = N + 1
+  Nqj = dim == 2 ? 1 : Nq
+
+  nout = length(outstate)
+
+  l_Q = MArray{Tuple{nstate}, DFloat}(undef)
+  # note that k is the second not 4th index (since this is scratch memory and k
+  # needs to be persistent across threads)
+  l_V = MArray{Tuple{nout}, DFloat}(undef)
+  @inbounds @loop for eh in (elems; blockIdx().x)
+    # Loop up the first element along all horizontal elements
+    ev = 1
+    e = ev + (eh - 1) * nvertelem
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        # loop up the pencil
+        k = 2 
+        ijk = i + Nq * ((j-1) + Nqj * (k-1))
+        # local storage for `first-node` values of the state Q
+        @unroll for s = 1:nout
+          l_V[s] = auxstate[ijk, instate[s], e]
+        end
+        # Store first-node values : Accessible via auxstate
+        @unroll for k in 1:2
+          ijk = i + Nq * ((j-1) + Nqj * (k-1))
+          @unroll for s = 1:nout
+            P[ijk, outstate[s], e] = l_V[s]
           end
         end
       end
