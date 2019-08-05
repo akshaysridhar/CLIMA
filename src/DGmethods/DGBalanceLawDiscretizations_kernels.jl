@@ -904,30 +904,25 @@ function knl_state_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
   # needs to be persistent across threads)
   l_V = MArray{Tuple{nout}, DFloat}(undef)
   
-  s_I = @shmem DFloat (Nq, Nq)
-  
   @inbounds @loop for eh in (elems; blockIdx().x)
-    # Loop up the stack of elements
-    for ev = 1:1
-      e = ev + (eh - 1) * nvertelem
-      # Evaluate the integral kernel at each DOF in the slabk
-      @loop for j in (1:Nqj; threadIdx().y)
-        @loop for i in (1:Nq; threadIdx().x)
-          # loop up the pencil
-          @unroll for k in 2:2
-            ijk = i + Nq * ((j-1) + Nqj * (k-1))
-            # local storage for `first-node` values of the state Q
-            @unroll for s = 1:nout
-              l_V[s] = Q[ijk, instate[s], e]
-            end
-          end
-          # Store out to memory and reset the background value for next element
-          @unroll for k in 1:2
-            ijk = i + Nq * ((j-1) + Nqj * (k-1))
-            x, y, z = vgeo[ijk, _x, e], vgeo[ijk, _y, e], vgeo[ijk, _z, e]
-            @unroll for s = 1:nout
-              P[ijk, outstate[s], e] = l_V[s]
-            end
+    # Loop up the first element along all horizontal elements
+    ev = 1  
+    e = ev + (eh - 1) * nvertelem
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        # loop up the pencil
+        k = 2  
+        ijk = i + Nq * ((j-1) + Nqj * (k-1))
+        # local storage for `first-node` values of the state Q
+        @unroll for s = 1:nout
+          l_V[s] = Q[ijk, instate[s], e]
+        end
+        # Store out to memory and reset the background value for next element
+        @unroll for k in 1:2
+          ijk = i + Nq * ((j-1) + Nqj * (k-1))
+          x, y, z = vgeo[ijk, _x, e], vgeo[ijk, _y, e], vgeo[ijk, _z, e]
+          @unroll for s = 1:nout
+            P[ijk, outstate[s], e] = l_V[s]
           end
         end
       end
@@ -964,30 +959,24 @@ function knl_aux_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
   # note that k is the second not 4th index (since this is scratch memory and k
   # needs to be persistent across threads)
   l_V = MArray{Tuple{nout}, DFloat}(undef)
-  
-  s_I = @shmem DFloat (Nq, Nq)
-  
   @inbounds @loop for eh in (elems; blockIdx().x)
-    # Loop up the stack of e lements
-    for ev = 1:1 # TODO: redundant loops here can be removed 
-      e = ev + (eh - 1) * nvertelem
-      # Evaluate the integral kernel at each DOF in the slabk
-      @loop for j in (1:Nqj; threadIdx().y)
-        @loop for i in (1:Nq; threadIdx().x)
-          # loop up the pencil
-          @unroll for k in 2:2
-            ijk = i + Nq * ((j-1) + Nqj * (k-1))
-            # local storage for `first-node` values of the state Q
-            @unroll for s = 1:nout
-              l_V[s] = auxstate[ijk, instate[s], e]
-            end
-          end
-          # Store out to memory and reset the background value for next element
-          @unroll for k in 1:2
-            ijk = i + Nq * ((j-1) + Nqj * (k-1))
-            @unroll for s = 1:nout
-              P[ijk, outstate[s], e] = l_V[s]
-            end
+    # Loop up the first element along all horizontal elements
+    ev = 1
+    e = ev + (eh - 1) * nvertelem
+    @loop for j in (1:Nqj; threadIdx().y)
+      @loop for i in (1:Nq; threadIdx().x)
+        # loop up the pencil
+        k = 2 
+        ijk = i + Nq * ((j-1) + Nqj * (k-1))
+        # local storage for `first-node` values of the state Q
+        @unroll for s = 1:nout
+          l_V[s] = auxstate[ijk, instate[s], e]
+        end
+        # Store first-node values : Accessible via auxstate
+        @unroll for k in 1:2
+          ijk = i + Nq * ((j-1) + Nqj * (k-1))
+          @unroll for s = 1:nout
+            P[ijk, outstate[s], e] = l_V[s]
           end
         end
       end
@@ -995,6 +984,7 @@ function knl_aux_firstnode_info!(::Val{dim}, ::Val{N}, ::Val{nstate},
   end
   nothing
 end
+
 function knl_reverse_indefinite_stack_integral!(::Val{dim}, ::Val{N},
                                                 ::Val{nvertelem}, P, elems,
                                                 ::Val{outstate},
