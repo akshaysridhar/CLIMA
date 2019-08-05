@@ -552,7 +552,6 @@ end
         u, v, w = UM/ρM, VM/ρM, WM/ρM
         q_tot = QM[_QT]/ρM
         q_liq = auxM[_a_q_liq]
-        
         # No flux boundary conditions
         # No shear on walls (free-slip condition)
         
@@ -1049,8 +1048,8 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
         end
       end
         
-      mkpath("./CLIMA-output-scratch/dycoms-ref-31d99214-ALL-TERMS-CLIMA-DOC-LATEST/")
-      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-ref-31d99214-ALL-TERMS-CLIMA-DOC-LATEST/dy_%dD_mpirank%04d_step%04d", dim,
+      mkpath("./CLIMA-output-scratch/dycoms-ref/")
+      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-ref/dy_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
       writevtk(outprefix, Q, spacedisc, statenames,
