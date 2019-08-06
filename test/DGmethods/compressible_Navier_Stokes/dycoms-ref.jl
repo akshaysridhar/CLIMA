@@ -128,7 +128,7 @@ DoFstorage = (Nex*Ney*Nez)*(Npoly+1)^numdims*(_nstate + _nviscstates + _nauxstat
 
 
 # Smagorinsky model requirements : TODO move to SubgridScaleTurbulence module 
-const C_smag = 0.18
+const C_smag = 0.15
 # Equivalent grid-scale
 Δ = (Δx * Δy * Δz)^(1/3)
 const Δsqr = Δ * Δ
