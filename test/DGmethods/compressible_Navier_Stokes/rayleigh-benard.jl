@@ -2,10 +2,7 @@
 # These are general modules not necessarily specific
 # to CliMA
 using MPI
-using LinearAlgebra
-using StaticArrays
-using Logging, Printf, Dates
-# Load modules specific to CliMA project
+using CLIMA
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
 using CLIMA.DGBalanceLawDiscretizations
@@ -14,17 +11,21 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
+using LinearAlgebra
+using StaticArrays
+using Logging, Printf, Dates
 using CLIMA.Vtk
-using CLIMA.MoistThermodynamics
 using CLIMA.PlanetParameters
+using CLIMA.MoistThermodynamics
+
 @static if haspkg("CuArrays")
   using CUDAdrv
   using CUDAnative
   using CuArrays
   CuArrays.allowscalar(false)
-  const ArrayType = CuArray
+  const ArrayType = CuArray 
 else
-  const ArrayType = Array 
+  const ArrayType = Array
 end
 # For a three dimensional problem 
 const _nstate = 6
@@ -43,11 +44,8 @@ const xmin = 0
 const ymin = 0
 const zmin = 0
 const xmax = 2000
-const ymax = 100
+const ymax = 500
 const zmax = 2000
-const xc   = xmax / 2
-const yc   = ymax / 2
-const zc   = zmax / 2
 
 @inline function preflux(Q, aux)
   γ::eltype(Q) = γ_exact
@@ -57,7 +55,7 @@ const zc   = zmax / 2
   ρinv = 1 / ρ
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
   u, v, w = ρinv * U, ρinv * V, ρinv * W
-  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * y) / ρ
+  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * z) * ρinv
   qt = QT / ρ
   # Establish the current thermodynamic state using the prognostic variables
   TS = PhaseEquil(e_int, qt, ρ)
@@ -85,31 +83,29 @@ end
     F[1, _W], F[2, _W], F[3, _W]    = u * W      , v * W      , w * W + P
     F[1, _E], F[2, _E], F[3, _E]    = u * (E + P), v * (E + P), w * (E + P)
     F[1, _QT], F[2, _QT], F[3, _QT] = u * QT  , v * QT     , w * QT 
+    
     # Stress tensor
-    τ11, τ22, τ33 = VF[_τ11], VF[_τ22], VF[_τ33]
-    τ12 = τ21 = VF[_τ12]
-    τ13 = τ31 = VF[_τ13]
-    τ23 = τ32 = VF[_τ23]
+    τ11, τ22, τ33 = ρ * VF[_τ11], ρ * VF[_τ22], ρ * VF[_τ33]
+    τ12 = τ21 = ρ * VF[_τ12]
+    τ13 = τ31 = ρ * VF[_τ13]
+    τ23 = τ32 = ρ * VF[_τ23]
+    
     # Viscous contributions
     F[1, _U] += τ11; F[2, _U] += τ12; F[3, _U] += τ13
-    F[1, _U] *= ρ; F[2, _U] *= ρ; F[3,_U] *= ρ
-
     F[1, _V] += τ21; F[2, _V] += τ22; F[3, _V] += τ23
-    F[1, _V] *= ρ; F[2, _V] *= ρ; F[3,_V] *= ρ
-    
     F[1, _W] += τ31; F[2, _W] += τ32; F[3, _W] += τ33
-    F[1, _W] *= ρ; F[2, _W] *= ρ; F[3,_W] *= ρ
     # Energy dissipation
-    F[1, _E] += u * τ11 + v * τ12 + w * τ13
-    F[2, _E] += u * τ21 + v * τ22 + w * τ23
-    F[3, _E] += u * τ31 + v * τ32 + w * τ33
+    vEx, vEy, vEz = VF[_Ex], VF[_Ey], VF[_Ez]
+    F[1, _E] += u * τ11 + v * τ12 + w * τ13 + vEx
+    F[2, _E] += u * τ21 + v * τ22 + w * τ23 + vEy
+    F[3, _E] += u * τ31 + v * τ32 + w * τ33 + vEz
   end
 end
 
 # -------------------------------------------------------------------------
 # Compute the velocity from the state
 const _ngradstates = 4
-@inline function gradient_vars!(grad_vars, Q)
+@inline function gradient_vars!(grad_vars, Q, _...) 
   @inbounds begin
     ρ, U, V, W, E = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
     ρinv = 1 / ρ
@@ -132,7 +128,7 @@ end
 
 # -------------------------------------------------------------------------
 # Viscous fluxes
-const _nviscstates = 10
+const _nviscstates = 11
 const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _Ex, _Ey, _Ez, _SijSij, _visc = 1:_nviscstates
 @inline function compute_stresses!(VF, grad_mat, _...)
   @inbounds begin
@@ -145,6 +141,8 @@ const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _Ex, _Ey, _Ez, _SijSij, _visc = 
     S13 = (dudz + dwdx) / 2
     S23 = (dvdz + dwdy) / 2
     SijSij = (S11^2 + S22^2 + S33^2 + 2S12^2 + 2S13^2 + 2S23^2) 
+    Δ = 50
+    C_smag = 0.23
     ν_eddy = sqrt(2*SijSij) * (C_smag * Δ)^2 
     D_eddy = 3ν_eddy
     VF[_τ11] = -2 * ν_eddy * S11
@@ -161,19 +159,31 @@ end
 # -------------------------------------------------------------------------
 # Rayleigh-Benard problem with two fixed walls (prescribed temperatures)
 @inline function bcstate!(QP, VFP, auxP, nM, QM, VFM, auxM, bctype, t)
-  TM, PM, uM, vM, wM, ρinvM = preflux(QM, auxM)
   @inbounds begin
     x, y, z = auxM[_a_x], auxM[_a_y], auxM[_a_z]
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-    QP[_U] =  -2 * nM[1] * UnM
-    QP[_V] =  -2 * nM[2] * UnM
-    QP[_W] =  -2 * nM[3] * UnM
-    QP[_ρ] = ρM
-    QP[_E] = EM
+    z   = auxM[_a_z]
+    ρP  = ρM 
+    UP  = 0 #-2 * nM[1] * UnM
+    VP  = 0 #-2 * nM[2] * UnM
+    WP  = 0 #-2 * nM[3] * UnM
+    # Weak Boundary Condition Imposition
+    # In the limit of Δ → 0, the exact boundary values are recovered at the "M" or minus side. 
+    # The weak enforcement of plus side states ensures that the boundary fluxes are consistently calculated.
+    if auxM[_a_z] < 0.001
+      E_intP = ρP * cv_d * (T_bot - T_0)
+    else
+      E_intP = ρP * cv_d * (T_top - T_0) 
+    end
+    QP[_ρ] = ρP
+    QP[_U] = UP
+    QP[_V] = VP
+    QP[_W] = WP
+    QP[_E] = (E_intP + (UP^2 + VP^2 + WP^2)/(2*ρP) + ρP * grav * z)
     VFP .= VFM
-    VF[_dwdz] = 0 
-    VF[_Ez] = 0 
+    VFP[_τ33] = 0 
+    VFP[_Ez] = 0 
     nothing
   end
 end
@@ -182,7 +192,7 @@ end
 
 @inline function stresses_penalty!(VF, nM, grad_varsM, QM, aM, grad_varsP, QP, aP, t)
   @inbounds begin
-    n_Δgrad_vars = similar(VF, Size(3, 3))
+    n_Δgrad_vars = similar(VF, Size(3, _ngradstates))
     for j = 1:_ngradstates, i = 1:3
       n_Δgrad_vars[i, j] = nM[i] * (grad_varsP[j] - grad_varsM[j]) / 2
     end
@@ -216,7 +226,7 @@ momentum equation
   gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    S[_V] -= ρ * gravity
+    S[_W] -= ρ * gravity
   end
 end
 
@@ -225,31 +235,35 @@ end
 Initial conditions for the Rayleigh-Benard problem with two fixed walls 
 """
 const T_bot     = 320
-const T_slope   = 0.04
-const T_top     = T_bot - T_slope*z_max
+const T_slope   = -0.04
+const T_top     = T_bot + T_slope*zmax
 const α_thermal = 0.0034
 
 using Random
 const seed = MersenneTwister(0)
-function rising_thermal_bubble!(dim, Q, t, x, y, z, _...)
+function rayleigh_benard!(dim, Q, t, x, y, z, _...)
   DFloat                = eltype(Q)
   γ::DFloat             = γ_exact
   R_gas::DFloat         = R_d
   c_p::DFloat           = cp_d
   c_v::DFloat           = cv_d
   p0::DFloat            = MSLP
+  q_tot::DFloat         = 0
   gravity::DFloat       = grav
+  δT                    = z != 0.0 ? rand(seed, DFloat)/100 : 0 
+  δw                    = z != 0.0 ? rand(seed, DFloat)/100 : 0
+  θ_ref::DFloat         = T_bot
+  Δθ                    = T_slope * z + δT
+  θ                     = θ_ref + Δθ # potential temperature
+  π_exner               = 1.0 - gravity / (c_p * θ) * z # exner pressure
+  ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
+  P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
+  T                     = P / (ρ * R_gas) # temperature
+  U, V, W               = 0.0 , 0.0 , ρ * δw  # momentum components
   # initialise with dry domain 
-  δT                    = rand(seed, DFloat)/100
-  δw                    = rand(seed, DFloat)/100
-  q_tot::DFloat         = 0 
-  ρ0::DFloat            = 1.22
-  ρ                     = ρ0 + z*(1 + α_thermal*β)
-  T                     = T_bot - T_slope * z
-  P                     = ρ * R_gas * T
   E_int                 = ρ * c_v * (T-T_0)
   E_pot                 = ρ * grav * z
-  E_kin                 = 0
+  E_kin                 = ρ * 0.5 * δw^2 
   E                     = E_int + E_pot + E_kin
   @inbounds Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]= ρ, U, V, W, E, ρ * q_tot
 end
@@ -290,7 +304,7 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
                            source! = source!)
 
   # This is a actual state/function that lives on the grid
-  initialcondition(Q, x...) = rising_thermal_bubble!(Val(dim), Q, 0, x...)
+  initialcondition(Q, x...) = rayleigh_benard!(Val(dim), Q, 0, x...)
   Q = MPIStateArray(spacedisc, initialcondition)
 
   lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
@@ -317,20 +331,34 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
   end
 
-  step = [0]
-  mkpath("vtk")
-  cbvtk = GenericCallbacks.EveryXSimulationSteps(10) do (init=false)
-    outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
-                         MPI.Comm_rank(mpicomm), step[1])
-    @debug "doing VTK output" outprefix
-    writevtk(outprefix, Q, spacedisc, statenames)
-    step[1] += 1
-    nothing
-  end
+    npoststates = 5
+    _o_T, _o_dEdz, _o_u, _o_v, _o_w = 1:npoststates
+    postnames =("T", "dTdz", "u", "v", "w")
+    postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
-  # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
+    step = [0]
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
+      DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
+        @inbounds let
+          (T, P, u, v, w, _)= preflux(Q, aux)
+          R[_o_dEdz] = QV[_Ez]
+          R[_o_u] = u
+          R[_o_v] = v
+          R[_o_w] = w
+          R[_o_T] = T
+        end
+      end
+      mkpath("./vtk-rb-bc/")
+      outprefix = @sprintf("./vtk-rb-bc/rb_%dD_mpirank%04d_step%04d", dim,
+                           MPI.Comm_rank(mpicomm), step[1])
+      @debug "doing VTK output" outprefix
+      writevtk(outprefix, Q, spacedisc, statenames, postprocessarray, postnames)
+      
+      step[1] += 1
+      nothing
+    end
+
   solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
-
 
   # Print some end of the simulation information
   engf = norm(Q)
@@ -358,11 +386,11 @@ let
     # User defined timestep estimate
     # User defined simulation end time
     # User defined polynomial order 
-    numelem = (5,5,1)
-    dt = 1e-2
-    timeend = 10
-    polynomialorder = 5
-    for DFloat in (Float64,) #Float32)
+    numelem = (10,2,10)
+    polynomialorder = 4
+    dt = 0.002
+    timeend = 14400
+    for DFloat in (Float64,) 
       for dim = 3:3
         engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
                         DFloat, dt)
