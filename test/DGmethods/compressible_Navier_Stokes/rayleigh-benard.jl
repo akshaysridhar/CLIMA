@@ -249,18 +249,16 @@ function rayleigh_benard!(dim, Q, t, x, y, z, _...)
   c_v::DFloat           = cv_d
   p0::DFloat            = MSLP
   q_tot::DFloat         = 0
+  ρ0::DFloat            = 1.22
   gravity::DFloat       = grav
   δT                    = z != 0.0 ? rand(seed, DFloat)/100 : 0 
   δw                    = z != 0.0 ? rand(seed, DFloat)/100 : 0
-  θ_ref::DFloat         = T_bot
-  Δθ                    = T_slope * z + δT
-  θ                     = θ_ref + Δθ # potential temperature
-  π_exner               = 1.0 - gravity / (c_p * θ) * z # exner pressure
-  ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
-  P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
-  T                     = P / (ρ * R_gas) # temperature
-  U, V, W               = 0.0 , 0.0 , ρ * δw  # momentum components
-  # initialise with dry domain 
+  T_ref::DFloat         = T_bot
+  ΔT                    = T_slope * z + δT
+  T                     = T_ref + ΔT 
+  ρ                     = ρ0 * exp(-grav * z/330^2)
+  P                     = R_gas * ρ * T
+  U, V, W               = 0.0 , 0.0 , ρ * δw
   E_int                 = ρ * c_v * (T-T_0)
   E_pot                 = ρ * grav * z
   E_kin                 = ρ * 0.5 * δw^2 
