@@ -38,10 +38,18 @@ const statenames = ("RHO", "U", "V", "W", "E", "QT")
 
 # Viscous state labels
 const _nviscstates = 24
-const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, _qtx, _qty, _qtz, _JplusDx, _JplusDy, _JplusDz, _θx, _θy, _θz, _SijSij, _ν_e, _qvx, _qvy, _qvz, _qlx, _qly, _qlz, _ν_vreman = 1:_nviscstates
+const _τ11, _τ22, _τ33, _τ12, _τ13, _τ23, 
+      _qtx, _qty, _qtz, _JplusDx, _JplusDy, _JplusDz, 
+      _θx, _θy, _θz, _SijSij, 
+      _ν_e, 
+      _qvx, _qvy, _qvz, _qlx, _qly, _qlz, 
+      _ν_vreman = 1:_nviscstates
 
-const _nauxstate = 23
-const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,_a_q_liq, _a_θ, _a_P,_a_T, _a_soundspeed_air, _a_z_FN, _a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, _a_E_FN, _a_QT_FN, _a_Rm = 1:_nauxstate
+const _nauxstate = 33
+const _a_x, _a_y, _a_z, _a_sponge, _a_02z, _a_z2inf, _a_rad, _a_ν_e, _a_LWP_02z, _a_LWP_z2inf,
+      _a_q_liq, _a_θ, _a_P,_a_T, _a_soundspeed_air, _a_z_FN, _a_ρ_FN, _a_U_FN, _a_V_FN, _a_W_FN, 
+      _a_E_FN, _a_QT_FN, _a_Rm, _a_umean, _a_vmean, _a_wmean, _a_θmean, _a_Tmean, _a_qtmean, _a_u, 
+      _a_v, _a_w, _a_qt = 1:_nauxstate
 
 if !@isdefined integration_testing
     const integration_testing =
@@ -113,7 +121,8 @@ const first_node_level   = 0.0001
 const D_subsidence = 3.75e-6
 
 # Random number seed
-#const seed = MersenneTwister(0)
+const seed = MersenneTwister(0)
+
 
 function global_max(A::MPIStateArray, states=1:size(A, 2))
   host_array = Array ∈ typeof(A).parameters
@@ -643,6 +652,7 @@ function preodefun!(disc, Q, t)
       R[_a_soundspeed_air] = soundspeed_air(TS)
       R[_a_θ] = virtual_pottemp(TS)
       R[_a_Rm] = gas_constant_air(TS)
+      R[_a_qt] = q_tot
     end
   end
   firstnode_info(disc,Q,t)
@@ -729,119 +739,154 @@ end
 
 function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
 
-    brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
-                  range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)),
-                  range(DFloat(zmin), length=Ne[3]+1, DFloat(zmax)))
-    
-    
-    # User defined periodicity in the topl assignment
-    # brickrange defines the domain extents
-    topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,true,false))
+  brickrange = (range(DFloat(xmin), length=Ne[1]+1, DFloat(xmax)),
+                range(DFloat(ymin), length=Ne[2]+1, DFloat(ymax)),
+                range(DFloat(zmin), length=Ne[3]+1, DFloat(zmax)))
+  
+  
+  # User defined periodicity in the topl assignment
+  # brickrange defines the domain extents
+  topl = StackedBrickTopology(mpicomm, brickrange, periodicity=(true,true,false))
 
-    grid = DiscontinuousSpectralElementGrid(topl,
-                                            FloatType = DFloat,
-                                            DeviceArray = ArrayType,
-                                            polynomialorder = N)
-    
-    numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed)
-    numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed)
+  grid = DiscontinuousSpectralElementGrid(topl,
+                                          FloatType = DFloat,
+                                          DeviceArray = ArrayType,
+                                          polynomialorder = N)
+  
+  numflux!(x...) = NumericalFluxes.rusanov!(x..., cns_flux!, wavespeed)
+  numbcflux!(x...) = NumericalFluxes.rusanov_boundary_flux!(x..., cns_flux!, bcstate!, wavespeed)
 
-    # spacedisc = data needed for evaluating the right-hand side function
-    spacedisc = DGBalanceLaw(grid = grid,
-                             length_state_vector = _nstate,
-                             flux! = cns_flux!,
-                             numerical_flux! = numflux!,
-                             numerical_boundary_flux! = numbcflux!, 
-                             number_gradient_states = _ngradstates,
-                             number_viscous_states = _nviscstates,
-                             gradient_transform! = gradient_vars!,
-                             viscous_transform! = compute_stresses!,
-                             viscous_penalty! = stresses_penalty!,
-                             viscous_boundary_penalty! = stresses_boundary_penalty!,
-                             auxiliary_state_length = _nauxstate,
-                             auxiliary_state_initialization! = (x...) ->
-                             auxiliary_state_initialization!(x...),
-                             source! = source!,
-                             preodefun! = preodefun!)
+  # spacedisc = data needed for evaluating the right-hand side function
+  spacedisc = DGBalanceLaw(grid = grid,
+                           length_state_vector = _nstate,
+                           flux! = cns_flux!,
+                           numerical_flux! = numflux!,
+                           numerical_boundary_flux! = numbcflux!, 
+                           number_gradient_states = _ngradstates,
+                           number_viscous_states = _nviscstates,
+                           gradient_transform! = gradient_vars!,
+                           viscous_transform! = compute_stresses!,
+                           viscous_penalty! = stresses_penalty!,
+                           viscous_boundary_penalty! = stresses_boundary_penalty!,
+                           auxiliary_state_length = _nauxstate,
+                           auxiliary_state_initialization! = (x...) ->
+                           auxiliary_state_initialization!(x...),
+                           source! = source!,
+                           preodefun! = preodefun!)
 
-     # This is a actual state/function that lives on the grid
-    # ----------------------------------------------------
-    # GET DATA FROM INTERPOLATED ARRAY ONTO VECTORS
-    # This driver accepts data in 6 column format
-    # ----------------------------------------------------
-    (sounding, _, ncols) = read_sounding()
+   # This is a actual state/function that lives on the grid
+  # ----------------------------------------------------
+  # GET DATA FROM INTERPOLATED ARRAY ONTO VECTORS
+  # This driver accepts data in 6 column format
+  # ----------------------------------------------------
+  (sounding, _, ncols) = read_sounding()
 
-    # WARNING: Not all sounding data is formatted/scaled
-    # the same. Care required in assigning array values
-    # height theta qv    u     v     pressure
-    zinit, tinit, qinit, uinit, vinit, pinit  =
-        sounding[:, 1], sounding[:, 2], sounding[:, 3], sounding[:, 4], sounding[:, 5], sounding[:, 6]
-    
-    #------------------------------------------------------
-    # GET SPLINE FUNCTION
-    #------------------------------------------------------
-    spl_tinit    = Spline1D(zinit, tinit; k=1)
-    spl_qinit    = Spline1D(zinit, qinit; k=1)
-    spl_uinit    = Spline1D(zinit, uinit; k=1)
-    spl_vinit    = Spline1D(zinit, vinit; k=1)
-    spl_pinit    = Spline1D(zinit, pinit; k=1)
+  # WARNING: Not all sounding data is formatted/scaled
+  # the same. Care required in assigning array values
+  # height theta qv    u     v     pressure
+  zinit, tinit, qinit, uinit, vinit, pinit  =
+      sounding[:, 1], sounding[:, 2], sounding[:, 3], sounding[:, 4], sounding[:, 5], sounding[:, 6]
+  
+  #------------------------------------------------------
+  # GET SPLINE FUNCTION
+  #------------------------------------------------------
+  spl_tinit    = Spline1D(zinit, tinit; k=1)
+  spl_qinit    = Spline1D(zinit, qinit; k=1)
+  spl_uinit    = Spline1D(zinit, uinit; k=1)
+  spl_vinit    = Spline1D(zinit, vinit; k=1)
+  spl_pinit    = Spline1D(zinit, pinit; k=1)
 
 
-    initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), spl_tinit,
-                                        spl_qinit, spl_uinit, spl_vinit,
-                                        spl_pinit, x...)
+  initialcondition(Q, x...) = dycoms!(Val(dim), Q, DFloat(0), spl_tinit,
+                                      spl_qinit, spl_uinit, spl_vinit,
+                                      spl_pinit, x...)
 
-    Q = MPIStateArray(spacedisc, initialcondition)     
-    
-    lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
+  Q = MPIStateArray(spacedisc, initialcondition)     
+  
+  lsrk = LSRK54CarpenterKennedy(spacedisc, Q; dt = dt, t0 = 0)
 
-    # Set up the information callback
-    starttime = Ref(now())
-    cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
-        if s
-            starttime[] = now()
-        else
-            ql_max = global_max(spacedisc.auxstate, _a_q_liq)
-            @info @sprintf("""Update
-                         simtime = %.16e
-                         runtime = %s
-                         max(ql) = %.16e""",
-                           ODESolvers.gettime(lsrk),
-                           Dates.format(convert(Dates.DateTime,
-                                                Dates.now()-starttime[]),
-                                        Dates.dateformat"HH:MM:SS"), ql_max)
-        end
-    end
-
-    npoststates = 4
-    _o_RAD, _o_q_liq, _o_T, _o_θ = 1:npoststates
-    postnames = ("RAD", "_q_liq", "T", "THETA")
-    postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
-
-    step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(15000) do (init=false)
-      DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
-        @inbounds let
-            R[_o_RAD]   = aux[_a_z2inf] + aux[_a_02z]
-            R[_o_q_liq] = aux[_a_q_liq]
-            R[_o_T]     = aux[_a_T]
-            R[_o_θ]     = aux[_a_θ]
-        end
+  # Set up the information callback
+  starttime = Ref(now())
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
+      if s
+          starttime[] = now()
+      else
+          ql_max = global_max(spacedisc.auxstate, _a_q_liq)
+          @info @sprintf("""Update
+                       simtime = %.16e
+                       runtime = %s
+                       max(ql) = %.16e""",
+                         ODESolvers.gettime(lsrk),
+                         Dates.format(convert(Dates.DateTime,
+                                              Dates.now()-starttime[]),
+                                      Dates.dateformat"HH:MM:SS"), ql_max)
       end
-        
-      mkpath("./CLIMA-output-scratch/dycoms-bc-vreman/")
-      outprefix = @sprintf("./CLIMA-output-scratch/dycoms-bc-vreman/dy_%dD_mpirank%04d_step%04d", dim,
-                           MPI.Comm_rank(mpicomm), step[1])
-      @debug "doing VTK output" outprefix
-      writevtk(outprefix, Q, spacedisc, statenames,
-               postprocessarray, postnames)
-      
-      step[1] += 1
-      nothing
+  end
+
+  npoststates = 4
+  _o_RAD, _o_q_liq, _o_T, _o_θ = 1:npoststates
+  postnames = ("RAD", "_q_liq", "T", "THETA")
+  postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
+
+  step = [0]
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(15000) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
+      @inbounds let
+          R[_o_RAD]   = aux[_a_z2inf] + aux[_a_02z]
+          R[_o_q_liq] = aux[_a_q_liq]
+          R[_o_T]     = aux[_a_T]
+          R[_o_θ]     = aux[_a_θ]
+      end
     end
-    # Initialise the integration computation. Kernels calculate this at every timestep?? 
-    integral_computation(spacedisc, Q, 0) 
-    solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+      
+    mkpath("./CLIMA-output-scratch/dycoms-bc-vreman/")
+    outprefix = @sprintf("./CLIMA-output-scratch/dycoms-bc-vreman/dy_%dD_mpirank%04d_step%04d", dim,
+                         MPI.Comm_rank(mpicomm), step[1])
+    @debug "doing VTK output" outprefix
+    writevtk(outprefix, Q, spacedisc, statenames,
+             postprocessarray, postnames)
+    
+    step[1] += 1
+    nothing
+  end
+  
+  nstatstates = 6
+  _s_uprime, _s_vprime, _s_wprime, _s_Tprime, _s_θprime, _s_qtprime = 1:nstatstates
+  statnames= ("_s_uprime", "_s_vprime", "_s_wprime","_s_Tprime", "_s_θprime", "_s_qtprime")
+  statsarray = MPIStateArray(spacedisc; nstate=nstatstates)
+
+  step = [0]
+  cbstats = GenericCallbacks.EveryXSimulationSteps(1000) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(statsarray, spacedisc, Q) do R, Q, QV, aux
+      qtmean = global_mean(spacedisc.auxstate, _a_qt)
+      umean = global_mean(spacedisc.auxstate, _a_u)
+      vmean = global_mean(spacedisc.auxstate, _a_v)
+      wmean = global_mean(spacedisc.auxstate, _a_w)
+      θmean = global_mean(spacedisc.auxstate, _a_θ)
+      Tmean = global_mean(spacedisc.auxstate, _a_T)
+      @inbounds let
+        R[_s_uprime] = aux[_a_u] - umean
+        R[_s_vprime] = aux[_a_v] - vmean
+        R[_s_wprime] = aux[_a_w] - wmean
+        R[_s_θprime] = aux[_a_θ] - θmean
+        R[_s_Tprime] = aux[_a_T] - Tmean
+        R[_s_qtprime] = Q[_QT]/Q[_ρ] - qtmean
+      end
+    end
+      
+    mkpath("./dycoms-stats/")
+    outprefix = @sprintf("./dycoms-stats/dy_%dD_mpirank%04d_step%04d", dim,
+                         MPI.Comm_rank(mpicomm), step[1])
+    @debug "doing VTK output" outprefix
+    writevtk(outprefix, Q, spacedisc, statenames,
+             statsarray, statnames)
+    
+    step[1] += 1
+    nothing
+  end
+  # Initialise the integration computation. Kernels calculate this at every timestep?? 
+  integral_computation(spacedisc, Q, 0) 
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk, cbstats))
 
 end
 
