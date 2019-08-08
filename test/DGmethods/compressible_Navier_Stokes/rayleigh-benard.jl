@@ -44,18 +44,17 @@ const xmin = 0
 const ymin = 0
 const zmin = 0
 const xmax = 2000
-const ymax = 500
+const ymax = 400
 const zmax = 2000
 
 @inline function preflux(Q, aux)
   γ::eltype(Q) = γ_exact
-  gravity::eltype(Q) = grav
   R_gas::eltype(Q) = R_d
   @inbounds ρ, U, V, W, E, QT = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E], Q[_QT]
   ρinv = 1 / ρ
   x,y,z = aux[_a_x], aux[_a_y], aux[_a_z]
   u, v, w = ρinv * U, ρinv * V, ρinv * W
-  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * gravity * z) * ρinv
+  e_int = (E - (U^2 + V^2+ W^2)/(2*ρ) - ρ * grav * z) * ρinv
   qt = QT / ρ
   # Establish the current thermodynamic state using the prognostic variables
   TS = PhaseEquil(e_int, qt, ρ)
@@ -96,9 +95,9 @@ end
     F[1, _W] += τ31; F[2, _W] += τ32; F[3, _W] += τ33
     # Energy dissipation
     vEx, vEy, vEz = VF[_Ex], VF[_Ey], VF[_Ez]
-    F[1, _E] += u * τ11 + v * τ12 + w * τ13 + vEx
-    F[2, _E] += u * τ21 + v * τ22 + w * τ23 + vEy
-    F[3, _E] += u * τ31 + v * τ32 + w * τ33 + vEz
+    F[1, _E] += u * τ11 + v * τ12 + w * τ13 + vEx * ρ
+    F[2, _E] += u * τ21 + v * τ22 + w * τ23 + vEy * ρ
+    F[3, _E] += u * τ31 + v * τ32 + w * τ33 + vEz * ρ
   end
 end
 
@@ -164,10 +163,12 @@ end
     ρM, UM, VM, WM, EM, QTM = QM[_ρ], QM[_U], QM[_V], QM[_W], QM[_E], QM[_QT]
     UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
     z   = auxM[_a_z]
-    ρP  = ρM 
-    UP  = 0 #-2 * nM[1] * UnM
-    VP  = 0 #-2 * nM[2] * UnM
-    WP  = 0 #-2 * nM[3] * UnM
+    ρP  = ρM
+    # Prescribe no-slip wall.
+    # Note that with the default resolution this results in an underresolved near-wall layer
+    UP  = 0 
+    VP  = 0 
+    WP  = 0 
     # Weak Boundary Condition Imposition
     # In the limit of Δ → 0, the exact boundary values are recovered at the "M" or minus side. 
     # The weak enforcement of plus side states ensures that the boundary fluxes are consistently calculated.
@@ -223,20 +224,18 @@ Geopotential source term. Gravity forcing applied to the vertical
 momentum equation
 """
 @inline function source_geopot!(S,Q,aux,t)
-  gravity::eltype(Q) = grav
   @inbounds begin
     ρ, U, V, W, E  = Q[_ρ], Q[_U], Q[_V], Q[_W], Q[_E]
-    S[_W] -= ρ * gravity
+    S[_W] -= ρ * grav
   end
 end
 
-# initial condition
 """
 Initial conditions for the Rayleigh-Benard problem with two fixed walls 
 """
 const T_bot     = 320
-const T_slope   = -0.04
-const T_top     = T_bot + T_slope*zmax
+const T_lapse   = -0.04
+const T_top     = T_bot + T_lapse*zmax
 const α_thermal = 0.0034
 
 using Random
@@ -249,16 +248,13 @@ function rayleigh_benard!(dim, Q, t, x, y, z, _...)
   c_v::DFloat           = cv_d
   p0::DFloat            = MSLP
   q_tot::DFloat         = 0
-  gravity::DFloat       = grav
+  c_ref::DFloat         = sqrt(γ * R_gas * T_bot)
   δT                    = z != 0.0 ? rand(seed, DFloat)/100 : 0 
   δw                    = z != 0.0 ? rand(seed, DFloat)/100 : 0
-  θ_ref::DFloat         = T_bot
-  Δθ                    = T_slope * z + δT
-  θ                     = θ_ref + Δθ # potential temperature
-  π_exner               = 1.0 - gravity / (c_p * θ) * z # exner pressure
-  ρ                     = p0 / (R_gas * θ) * (π_exner)^ (c_v / R_gas) # density
-  P                     = p0 * (R_gas * (ρ * θ) / p0) ^(c_p/c_v) # pressure (absolute)
-  T                     = P / (ρ * R_gas) # temperature
+  ΔT                    = T_lapse * z + δT
+  T                     = T_bot + ΔT # potential temperature
+  P                     = p0*(T/T_bot)^(grav/R_gas/T_lapse)
+  ρ                     = P / (R_gas * T)
   U, V, W               = 0.0 , 0.0 , ρ * δw  # momentum components
   # initialise with dry domain 
   E_int                 = ρ * c_v * (T-T_0)
@@ -331,32 +327,32 @@ function run(mpicomm, dim, Ne, N, timeend, DFloat, dt)
     end
   end
 
-    npoststates = 5
-    _o_T, _o_dEdz, _o_u, _o_v, _o_w = 1:npoststates
-    postnames =("T", "dTdz", "u", "v", "w")
-    postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
+  npoststates = 5
+  _o_T, _o_dEdz, _o_u, _o_v, _o_w = 1:npoststates
+  postnames =("T", "dTdz", "u", "v", "w")
+  postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
 
-    step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
-      DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
-        @inbounds let
-          (T, P, u, v, w, _)= preflux(Q, aux)
-          R[_o_dEdz] = QV[_Ez]
-          R[_o_u] = u
-          R[_o_v] = v
-          R[_o_w] = w
-          R[_o_T] = T
-        end
+  step = [0]
+  cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
+    DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc, Q) do R, Q, QV, aux
+      @inbounds let
+        (T, P, u, v, w, _)= preflux(Q, aux)
+        R[_o_dEdz] = QV[_Ez]
+        R[_o_u] = u
+        R[_o_v] = v
+        R[_o_w] = w
+        R[_o_T] = T
       end
-      mkpath("./vtk-rb-bc/")
-      outprefix = @sprintf("./vtk-rb-bc/rb_%dD_mpirank%04d_step%04d", dim,
-                           MPI.Comm_rank(mpicomm), step[1])
-      @debug "doing VTK output" outprefix
-      writevtk(outprefix, Q, spacedisc, statenames, postprocessarray, postnames)
-      
-      step[1] += 1
-      nothing
     end
+    mkpath("./vtk-rb-bc/")
+    outprefix = @sprintf("./vtk-rb-bc/rb_%dD_mpirank%04d_step%04d", dim,
+                         MPI.Comm_rank(mpicomm), step[1])
+    @debug "doing VTK output" outprefix
+    writevtk(outprefix, Q, spacedisc, statenames, postprocessarray, postnames)
+    
+    step[1] += 1
+    nothing
+  end
 
   solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
@@ -382,20 +378,19 @@ let
   else
     global_logger(NullLogger())
   end
-    # User defined number of elements
-    # User defined timestep estimate
-    # User defined simulation end time
-    # User defined polynomial order 
-    numelem = (10,2,10)
-    polynomialorder = 4
-    dt = 0.002
-    timeend = 14400
-    for DFloat in (Float64,) 
-      for dim = 3:3
-        engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
-                        DFloat, dt)
-      end
+  # User defined number of elements
+  # User defined timestep estimate
+  # User defined simulation end time
+  # User defined polynomial order 
+  numelem = (10,2,10)
+  polynomialorder = 4
+  dt = 0.005
+  timeend = 14400
+  for DFloat in (Float64,) 
+    for dim = 3:3
+      engf_eng0 = run(mpicomm, dim, numelem[1:dim], polynomialorder, timeend,
+                      DFloat, dt)
     end
   end
-
+end
 nothing
