@@ -4,7 +4,7 @@ export AtmosModel,
   ConstantViscosityWithDivergence,
   DryModel, MoistEquil,
   NoRadiation,
-  NoFluxBC, InitStateBC
+  NoFluxBC, InitStateBC, InitStateBC_FN
 
 using LinearAlgebra, StaticArrays
 using ..VariableTemplates
@@ -171,7 +171,7 @@ Set the value at the boundary to match the `init_state!` function. This is mainl
 struct InitStateBC <: BoundaryCondition
 end
 function boundarycondition!(bl::AtmosModel{T,M,R,S,BC,IS}, stateP::Vars, diffP::Vars, auxP::Vars,
-    nM, stateM::Vars, diffM::Vars, auxM::Vars, bctype, t) where {T,M,R,S,BC <: InitStateBC,IS}
+    nM, stateM::Vars, diffM::Vars, auxM::Vars, bctype, t, _...) where {T,M,R,S,BC <: InitStateBC,IS}
   coord = (auxP.coord.x, auxP.coord.y, auxP.coord.z)
   init_state!(bl, stateP, auxP, coord, t)
 end
@@ -180,4 +180,21 @@ function init_state!(bl::AtmosModel, state::Vars, aux::Vars, coords, t)
   bl.init_state(state, aux, coords, t)
 end
 
+"""
+    InitStateBC_FN <: BoundaryCondition
+
+Set the value at the boundary to match the `init_state!` function. This is mainly useful for cases where the problem has an explicit solution.
+In addition, this function allows access to variables at the first interior node away from the bottom wall. 
+"""
+struct InitStateBC_FN <: BoundaryCondition
+end
+function boundarycondition!(bl::AtmosModel{T,M,R,S,BC,IS}, stateP::Vars, diffP::Vars, auxP::Vars,
+    nM, stateM::Vars, diffM::Vars, auxM::Vars, bctype, t, state1::Vars, diff1::Vars, aux1::Vars) where {T,M,R,S,BC <: InitStateBC_FN,IS}
+  coord = (auxP.coord.x, auxP.coord.y, auxP.coord.z)
+  init_state!(bl, stateP, auxP, coord, t)
+end
+
+function init_state!(bl::AtmosModel, state::Vars, aux::Vars, coords, t)
+  bl.init_state(state, aux, coords, t)
+end
 end # module
