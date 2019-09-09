@@ -5,7 +5,7 @@ export AtmosModel,
   DryModel, EquilMoist,
   NoRadiation, StevensRadiation,
   Gravity, RayleighSponge, Subsidence, GeostrophicForcing,
-  NoFluxBC, InitStateBC, DYCOMS_BC,
+  NoFluxBC, InitStateBC, DYCOMS_BC, BOMEX_BC,
   FlatOrientation, SphericalOrientation
 
 using LinearAlgebra, StaticArrays

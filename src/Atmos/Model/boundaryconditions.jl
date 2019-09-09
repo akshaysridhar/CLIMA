@@ -138,3 +138,16 @@ function atmos_boundarycondition!(bc::DYCOMS_BC, m::AtmosModel, stateP::Vars, di
   end
 end
  
+
+"""
+  BOMEX_BC <: BoundaryCondition
+  Prescribes boundary conditions for Dynamics of Marine Stratocumulus Case
+"""
+struct BOMEX_BC{DT} <: BoundaryCondition
+  #TODO complete field list
+end
+function atmos_boundarycondition!(bc::BOMEX_BC, m::AtmosModel, stateP::Vars, diffP::Vars, auxP::Vars, nM, stateM::Vars, diffM::Vars, auxM::Vars, bctype, t, state1::Vars, diff1::Vars, aux1::Vars) 
+  
+  if bctype == 1 # Identifies top wall
+  end
+end
