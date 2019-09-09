@@ -198,7 +198,7 @@ let
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
     # Problem type
-    DT = Float64
+    DT = Float32
     # DG polynomial order 
     polynomialorder = 4
     # User specified grid spacing
