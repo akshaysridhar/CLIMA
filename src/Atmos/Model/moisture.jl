@@ -8,7 +8,7 @@ vars_aux(::MoistureModel, T) = @vars()
 
 function update_aux!(::MoistureModel, state::Vars, diffusive::Vars, aux::Vars, t::Real)
 end
-function diffusive!(::MoistureModel, diffusive, ∇transform, state, aux, t, ν)
+function diffusive!(::MoistureModel, diffusive, ∇transform, state, aux, t, ν, inv_Pr_turb)
 end
 function flux_diffusive!(::MoistureModel, flux::Grad, state::Vars, diffusive::Vars, aux::Vars, t::Real)
 end
@@ -17,9 +17,8 @@ end
 function gradvariables!(::MoistureModel, transform::Vars, state::Vars, aux::Vars, t::Real)
 end
 
-function internal_energy(m::MoistureModel, state::Vars, aux::Vars)
+@inline function internal_energy(m::MoistureModel, state::Vars, aux::Vars)
   T = eltype(state)
-  q_pt = get_phase_partition(m, state)
   ρinv = 1 / state.ρ
   ρe_kin = ρinv*sum(abs2, state.ρu)/2
   ρe_pot = state.ρ * aux.orientation.Φ
@@ -41,7 +40,7 @@ struct DryModel <: MoistureModel
 end
 
 vars_aux(::DryModel,T) = @vars(e_int::T, temperature::T, θ_v::T)
-function update_aux!(m::DryModel, state::Vars, diffusive::Vars, aux::Vars, t::Real)
+@inline function update_aux!(m::DryModel, state::Vars, diffusive::Vars, aux::Vars, t::Real)
   aux.moisture.e_int = internal_energy(m, state, aux)
   TS = PhaseDry(aux.moisture.e_int, state.ρ)
   aux.moisture.θ_v = virtual_pottemp(TS)
@@ -61,13 +60,14 @@ end
 vars_state(::EquilMoist,T) = @vars(ρq_tot::T)
 vars_gradient(::EquilMoist,T) = @vars(q_tot::T, h_tot::T)
 vars_diffusive(::EquilMoist,T) = @vars(ρd_q_tot::SVector{3,T}, ρd_h_tot::SVector{3,T})
-vars_aux(::EquilMoist,T) = @vars(e_int::T, temperature::T, θ_v::T)
+vars_aux(::EquilMoist,T) = @vars(e_int::T, temperature::T, θ_v::T, q_liq::T)
 
-function update_aux!(m::EquilMoist, state::Vars, diffusive::Vars, aux::Vars, t::Real)
+@inline function update_aux!(m::EquilMoist, state::Vars, diffusive::Vars, aux::Vars, t::Real)
   aux.moisture.e_int = internal_energy(m, state, aux)
   TS = PhaseEquil(aux.moisture.e_int, get_phase_partition(m, state).tot, state.ρ)
   aux.moisture.temperature = air_temperature(TS)
   aux.moisture.θ_v = virtual_pottemp(TS)
+  aux.moisture.q_liq = PhasePartition(TS).liq
   nothing
 end
 
@@ -77,7 +77,6 @@ thermo_state(::EquilMoist, state::Vars, aux::Vars) = PhaseEquil(aux.moisture.e_i
 function gradvariables!(m::EquilMoist, transform::Vars, state::Vars, aux::Vars, t::Real)
   ρinv = 1/state.ρ
   transform.moisture.q_tot = state.moisture.ρq_tot * ρinv
-
   phase = thermo_state(m, state, aux)
   R_m = gas_constant_air(phase)
   T = aux.moisture.temperature
@@ -101,5 +100,5 @@ function flux_diffusive!(m::EquilMoist, flux::Grad, state::Vars, diffusive::Vars
   flux.ρ += diffusive.moisture.ρd_q_tot
   flux.ρu += diffusive.moisture.ρd_q_tot .* u'
   flux.ρe += diffusive.moisture.ρd_h_tot
-  flux.moisture.ρq_tot = diffusive.moisture.ρd_q_tot
+  flux.moisture.ρq_tot += diffusive.moisture.ρd_q_tot
 end
