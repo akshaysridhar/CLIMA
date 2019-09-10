@@ -155,8 +155,8 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
 
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
-    mkpath("./vtk-dycoms/")
-    outprefix = @sprintf("./vtk-dycoms/dycoms_%dD_mpirank%04d_step%04d", dim,
+    mkpath("./vtk-dycoms-2gpu-10x10x5-5on350/")
+    outprefix = @sprintf("./vtk-dycoms-2gpu-10x10x5-5on350/dycoms_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
@@ -199,13 +199,13 @@ let
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
     # Problem type
-    DT = Float64
+    DT = Float32
     # DG polynomial order 
     polynomialorder = 4
     # User specified grid spacing
     Δx    = DT(10)
     Δy    = DT(10)
-    Δz    = DT(10)
+    Δz    = DT(5)
     # SGS Filter constants
     C_smag = DT(0.15)
     LHF    = DT(115)
@@ -230,7 +230,7 @@ let
                   range(DT(ymin), length=Ne[2]+1, DT(ymax)),
                   range(DT(zmin), length=Ne[3]+1, DT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
-    dt = 0.005
+    dt = DT(5/350)
     timeend = 7200
     dim = 3
     @info (ArrayType, DT, dim)
