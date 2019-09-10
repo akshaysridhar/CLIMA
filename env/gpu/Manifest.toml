@@ -75,7 +75,7 @@ uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 version = "0.2.0"
 
 [[CLIMA]]
-deps = ["Coverage", "Dates", "DelimitedFiles", "Dierckx", "DifferentialEquations", "Distributions", "DocStringExtensions", "DoubleFloats", "ForwardDiff", "GPUifyLoops", "GaussQuadrature", "LazyArrays", "LinearAlgebra", "Literate", "Logging", "MPI", "Pkg", "Printf", "Requires", "StaticArrays", "Statistics", "WriteVTK"]
+deps = ["Coverage", "Dates", "DelimitedFiles", "Dierckx", "DifferentialEquations", "Distributions", "DocStringExtensions", "DoubleFloats", "ForwardDiff", "GPUifyLoops", "GaussQuadrature", "LazyArrays", "LinearAlgebra", "Literate", "Logging", "MPI", "NLsolve", "Pkg", "Printf", "Requires", "StaticArrays", "Statistics", "WriteVTK"]
 path = "../../"
 uuid = "777c4786-024f-11e9-21a3-85d5d4106250"
 version = "0.1.0"
@@ -153,7 +153,7 @@ version = "4.0.0"
 
 [[CuArrays]]
 deps = ["AbstractFFTs", "Adapt", "CUDAapi", "CUDAdrv", "CUDAnative", "GPUArrays", "LinearAlgebra", "MacroTools", "NNlib", "Printf", "Random", "Requires", "SparseArrays", "TimerOutputs"]
-git-tree-sha1 = "9fd726064739268d5688831d1d6cb7f43edae361"
+git-tree-sha1 = "e9959fe9ec016fbe0b21bf90b0b8fda711f11266"
 repo-rev = "master"
 repo-url = "https://github.com/JuliaGPU/CuArrays.jl.git"
 uuid = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
