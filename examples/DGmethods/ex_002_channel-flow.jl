@@ -61,12 +61,12 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
                                           polynomialorder = N,
                                          )
 
-  model = AtmosModel(FlatOrientation(),
+  model = AtmosModel(NoOrientation(),
                      NoReferenceState(),
                      SmagorinskyLilly{DT}(C_smag),
                      EquilMoist(),
                      NoRadiation(),
-                     ConstPG{DT}(-10/2000),
+                     (Gravity(),ConstPG{DT}(-10/2000)),
                      ChannelFlowBC(),
                      Initialise_ChannelFlow!)
 

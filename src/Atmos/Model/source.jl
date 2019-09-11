@@ -70,7 +70,7 @@ struct ConstPG{DT} <: Source
 end
 function atmos_source!(s::ConstPG, m::AtmosModel, source::Vars, state::Vars, aux::Vars, t::Real)
   DT = eltype(state)
-  source.ρu -= s.∂p∂x
+  source.ρu -= SVector(s.∂p∂x,DT(0),DT(0))
 end
 
 
