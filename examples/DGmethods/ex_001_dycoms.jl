@@ -50,7 +50,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   ρ_sfc::DT     = 1.22
   P_sfc::DT     = 1.0178e5
   T_BL::DT      = 285.0
-  T_sfc::DT     = P_sfc/(ρ_sfc * Rm_sfc);
+  T_sfc::DT     = P_sfc/(ρ_sfc * Rm_sfc)
   
   q_liq::DT      = 0
   q_ice::DT      = 0
@@ -116,7 +116,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
                       RayleighSponge{DT}(zmax, zsponge, 1), 
                       Subsidence(), 
                       GeostrophicForcing{DT}(7.62e-5, 7, -5.5)), 
-                     DYCOMS_BC{DT}(C_drag, LHF, SHF),
+                     DYCOMS_BC{DT}(C_drag, -LHF, -SHF),
                      Initialise_DYCOMS!)
 
   dg = DGModel(model,
@@ -155,8 +155,8 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
 
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
-    mkpath("./vtk-dycoms-2gpu-10x10x5-5on350/")
-    outprefix = @sprintf("./vtk-dycoms-2gpu-10x10x5-5on350/dycoms_%dD_mpirank%04d_step%04d", dim,
+    mkpath("./vtk-dycoms-iso10")
+    outprefix = @sprintf("./vtk-dycoms-iso10/dycoms_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
@@ -203,9 +203,9 @@ let
     # DG polynomial order 
     polynomialorder = 4
     # User specified grid spacing
-    Δx    = DT(10)
-    Δy    = DT(10)
-    Δz    = DT(5)
+    Δx    = DT(20)
+    Δy    = DT(20)
+    Δz    = DT(20)
     # SGS Filter constants
     C_smag = DT(0.15)
     LHF    = DT(115)
@@ -230,8 +230,8 @@ let
                   range(DT(ymin), length=Ne[2]+1, DT(ymax)),
                   range(DT(zmin), length=Ne[3]+1, DT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
-    dt = DT(5/350)
-    timeend = 7200
+    dt = 0.015
+    timeend = 3600 * 4
     dim = 3
     @info (ArrayType, DT, dim)
     result = run(mpicomm, ArrayType, dim, topl, 
