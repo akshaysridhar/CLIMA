@@ -1,0 +1,4 @@
+  Updating registry at `~/.julia/registries/General`
+  Updating git-repo `https://github.com/JuliaRegistries/General.git`
+[?25l[2K[?25hPrecompiling project...
+slurmstepd: error: *** JOB 6577083 ON hpc-22-38 CANCELLED AT 2019-09-10T10:39:56 ***

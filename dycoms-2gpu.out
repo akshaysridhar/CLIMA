@@ -1,0 +1,452 @@
+WARNING: Method definition overdub(Cassette.Context{N, M, T, P, B, H} where H<:Union{Cassette.DisableHooks, Nothing} where B<:Union{Nothing, Base.IdDict{Module, Base.Dict{Symbol, Cassette.BindingMeta}}} where P<:Cassette.AbstractPass where T<:Union{Nothing, Cassette.Tag{N, X, E} where E where X where N<:Cassette.AbstractContextName} where M where N<:Cassette.AbstractContextName, Any...) in module Cassette at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:524 overwritten in module GPUifyLoops at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:524.
+  ** incremental compilation may be fatally broken for this module **
+
+WARNING: Method definition recurse(Cassette.Context{N, M, T, P, B, H} where H<:Union{Cassette.DisableHooks, Nothing} where B<:Union{Nothing, Base.IdDict{Module, Base.Dict{Symbol, Cassette.BindingMeta}}} where P<:Cassette.AbstractPass where T<:Union{Nothing, Cassette.Tag{N, X, E} where E where X where N<:Cassette.AbstractContextName} where M where N<:Cassette.AbstractContextName, Any...) in module Cassette at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:537 overwritten in module GPUifyLoops at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:537.
+  ** incremental compilation may be fatally broken for this module **
+
+WARNING: Method definition altitude(CLIMA.Atmos.Orientation, CLIMA.VariableTemplates.Vars{S, A, offset} where offset where A where S) in module Atmos at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:16 overwritten at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:31.
+  ** incremental compilation may be fatally broken for this module **
+
+  Updating registry at `~/.julia/registries/General`
+  Updating git-repo `https://github.com/JuliaRegistries/General.git`
+[?25l[2K[?25hPrecompiling project...
+Precompiling CLIMA
+[1568214509.891017] [hpc-23-30:117375:0]         parser.c:1369 UCX  WARN  unused env variable: UCX_MEM_MMAP_RELOC (set UCX_WARN_UNUSED_ENV_VARS=n to suppress this warning)
+[1568214509.891018] [hpc-23-30:117376:0]         parser.c:1369 UCX  WARN  unused env variable: UCX_MEM_MMAP_RELOC (set UCX_WARN_UNUSED_ENV_VARS=n to suppress this warning)
+[ Info: (CuArray, Float32, 3)
+┌ Info: Starting
+└ norm(Q₀) = 2.6942376960000000e+09
+┌ Info: Update
+│ simtime = 2.4980381011962891e+01
+│ runtime = 00:00:59
+└ norm(Q) = 2.6940584960000000e+09
+┌ Info: Update
+│ simtime = 6.8500518798828125e+01
+│ runtime = 00:01:59
+└ norm(Q) = 2.6935910400000000e+09
+┌ Info: Update
+│ simtime = 1.1557261657714844e+02
+│ runtime = 00:02:59
+└ norm(Q) = 2.6925240320000000e+09
+┌ Info: Update
+│ simtime = 1.6361813354492188e+02
+│ runtime = 00:03:59
+└ norm(Q) = 2.6915799040000000e+09
+┌ Info: Update
+│ simtime = 2.0516700744628906e+02
+│ runtime = 00:04:59
+└ norm(Q) = 2.6906749440000000e+09
+┌ Info: Update
+│ simtime = 2.4563565063476563e+02
+│ runtime = 00:05:59
+└ norm(Q) = 2.6898490880000000e+09
+┌ Info: Update
+│ simtime = 2.8686090087890625e+02
+│ runtime = 00:06:59
+└ norm(Q) = 2.6891555840000000e+09
+┌ Info: Update
+│ simtime = 3.3389505004882813e+02
+│ runtime = 00:07:59
+└ norm(Q) = 2.6882744320000000e+09
+┌ Info: Update
+│ simtime = 3.7655160522460938e+02
+│ runtime = 00:08:59
+└ norm(Q) = 2.6875363840000000e+09
+┌ Info: Update
+│ simtime = 4.1952798461914063e+02
+│ runtime = 00:09:59
+└ norm(Q) = 2.6868433920000000e+09
+┌ Info: Update
+│ simtime = 4.5964593505859375e+02
+│ runtime = 00:10:59
+└ norm(Q) = 2.6862643200000000e+09
+┌ Info: Update
+│ simtime = 4.9990380859375000e+02
+│ runtime = 00:12:00
+└ norm(Q) = 2.6856601600000000e+09
+┌ Info: Update
+│ simtime = 5.4030474853515625e+02
+│ runtime = 00:13:00
+└ norm(Q) = 2.6850785280000000e+09
+┌ Info: Update
+│ simtime = 5.8220562744140625e+02
+│ runtime = 00:14:00
+└ norm(Q) = 2.6845173760000000e+09
+┌ Info: Update
+│ simtime = 6.2604840087890625e+02
+│ runtime = 00:15:00
+└ norm(Q) = 2.6839319040000000e+09
+┌ Info: Update
+│ simtime = 6.6764898681640625e+02
+│ runtime = 00:16:00
+└ norm(Q) = 2.6833978880000000e+09
+┌ Info: Update
+│ simtime = 7.1087115478515625e+02
+│ runtime = 00:17:00
+└ norm(Q) = 2.6828682240000000e+09
+┌ Info: Update
+│ simtime = 7.5060992431640625e+02
+│ runtime = 00:18:00
+└ norm(Q) = 2.6823843840000000e+09
+┌ Info: Update
+│ simtime = 7.9221051025390625e+02
+│ runtime = 00:19:00
+└ norm(Q) = 2.6818846720000000e+09
+┌ Info: Update
+│ simtime = 8.3853570556640625e+02
+│ runtime = 00:20:00
+└ norm(Q) = 2.6813450240000000e+09
+┌ Info: Update
+│ simtime = 8.8129742431640625e+02
+│ runtime = 00:21:00
+└ norm(Q) = 2.6808647680000000e+09
+┌ Info: Update
+│ simtime = 9.2540045166015625e+02
+│ runtime = 00:22:00
+└ norm(Q) = 2.6803906560000000e+09
+┌ Info: Update
+│ simtime = 9.6816217041015625e+02
+│ runtime = 00:23:00
+└ norm(Q) = 2.6799449600000000e+09
+┌ Info: Update
+│ simtime = 1.0099829711914063e+03
+│ runtime = 00:24:00
+└ norm(Q) = 2.6795194880000000e+09
+┌ Info: Update
+│ simtime = 1.0495615234375000e+03
+│ runtime = 00:25:01
+└ norm(Q) = 2.6791278080000000e+09
+┌ Info: Update
+│ simtime = 1.0923232421875000e+03
+│ runtime = 00:26:01
+└ norm(Q) = 2.6787092480000000e+09
+┌ Info: Update
+│ simtime = 1.1356254882812500e+03
+│ runtime = 00:27:01
+└ norm(Q) = 2.6782865920000000e+09
+┌ Info: Update
+│ simtime = 1.1763452148437500e+03
+│ runtime = 00:28:02
+└ norm(Q) = 2.6778900480000000e+09
+┌ Info: Update
+│ simtime = 1.2206484375000000e+03
+│ runtime = 00:29:02
+└ norm(Q) = 2.6774563840000000e+09
+┌ Info: Update
+│ simtime = 1.2608876953125000e+03
+│ runtime = 00:30:02
+└ norm(Q) = 2.6770641920000000e+09
+┌ Info: Update
+│ simtime = 1.3032690429687500e+03
+│ runtime = 00:31:02
+└ norm(Q) = 2.6766520320000000e+09
+┌ Info: Update
+│ simtime = 1.3462709960937500e+03
+│ runtime = 00:32:02
+└ norm(Q) = 2.6762342400000000e+09
+┌ Info: Update
+│ simtime = 1.3891127929687500e+03
+│ runtime = 00:33:02
+└ norm(Q) = 2.6758174720000000e+09
+┌ Info: Update
+│ simtime = 1.4334360351562500e+03
+│ runtime = 00:34:02
+└ norm(Q) = 2.6753856000000000e+09
+┌ Info: Update
+│ simtime = 1.4762177734375000e+03
+│ runtime = 00:35:02
+└ norm(Q) = 2.6749680640000000e+09
+┌ Info: Update
+│ simtime = 1.5188793945312500e+03
+│ runtime = 00:36:02
+└ norm(Q) = 2.6745510400000000e+09
+┌ Info: Update
+│ simtime = 1.5603798828125000e+03
+│ runtime = 00:37:04
+└ norm(Q) = 2.6741445120000000e+09
+┌ Info: Update
+│ simtime = 1.6026411132812500e+03
+│ runtime = 00:38:04
+└ norm(Q) = 2.6737277440000000e+09
+┌ Info: Update
+│ simtime = 1.6440014648437500e+03
+│ runtime = 00:39:04
+└ norm(Q) = 2.6733171200000000e+09
+┌ Info: Update
+│ simtime = 1.6841606445312500e+03
+│ runtime = 00:40:04
+└ norm(Q) = 2.6729169920000000e+09
+┌ Info: Update
+│ simtime = 1.7285239257812500e+03
+│ runtime = 00:41:04
+└ norm(Q) = 2.6724743680000000e+09
+┌ Info: Update
+│ simtime = 1.7766508789062500e+03
+│ runtime = 00:42:04
+└ norm(Q) = 2.6719936000000000e+09
+┌ Info: Update
+│ simtime = 1.8199731445312500e+03
+│ runtime = 00:43:04
+└ norm(Q) = 2.6715607040000000e+09
+┌ Info: Update
+│ simtime = 1.8619340820312500e+03
+│ runtime = 00:44:04
+└ norm(Q) = 2.6711413760000000e+09
+┌ Info: Update
+│ simtime = 1.9044355468750000e+03
+│ runtime = 00:45:04
+└ norm(Q) = 2.6707153920000000e+09
+┌ Info: Update
+│ simtime = 1.9456357421875000e+03
+│ runtime = 00:46:05
+└ norm(Q) = 2.6703014400000000e+09
+┌ Info: Update
+│ simtime = 1.9875166015625000e+03
+│ runtime = 00:47:05
+└ norm(Q) = 2.6698785280000000e+09
+┌ Info: Update
+│ simtime = 2.0337817382812500e+03
+│ runtime = 00:48:05
+└ norm(Q) = 2.6694108160000000e+09
+┌ Info: Update
+│ simtime = 2.0744013671875000e+03
+│ runtime = 00:49:05
+└ norm(Q) = 2.6689996800000000e+09
+┌ Info: Update
+│ simtime = 2.1206064453125000e+03
+│ runtime = 00:50:05
+└ norm(Q) = 2.6685329920000000e+09
+┌ Info: Update
+│ simtime = 2.1621269531250000e+03
+│ runtime = 00:51:05
+└ norm(Q) = 2.6681134080000000e+09
+┌ Info: Update
+│ simtime = 2.2022260742187500e+03
+│ runtime = 00:52:06
+└ norm(Q) = 2.6677079040000000e+09
+┌ Info: Update
+│ simtime = 2.2440869140625000e+03
+│ runtime = 00:53:06
+└ norm(Q) = 2.6672844800000000e+09
+┌ Info: Update
+│ simtime = 2.2857475585937500e+03
+│ runtime = 00:54:06
+└ norm(Q) = 2.6668633600000000e+09
+┌ Info: Update
+│ simtime = 2.3283090820312500e+03
+│ runtime = 00:55:07
+└ norm(Q) = 2.6664332800000000e+09
+┌ Info: Update
+│ simtime = 2.3704101562500000e+03
+│ runtime = 00:56:07
+└ norm(Q) = 2.6660080640000000e+09
+┌ Info: Update
+│ simtime = 2.4106293945312500e+03
+│ runtime = 00:57:07
+└ norm(Q) = 2.6656020480000000e+09
+┌ Info: Update
+│ simtime = 2.4526904296875000e+03
+│ runtime = 00:58:07
+└ norm(Q) = 2.6651781120000000e+09
+┌ Info: Update
+│ simtime = 2.4946113281250000e+03
+│ runtime = 00:59:07
+└ norm(Q) = 2.6647554560000000e+09
+┌ Info: Update
+│ simtime = 2.5395751953125000e+03
+│ runtime = 01:00:07
+└ norm(Q) = 2.6643028480000000e+09
+┌ Info: Update
+│ simtime = 2.5810756835937500e+03
+│ runtime = 01:01:07
+└ norm(Q) = 2.6638855680000000e+09
+┌ Info: Update
+│ simtime = 2.6258593750000000e+03
+│ runtime = 01:02:07
+└ norm(Q) = 2.6634337280000000e+09
+┌ Info: Update
+│ simtime = 2.6674199218750000e+03
+│ runtime = 01:03:07
+└ norm(Q) = 2.6630141440000000e+09
+┌ Info: Update
+│ simtime = 2.7089003906250000e+03
+│ runtime = 01:04:07
+└ norm(Q) = 2.6625953280000000e+09
+┌ Info: Update
+│ simtime = 2.7507011718750000e+03
+│ runtime = 01:05:07
+└ norm(Q) = 2.6621726720000000e+09
+┌ Info: Update
+│ simtime = 2.7925419921875000e+03
+│ runtime = 01:06:07
+└ norm(Q) = 2.6617495040000000e+09
+┌ Info: Update
+│ simtime = 2.8384467773437500e+03
+│ runtime = 01:07:09
+└ norm(Q) = 2.6612843520000000e+09
+┌ Info: Update
+│ simtime = 2.8813886718750000e+03
+│ runtime = 01:08:09
+└ norm(Q) = 2.6608496640000000e+09
+┌ Info: Update
+│ simtime = 2.9239301757812500e+03
+│ runtime = 01:09:09
+└ norm(Q) = 2.6604183040000000e+09
+┌ Info: Update
+│ simtime = 2.9667719726562500e+03
+│ runtime = 01:10:09
+└ norm(Q) = 2.6599831040000000e+09
+┌ Info: Update
+│ simtime = 3.0087729492187500e+03
+│ runtime = 01:11:09
+└ norm(Q) = 2.6595566080000000e+09
+┌ Info: Update
+│ simtime = 3.0515947265625000e+03
+│ runtime = 01:12:09
+└ norm(Q) = 2.6591211520000000e+09
+┌ Info: Update
+│ simtime = 3.0983203125000000e+03
+│ runtime = 01:13:09
+└ norm(Q) = 2.6586457600000000e+09
+┌ Info: Update
+│ simtime = 3.1451860351562500e+03
+│ runtime = 01:14:09
+└ norm(Q) = 2.6581685760000000e+09
+┌ Info: Update
+│ simtime = 3.1879677734375000e+03
+│ runtime = 01:15:09
+└ norm(Q) = 2.6577333760000000e+09
+┌ Info: Update
+│ simtime = 3.2330117187500000e+03
+│ runtime = 01:16:10
+└ norm(Q) = 2.6572743680000000e+09
+┌ Info: Update
+│ simtime = 3.2747924804687500e+03
+│ runtime = 01:17:10
+└ norm(Q) = 2.6568486400000000e+09
+┌ Info: Update
+│ simtime = 3.3172338867187500e+03
+│ runtime = 01:18:10
+└ norm(Q) = 2.6564167680000000e+09
+┌ Info: Update
+│ simtime = 3.3585341796875000e+03
+│ runtime = 01:19:11
+└ norm(Q) = 2.6559966720000000e+09
+┌ Info: Update
+│ simtime = 3.4004150390625000e+03
+│ runtime = 01:20:11
+└ norm(Q) = 2.6555701760000000e+09
+┌ Info: Update
+│ simtime = 3.4463398437500000e+03
+│ runtime = 01:21:11
+└ norm(Q) = 2.6551029760000000e+09
+┌ Info: Update
+│ simtime = 3.4882407226562500e+03
+│ runtime = 01:22:12
+└ norm(Q) = 2.6546764800000000e+09
+┌ Info: Update
+│ simtime = 3.5309423828125000e+03
+│ runtime = 01:23:12
+└ norm(Q) = 2.6542417920000000e+09
+┌ Info: Update
+│ simtime = 3.5778881835937500e+03
+│ runtime = 01:24:12
+└ norm(Q) = 2.6537638400000000e+09
+┌ Info: Update
+│ simtime = 3.6222514648437500e+03
+│ runtime = 01:25:12
+└ norm(Q) = 2.6533120000000000e+09
+┌ Info: Update
+│ simtime = 3.6639521484375000e+03
+│ runtime = 01:26:12
+└ norm(Q) = 2.6528878080000000e+09
+┌ Info: Update
+│ simtime = 3.7056127929687500e+03
+│ runtime = 01:27:12
+└ norm(Q) = 2.6524633600000000e+09
+┌ Info: Update
+│ simtime = 3.7483344726562500e+03
+│ runtime = 01:28:12
+└ norm(Q) = 2.6520289280000000e+09
+┌ Info: Update
+│ simtime = 3.7905156250000000e+03
+│ runtime = 01:29:12
+└ norm(Q) = 2.6516001280000000e+09
+┌ Info: Update
+│ simtime = 3.8351791992187500e+03
+│ runtime = 01:30:12
+└ norm(Q) = 2.6511472640000000e+09
+┌ Info: Update
+│ simtime = 3.8760791015625000e+03
+│ runtime = 01:31:12
+└ norm(Q) = 2.6507330560000000e+09
+┌ Info: Update
+│ simtime = 3.9189809570312500e+03
+│ runtime = 01:32:12
+└ norm(Q) = 2.6503011840000000e+09
+┌ Info: Update
+│ simtime = 3.9621430664062500e+03
+│ runtime = 01:33:13
+└ norm(Q) = 2.6498690560000000e+09
+┌ Info: Update
+│ simtime = 4.0052050781250000e+03
+│ runtime = 01:34:13
+└ norm(Q) = 2.6494405120000000e+09
+┌ Info: Update
+│ simtime = 4.0492280273437500e+03
+│ runtime = 01:35:13
+└ norm(Q) = 2.6490071040000000e+09
+┌ Info: Update
+│ simtime = 4.0907084960937500e+03
+│ runtime = 01:36:14
+└ norm(Q) = 2.6486059520000000e+09
+┌ Info: Update
+│ simtime = 4.1377143554687500e+03
+│ runtime = 01:37:14
+└ norm(Q) = 2.6481669120000000e+09
+┌ Info: Update
+│ simtime = 4.1811567382812500e+03
+│ runtime = 01:38:14
+└ norm(Q) = 2.6477872640000000e+09
+┌ Info: Update
+│ simtime = 4.2270214843750000e+03
+│ runtime = 01:39:14
+└ norm(Q) = 2.6474570240000000e+09
+┌ Info: Update
+│ simtime = 4.2689624023437500e+03
+│ runtime = 01:40:15
+└ norm(Q) = 2.6473413120000000e+09
+ERROR: a exception was thrown during kernel execution.
+       Run Julia on debug level 2 for device stack traces.
+ERROR: a exception was thrown during kernel execution.
+       Run Julia on debug level 2 for device stack traces.
+/home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl: Error During Test at /home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl:200
+  Got exception outside of a @test
+  CUDA error: unspecified launch failure (code #719, ERROR_LAUNCH_FAILED)
+  Stacktrace:
+   [1] macro expansion at /home/asridhar/.julia/packages/CUDAdrv/WVU1H/src/base.jl:147 [inlined]
+   [2] #copy!#10(::Nothing, ::Bool, ::typeof(CUDAdrv.Mem.copy!), ::Ptr{Float32}, ::CUDAdrv.Mem.DeviceBuffer, ::Int64) at /home/asridhar/.julia/packages/CUDAdrv/WVU1H/src/memory.jl:344
+   [3] copy! at /home/asridhar/.julia/packages/CUDAdrv/WVU1H/src/memory.jl:335 [inlined]
+   [4] copyto!(::Array{Float32,2}, ::Int64, ::CuArray{Float32,2}, ::Int64, ::Int64) at /home/asridhar/.julia/packages/CuArrays/Ux8Vu/src/array.jl:194
+   [5] #start_ghost_exchange!#14(::Bool, ::typeof(CLIMA.MPIStateArrays.start_ghost_exchange!), ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}) at /home/asridhar/.julia/packages/GPUArrays/fAX0Q/src/abstractarray.jl:101
+   [6] start_ghost_exchange! at /central/home/asridhar/CLIMA/src/Arrays/MPIStateArrays.jl:259 [inlined]
+   [7] #call#1(::Bool, ::DGModel{AtmosModel{FlatOrientation,NoReferenceState,SmagorinskyLilly{Float32},EquilMoist,StevensRadiation{Float32},Tuple{Gravity,RayleighSponge{Float32},Subsidence,GeostrophicForcing{Float32}},DYCOMS_BC{Float32},typeof(Initialise_DYCOMS!)},DiscontinuousSpectralElementGrid{Float32,3,4,125,CuArray,CuArray{Float32,1},CuArray{Float32,2},CuArray{Float32,3},CuArray{Float32,4},CuArray{Int64,1},CuArray{Int64,2},CuArray{Int64,3},StackedBrickTopology{3,Float32}},Rusanov,CentralNumericalFluxDiffusive,CentralGradPenalty}, ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::NamedTuple{(:aux, :diff),Tuple{MPIStateArray{Tuple{125,14},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},MPIStateArray{Tuple{125,13},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}}}, ::Float32) at /central/home/asridhar/CLIMA/src/DGmethods/DGmodel.jl:68
+   [8] (::getfield(CLIMA.DGmethods, Symbol("#kw#DGModel")))(::NamedTuple{(:increment,),Tuple{Bool}}, ::DGModel{AtmosModel{FlatOrientation,NoReferenceState,SmagorinskyLilly{Float32},EquilMoist,StevensRadiation{Float32},Tuple{Gravity,RayleighSponge{Float32},Subsidence,GeostrophicForcing{Float32}},DYCOMS_BC{Float32},typeof(Initialise_DYCOMS!)},DiscontinuousSpectralElementGrid{Float32,3,4,125,CuArray,CuArray{Float32,1},CuArray{Float32,2},CuArray{Float32,3},CuArray{Float32,4},CuArray{Int64,1},CuArray{Int64,2},CuArray{Int64,3},StackedBrickTopology{3,Float32}},Rusanov,CentralNumericalFluxDiffusive,CentralGradPenalty}, ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::NamedTuple{(:aux, :diff),Tuple{MPIStateArray{Tuple{125,14},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},MPIStateArray{Tuple{125,13},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}}}, ::Float32) at ./none:0
+   [9] dostep!(::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::LowStorageRungeKutta2N{Float32,Float32,MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},5}, ::NamedTuple{(:aux, :diff),Tuple{MPIStateArray{Tuple{125,14},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},MPIStateArray{Tuple{125,13},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}}}, ::Int64, ::Bool) at /central/home/asridhar/CLIMA/src/ODESolvers/LowStorageRungeKuttaMethod.jl:92
+   [10] #solve!#1(::Int64, ::Bool, ::Int64, ::Tuple{CLIMA.GenericCallbacks.EveryXWallTimeSeconds,CLIMA.GenericCallbacks.EveryXSimulationSteps}, ::typeof(solve!), ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::LowStorageRungeKutta2N{Float32,Float32,MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},5}, ::NamedTuple{(:aux, :diff),Tuple{MPIStateArray{Tuple{125,14},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},MPIStateArray{Tuple{125,13},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}}}) at /central/home/asridhar/CLIMA/src/ODESolvers/ODESolvers.jl:53
+   [11] (::getfield(CLIMA.ODESolvers, Symbol("#kw##solve!")))(::NamedTuple{(:timeend, :callbacks),Tuple{Int64,Tuple{CLIMA.GenericCallbacks.EveryXWallTimeSeconds,CLIMA.GenericCallbacks.EveryXSimulationSteps}}}, ::typeof(solve!), ::MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}, ::LowStorageRungeKutta2N{Float32,Float32,MPIStateArray{Tuple{125,6},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},5}, ::NamedTuple{(:aux, :diff),Tuple{MPIStateArray{Tuple{125,14},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}},MPIStateArray{Tuple{125,13},Float32,CuArray,3,CuArray{Float32,3},2,CuArray{Int64,1},CuArray{Float32,3},CuArray{Float32,2}}}}) at ./none:0
+   [12] run(::MPI.Comm, ::Type, ::Int64, ::StackedBrickTopology{3,Float32}, ::Int64, ::Int64, ::Type, ::Float64, ::Float32, ::Float32, ::Float32, ::Float32, ::Int64, ::Float32) at /home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl:169
+   [13] top-level scope at /home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl:237
+   [14] top-level scope at /buildworker/worker/package_linux64/build/usr/share/julia/stdlib/v1.2/Test/src/Test.jl:1186
+   [15] top-level scope at /home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl:200
+   [16] include at ./boot.jl:328 [inlined]
+   [17] include_relative(::Module, ::String) at ./loading.jl:1094
+   [18] include(::Module, ::String) at ./Base.jl:31
+   [19] exec_options(::Base.JLOptions) at ./client.jl:295
+   [20] _start() at ./client.jl:464
+  
+Test Summary:                                            | Error  Total
+/home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl |     1      1
+ERROR: LoadError: Some tests did not pass: 0 passed, 0 failed, 1 errored, 0 broken.
+in expression starting at /home/asridhar/CLIMA/examples/DGmethods/ex_001_dycoms.jl:188
+slurmstepd: error: *** JOB 6587340 ON hpc-23-30 CANCELLED AT 2019-09-11T11:06:34 ***

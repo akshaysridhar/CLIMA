@@ -630,6 +630,8 @@ function initauxstate!(bl::BalanceLaw, ::Val{dim}, ::Val{polyorder}, auxstate, v
   end
 end
 
+
+# TODO : Delete dof_iteration docs
 """
     knl_dof_iteration!(::Val{dim}, ::Val{N}, ::Val{nRstate}, ::Val{nstate},
                        ::Val{nviscstate}, ::Val{nauxstate}, dof_fun!, R, Q,

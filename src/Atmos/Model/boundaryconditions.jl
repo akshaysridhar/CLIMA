@@ -227,3 +227,30 @@ function atmos_boundarycondition_diffusive!(bc::DYCOMS_BC, m::AtmosModel,
   end
 end
 
+"""
+  ChannelFlowBC <: BoundaryCondition
+  Prescribes boundary conditions for Dynamics of Marine Stratocumulus Case
+"""
+struct ChannelFlowBC <: BoundaryCondition
+end
+function atmos_boundarycondition_state!(bc::ChannelFlowBC, m::AtmosModel,
+                                        stateP::Vars, auxP::Vars,
+                                        nM, stateM::Vars,
+                                        auxM::Vars, bctype, t, state1::Vars,
+                                        aux1::Vars) 
+  DT = eltype(stateP)
+  # Zero slip boundaries at top and bottom walls
+  if bctype == 1 || bctype == 2
+    stateP.ρu =SVector(DT(0),DT(0),DT(0))
+    stateP.ρe = DT(0)
+  end
+end
+function atmos_boundarycondition_diffusive!(bc::ChannelFlowBC, m::AtmosModel,
+                                            stateP::Vars, diffP::Vars,
+                                            auxP::Vars, nM, stateM::Vars,
+                                            diffM::Vars, auxM::Vars, bctype, t,
+                                            state1::Vars, diff1::Vars,
+                                            aux1::Vars) 
+  nothing
+end
+

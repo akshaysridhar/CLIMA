@@ -4,8 +4,8 @@ export AtmosModel,
   ConstantViscosityWithDivergence, SmagorinskyLilly,
   DryModel, EquilMoist,
   NoRadiation, StevensRadiation,
-  Gravity, RayleighSponge, Subsidence, GeostrophicForcing,
-  NoFluxBC, InitStateBC, DYCOMS_BC,
+  Gravity, RayleighSponge, Subsidence, GeostrophicForcing, ConstPG,
+  NoFluxBC, InitStateBC, DYCOMS_BC, ChannelFlowBC,
   FlatOrientation, SphericalOrientation
 
 using LinearAlgebra, StaticArrays
@@ -188,6 +188,7 @@ end
 
 function update_aux!(m::AtmosModel, state::Vars, diffusive::Vars, aux::Vars, t::Real)
   atmos_update_aux!(m.moisture, m, state, diffusive, aux, t)
+  atmos_update_aux!(m.turbulence, m, state, diffusive, aux, t)
 end
 
 function integrate_aux!(m::AtmosModel, integ::Vars, state::Vars, aux::Vars)
