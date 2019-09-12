@@ -203,8 +203,8 @@ let
     # DG polynomial order 
     polynomialorder = 4
     # User specified grid spacing
-    Δx    = DT(20)
-    Δy    = DT(20)
+    Δx    = DT(30)
+    Δy    = DT(30)
     Δz    = DT(20)
     # SGS Filter constants
     C_smag = DT(0.15)
@@ -230,7 +230,7 @@ let
                   range(DT(ymin), length=Ne[2]+1, DT(ymax)),
                   range(DT(zmin), length=Ne[3]+1, DT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
-    dt = 0.015
+    dt = 0.02
     timeend = 3600 * 4
     dim = 3
     @info (ArrayType, DT, dim)
