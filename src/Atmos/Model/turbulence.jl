@@ -1,9 +1,7 @@
 #### Turbulence closures
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
-
-abstract type TurbulenceClosure
-end
+export ConstantViscosityWithDivergence, SmagorinskyLilly
 
 vars_state(::TurbulenceClosure, T) = @vars()
 vars_gradient(::TurbulenceClosure, T) = @vars()
@@ -12,7 +10,7 @@ vars_aux(::TurbulenceClosure, T) = @vars()
 
 function atmos_init_aux!(::TurbulenceClosure, ::AtmosModel, aux::Vars, geom::LocalGeometry)
 end
-function update_aux!(::TurbulenceClosure, state::Vars, diffusive::Vars, aux::Vars, t::Real)
+function atmos_nodal_update_aux!(::TurbulenceClosure, ::AtmosModel, state::Vars, aux::Vars, t::Real)
 end
 function diffusive!(::TurbulenceClosure, diffusive, ∇transform, state, aux, t, ν)
 end
