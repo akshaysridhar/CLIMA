@@ -193,6 +193,34 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     TSM         = PhaseEquil(e_intM, q_totM, ρM) 
     q_vapM      = q_totM - PhasePartition(TSM).liq
     TM          = air_temperature(TSM)
+    # --------------------------------------------------------- #
+    # Use SurfaceFluxes module to compute exchange coefficients
+    # for θ and u_star 
+    # --------------------------------------------------------- # 
+    θ_s         = virtual_pottemp(TSM)
+    θ_bar       = (virtual_pottemp(TS_FN) + θ_s) / 2
+    x_initial   = [DT(100),DT(10),DT(300)] # Initial guess for L_MO, u_star, θ_star
+    x_ave       = [DT(10), θ_bar]
+    x_s         = [DT(10), θ_s]
+    F_exchange  = [DT(0.0011), DT(0.0011)] # Exchange coefficients at the top of the surface layer 
+    z_0         = [DT(0.01), DT(0.001)] # (Roughness lengths for momentum and heat respectively)
+    dimensionless_number =  [DT(1), DT(71/100)] # (Different for u_star and θ_star)
+    a_bl        = DT(4.7) # Log relation offset (enforces no-slip)
+    Δz          = z_FN
+    z           = z_FN
+    sfc         = surface_conditions(x_initial,
+                                     x_ave,
+                                     x_s,
+                                     z_0,
+                                     F_exchange,
+                                     dimensionless_number,
+                                     θ_bar,
+                                     Δz,
+                                     z,
+                                     a_bl
+                                     )
+    @show sfc
+    # TODO: WIP Surface Fluxes module
     # ----------------------------------------------------------
     # Extract components of diffusive momentum flux (minus-side)
     # ----------------------------------------------------------
