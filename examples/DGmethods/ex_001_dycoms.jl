@@ -136,7 +136,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   norm(Q₀) = %.16e""" eng0
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(30, mpicomm) do (s=false)
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(120, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else
@@ -155,8 +155,9 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Setup VTK output callbacks
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
-    mkpath("./vtk-dycoms-2gpu/")
-    outprefix = @sprintf("./vtk-dycoms-2gpu/dycoms_%dD_mpirank%04d_step%04d", dim,
+    VTKPATH = "dyc-2gpu"
+    mkpath(VTKPATH)
+    outprefix = @sprintf("./%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
                            MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
@@ -228,10 +229,11 @@ let
                   range(DT(ymin), length=Ne[2]+1, DT(ymax)),
                   range(DT(zmin), length=Ne[3]+1, DT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
-    dt = DT(2 / 350)
-    timeend = DT(7200)
+    dt = DT(1 / 350)
+    timeend = DT(14400)
     dim = 3
     @info (ArrayType, DT, dim)
+    @info ((Nex,Ney,Nez), (Δx, Δy, Δz), (xmax,ymax,zmax), dt, timeend)
     result = run(mpicomm, ArrayType, dim, topl, 
                  polynomialorder, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
     @test result ≈ DT(0.9999735345500744)
