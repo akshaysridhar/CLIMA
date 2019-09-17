@@ -1,5 +1,6 @@
 using CLIMA.PlanetParameters
 using CLIMA.SurfaceFluxes
+export PeriodicBC, NoFluxBC, InitStateBC, DYCOMS_BC
 
 #TODO: figure out a better interface for this.
 # at the moment we can just pass a function, but we should do something better
