@@ -136,7 +136,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   norm(Q₀) = %.16e""" eng0
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(120, mpicomm) do (s=false)
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(600, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else
@@ -154,7 +154,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   
   # Setup VTK output callbacks
   step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
     VTKPATH = "dyc-1gpu"
     mkpath(VTKPATH)
     outprefix = @sprintf("./%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
