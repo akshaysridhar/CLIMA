@@ -155,7 +155,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Setup VTK output callbacks
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(5000) do (init=false)
-    VTKPATH = "dyc-2gpu"
+    VTKPATH = "dyc-1gpu"
     mkpath(VTKPATH)
     outprefix = @sprintf("./%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
                            MPI.Comm_rank(mpicomm), step[1])
@@ -229,7 +229,7 @@ let
                   range(DT(ymin), length=Ne[2]+1, DT(ymax)),
                   range(DT(zmin), length=Ne[3]+1, DT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
-    dt = DT(1 / 350)
+    dt = 0.001
     timeend = DT(14400)
     dim = 3
     @info (ArrayType, DT, dim)
