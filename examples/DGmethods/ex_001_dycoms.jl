@@ -155,9 +155,9 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Setup VTK output callbacks
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
-    VTKPATH = "dyc-1gpu"
+    VTKPATH = "/central/scratch/asridhar/DYCOMS-1GPU-FluxMod-650900"
     mkpath(VTKPATH)
-    outprefix = @sprintf("./%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
+    outprefix = @sprintf("%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
                            MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
@@ -202,13 +202,13 @@ let
     # DG polynomial order 
     polynomialorder = 4
     # User specified grid spacing
-    Δx    = DT(10)
-    Δy    = DT(10)
-    Δz    = DT(10)
+    Δx    = DT(35)
+    Δy    = DT(35)
+    Δz    = DT(35)
     # SGS Filter constants
     C_smag = DT(0.15)
-    LHF    = DT(115)
-    SHF    = DT(15)
+    LHF    = DT(-115)
+    SHF    = DT(-15)
     C_drag = DT(0.0011)
     # Physical domain extents 
     (xmin, xmax) = (0, 1000)
@@ -225,9 +225,20 @@ let
     Nez = ceil(Int64, (Lz/Δz - 1)/polynomialorder)
     Ne = (Nex, Ney, Nez)
     # User defined domain parameters
-    brickrange = (range(DT(xmin), length=Ne[1]+1, DT(xmax)),
-                  range(DT(ymin), length=Ne[2]+1, DT(ymax)),
-                  range(DT(zmin), length=Ne[3]+1, DT(zmax)))
+    xrange = range(DT(xmin), length=Ne[1]+1, DT(xmax))
+    yrange = range(DT(ymin), length=Ne[2]+1, DT(ymax))
+    #zrange = range(DT(zmin), length=Ne[3]+1, DT(zmax))
+    #Element-sizes 
+    #RefineExtents
+    ref_lo = DT(650)
+    ref_hi = DT(1000)
+    zrange_1 = range(DT(zmin),DT(ref_lo), step = 100)
+    zrange_2 = range(DT(ref_lo), DT(ref_hi), step = 40)
+    zrange_3 = range(DT(ref_hi), DT(zmax), step = 100)
+    zrange = (zrange_1...,zrange_2...,zrange_3...)
+    zrange = unique(zrange)
+    #zrange = grid_stretching_1d(DT(zmin), DT(zmax), Nez, "top_stretching")
+    brickrange = (xrange,yrange,zrange)
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
     dt = 0.001
     timeend = DT(14400)
