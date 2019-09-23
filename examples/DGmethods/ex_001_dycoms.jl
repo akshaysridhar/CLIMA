@@ -85,7 +85,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   state.moisture.ρq_tot = ρ * q_tot
 end
 
-function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
+function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, VTKPATH)
   # Grid setup (topl contains brickrange information)
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = DT,
@@ -155,7 +155,6 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Setup VTK output callbacks
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
-    VTKPATH = "/central/scratch/asridhar/DYCOMS-1GPU-FluxMod-650900"
     mkpath(VTKPATH)
     outprefix = @sprintf("%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
                            MPI.Comm_rank(mpicomm), step[1])
@@ -243,10 +242,11 @@ let
     dt = 0.001
     timeend = DT(14400)
     dim = 3
-    @info (ArrayType, DT, dim)
+    VTKPATH = "/central/scratch/asridhar/DYCOMS-calcfluxes"
+    @info (ArrayType, DT, dim, VTKPATH)
     @info ((Nex,Ney,Nez), (Δx, Δy, Δz), (xmax,ymax,zmax), dt, timeend)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 polynomialorder, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
+                 polynomialorder, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, VTKPATH)
     @test result ≈ DT(0.9999735345500744)
   end
 end
