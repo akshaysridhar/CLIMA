@@ -57,11 +57,12 @@ end
 struct SmagorinskyLilly{T} <: TurbulenceClosure
   C_smag::T
 end
-vars_aux(::SmagorinskyLilly,T) = @vars(Δ::T)
+vars_aux(::SmagorinskyLilly,T) = @vars(Δ::T, Δmat::SMatrix{3,3,T,9})
 vars_gradient(::SmagorinskyLilly,T) = @vars(θ_v::T)
 vars_diffusive(::SmagorinskyLilly,T) = @vars(∂θ∂Φ::T)
 function atmos_init_aux!(::SmagorinskyLilly, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
+  aux.turbulence.Δmat = sqrt.(abs.(inv(resolutionmetric(geom))))
 end
 function gradvariables!(m::SmagorinskyLilly, transform::Vars, state::Vars, aux::Vars, t::Real)
   transform.turbulence.θ_v = aux.moisture.θ_v
@@ -123,8 +124,8 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly, S, state::Vars, diffusive
   @inbounds normS = strain_rate_magnitude(S)
   f_b² = squared_buoyancy_correction(normS, diffusive, aux)
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
-  return state.ρ * normS * f_b² * T(m.C_smag * aux.turbulence.Δ)^2
+  return state.ρ * normS * f_b² * (m.C_smag .* aux.turbulence.Δmat).^2
 end
 function scaled_momentum_flux_tensor(m::SmagorinskyLilly, ρν, S)
-  (-2*ρν) * S
+  (-2*ρν) .* S
 end
