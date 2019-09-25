@@ -109,7 +109,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Model definition
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     Vreman{DT}(C_smag),
+                     SmagorinskyLilly{DT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{DT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
                      (Gravity(), 
