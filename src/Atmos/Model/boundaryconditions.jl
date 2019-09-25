@@ -135,7 +135,6 @@ function atmos_boundary_state!(::Rusanov, bc::DYCOMS_BC, m::AtmosModel,
   
   if bctype == 1 # bctype identifies bottom wall 
     stateP.ρu = SVector(0,0,0)
-    stateP.ρe = stateM.ρ * total_energy(DT(0), DT(0), DT(292.5), PhasePartition(q_totM, DT(0), DT(0)))
   end
 end
 function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
@@ -207,7 +206,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     EVAPFLUX    = -stateM.ρ * C_drag * windspeed_FN * (qvdiff)
     diffP.moisture.ρd_q_tot  = SVector(DT(0),
                                        DT(0),
-                                       EVAPFLUX)
+                                       bc.LHF/LH_v0)
     # ----------------------------------------------------------
     # Boundary energy fluxes
     # ----------------------------------------------------------
@@ -215,7 +214,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
     diffP.moisture.ρd_h_tot  = SVector(DT(0),
                                        DT(0),
-                                       ENTHALPYFLUX)
+                                       bc.LHF + bc.SHF)
   end
 end
 

@@ -109,7 +109,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   # Model definition
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     SmagorinskyLilly{DT}(C_smag),
+                     Vreman{DT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{DT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
                      (Gravity(), 
@@ -136,7 +136,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   norm(Q₀) = %.16e""" eng0
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(600, mpicomm) do (s=false)
+  cbinfo = GenericCallbacks.EveryXWallTimeSeconds(10, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else
@@ -154,7 +154,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   
   # Setup VTK output callbacks
   step = [0]
-    cbvtk = GenericCallbacks.EveryXSimulationSteps(10000) do (init=false)
+    cbvtk = GenericCallbacks.EveryXSimulationSteps(30000) do (init=false)
     mkpath(VTKPATH)
     outprefix = @sprintf("%s/dycoms_%dD_mpirank%04d_step%04d", VTKPATH, dim,
                            MPI.Comm_rank(mpicomm), step[1])
@@ -206,12 +206,12 @@ let
     Δz    = DT(35)
     # SGS Filter constants
     C_smag = DT(0.15)
-    LHF    = DT(-115)
-    SHF    = DT(-15)
+    LHF    = DT(115)
+    SHF    = DT(15)
     C_drag = DT(0.0011)
     # Physical domain extents 
-    (xmin, xmax) = (0, 1000)
-    (ymin, ymax) = (0, 1000)
+    (xmin, xmax) = (0, 2000)
+    (ymin, ymax) = (0, 2000)
     (zmin, zmax) = (0, 1500)
     zsponge = DT(0.75 * zmax)
     #Get Nex, Ney from resolution
@@ -231,18 +231,18 @@ let
     #RefineExtents
     ref_lo = DT(650)
     ref_hi = DT(1000)
-    zrange_1 = range(DT(zmin),DT(ref_lo), step = 100)
-    zrange_2 = range(DT(ref_lo), DT(ref_hi), step = 40)
-    zrange_3 = range(DT(ref_hi), DT(zmax), step = 100)
+    zrange_1 = range(DT(zmin),DT(ref_lo), step = 150)
+    zrange_2 = range(DT(ref_lo), DT(ref_hi), step = 20)
+    zrange_3 = range(DT(ref_hi), DT(zmax), step = 150)
     zrange = (zrange_1...,zrange_2...,zrange_3...)
     zrange = unique(zrange)
     #zrange = grid_stretching_1d(DT(zmin), DT(zmax), Nez, "top_stretching")
     brickrange = (xrange,yrange,zrange)
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
     dt = 0.001
-    timeend = DT(14400)
+    timeend = DT(36000)
     dim = 3
-    VTKPATH = "/central/scratch/asridhar/DYCOMS-calcfluxes"
+    VTKPATH = "/central/scratch/asridhar/DYC-VREMAN-PF-RF-CPU"
     @info (ArrayType, DT, dim, VTKPATH)
     @info ((Nex,Ney,Nez), (Δx, Δy, Δz), (xmax,ymax,zmax), dt, timeend)
     result = run(mpicomm, ArrayType, dim, topl, 
