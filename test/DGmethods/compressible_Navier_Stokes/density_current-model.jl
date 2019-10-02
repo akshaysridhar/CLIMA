@@ -197,7 +197,7 @@ let
       device!(MPI.Comm_rank(mpicomm) % length(devices()))
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
-    FloatType = (Float32, Float64)
+    FloatType = (Float64, Float64)
     for DF in FloatType
       brickrange = (range(DF(xmin); length=Ne[1]+1, stop=xmax),
                     range(DF(ymin); length=Ne[2]+1, stop=ymax),
