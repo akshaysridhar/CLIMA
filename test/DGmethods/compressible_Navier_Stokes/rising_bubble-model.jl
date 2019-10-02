@@ -45,7 +45,7 @@ const Ne        = (10,2,10)
 const polynomialorder = 4
 const dim       = 3
 const dt        = 0.01
-const timeend   = 10dt
+const timeend   = 700
 # ------------- Initial condition function ----------- # 
 """
 @article{doi:10.1175/1520-0469(1993)050<1865:BCEWAS>2.0.CO;2,
@@ -108,7 +108,7 @@ function run(mpicomm, ArrayType,
   # -------------- Define model ---------------------------------- # 
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     Vreman{DF}(C_smag),
+                     SmagorinskyLilly{DF}(C_smag),
                      EquilMoist(), 
                      NoRadiation(),
                      Gravity(),
