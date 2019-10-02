@@ -36,6 +36,23 @@ end
 
 """
   Initial Condition for DYCOMS_RF01 LES
+@article{doi:10.1175/MWR2930.1,
+author = {Stevens, Bjorn and Moeng, Chin-Hoh and Ackerman, 
+          Andrew S. and Bretherton, Christopher S. and Chlond, 
+          Andreas and de Roode, Stephan and Edwards, James and Golaz, 
+          Jean-Christophe and Jiang, Hongli and Khairoutdinov, 
+          Marat and Kirkpatrick, Michael P. and Lewellen, David C. and Lock, Adrian and 
+          Maeller, Frank and Stevens, David E. and Whelan, Eoin and Zhu, Ping},
+title = {Evaluation of Large-Eddy Simulations via Observations of Nocturnal Marine Stratocumulus},
+journal = {Monthly Weather Review},
+volume = {133},
+number = {6},
+pages = {1443-1462},
+year = {2005},
+doi = {10.1175/MWR2930.1},
+URL = {https://doi.org/10.1175/MWR2930.1},
+eprint = {https://doi.org/10.1175/MWR2930.1}
+}
 """
 function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   DT            = eltype(state)
@@ -92,7 +109,6 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
                                           DeviceArray = ArrayType,
                                           polynomialorder = N,
                                          )
-<<<<<<< HEAD
   # Problem constants
   # Radiation model
   κ             = DT(85)
@@ -108,8 +124,6 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
   v_geostrophic = DT(-5.5)
   
   # Model definition
-=======
->>>>>>> 95733fd8e1589c5805c411ea63e383c34f3804b8
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
                      SmagorinskyLilly{DT}(C_smag),
@@ -127,11 +141,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
                Rusanov(),
                CentralNumericalFluxDiffusive(),
                CentralGradPenalty())
-  # Initialise ODE, param contains param.diff and param.aux (diffusive, auxiliary variables)
-  param = init_ode_param(dg)
-  # State variables, initialisation
-  Q = init_ode_state(dg, param, DT(0))
-  # Define timestepping method 
+  Q = init_ode_state(dg, DT(0))
   lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
   # Calculating initial condition norm 
   eng0 = norm(Q)
@@ -163,16 +173,18 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag, LHF, SHF
                            MPI.Comm_rank(mpicomm), step[1])
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
-             param[1], flattenednames(vars_aux(model,DT)))
+             dg.auxstate, flattenednames(vars_aux(model,DT)))
+        
     step[1] += 1
     nothing
   end
 
-  # Solver function
-  solve!(Q, lsrk, param; timeend=timeend, callbacks=(cbinfo, cbvtk))
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
+
   # Print some end of the simulation information
   engf = norm(Q)
-  Qe = init_ode_state(dg, param, DT(timeend))
+  Qe = init_ode_state(dg, DT(timeend))
+
   engfe = norm(Qe)
   errf = euclidean_distance(Q, Qe)
   @info @sprintf """Finished
