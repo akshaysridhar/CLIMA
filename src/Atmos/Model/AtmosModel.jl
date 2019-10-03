@@ -64,7 +64,7 @@ function vars_gradient(m::AtmosModel, T)
 end
 function vars_diffusive(m::AtmosModel, T)
   @vars begin
-    ρτ::SHermitianCompact{3,T,6}
+    ρτ::SMatrix{3,3,T,9}
     ρd_h_tot::SVector{3,T}
     turbulence::vars_diffusive(m.turbulence,T)
     moisture::vars_diffusive(m.moisture,T)
