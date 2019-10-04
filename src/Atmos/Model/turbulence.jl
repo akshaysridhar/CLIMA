@@ -70,13 +70,8 @@ struct SmagorinskyLilly{T} <: TurbulenceClosure
   "Smagorinsky Coefficient [dimensionless]"
   C_smag::T
 end
-<<<<<<< HEAD
 vars_aux(::SmagorinskyLilly,T) = @vars(Δ::SMatrix{3,3,T,9})
 vars_gradient(::SmagorinskyLilly,T) = @vars(θ_v::T)
-vars_diffusive(::SmagorinskyLilly,T) = @vars(∂θ∂Φ::T)
-=======
-vars_aux(::SmagorinskyLilly,T) = @vars(Δ::T)
->>>>>>> 35b27da370a485d48a6e0d066cfb8c3023255431
 function atmos_init_aux!(::SmagorinskyLilly, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = sqrt.(abs.(inv(resolutionmetric(geom))))
 end
