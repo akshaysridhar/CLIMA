@@ -23,6 +23,7 @@ function state(m::TestModel, T)
     b::state(m.b,T)
     c::state(m.c,T)
     S::SHermitianCompact{3,T,6}
+    M::SMatrix{3,3,T,9}
   end
 end
 
@@ -34,7 +35,7 @@ model = TestModel(SubModelA(), SubModelB(), SubModelC{5}())
 
 st = state(model, Float64)
 
-@test varsize(st) == 17
+@test varsize(st) == 26
 
 v = Vars{st}(zeros(MVector{varsize(st),Float64}))
 g = Grad{st}(zeros(MMatrix{3,varsize(st),Float64}))
@@ -49,19 +50,29 @@ v.b.ρqt = 12.0
 @test v.b.ρqt === 12.0
 
 @test v.S === zeros(SHermitianCompact{3,Float64,6})
+@test v.M === zeros(SMatrix{3,3,Float64,9})
 v.S = SHermitianCompact{3,Float64,6}(1,2,3,2,3,4,3,4,5)
+v.M = SMatrix{3,3,Float64,9}(1,2,3,4,5,6,7,8,9)
 @test v.S[1,1] === 1.0
 @test v.S[1,3] === 3.0
 @test v.S[3,1] === 3.0
 @test v.S[3,3] === 5.0
+
+@test v.M[1,1] === 1.0
+@test v.M[2,1] === 2.0
+@test v.M[3,1] === 3.0
+@test v.M[1,2] === 4.0
+@test v.M[2,2] === 5.0
+@test v.M[3,2] === 6.0
+@test v.M[1,3] === 7.0
+@test v.M[2,3] === 8.0
+@test v.M[3,3] === 9.0
 
 v.S = ones(SMatrix{3,3,Int64})
 @test v.S[1,1] === 1.0
 @test v.S[1,3] === 1.0
 @test v.S[3,1] === 1.0
 @test v.S[3,3] === 1.0
-
-
 
 @test propertynames(v.a) == ()
 @test propertynames(g.a) == ()
@@ -70,11 +81,13 @@ v.S = ones(SMatrix{3,3,Int64})
 g.ρu = SMatrix{3,3}(1:9)
 @test g.ρu == SMatrix{3,3,Float64}(1:9)
 
-
 @test size(v.c.ρk) == (5,)
 @test size(g.c.ρk) == (3,5)
 
 @test flattenednames(st) == ["ρ","ρu[1]","ρu[2]","ρu[3]","ρe",
                             "b.ρqt",
                             "c.ρk[1]","c.ρk[2]","c.ρk[3]","c.ρk[4]","c.ρk[5]",
-                            "S[1,1]", "S[2,1]", "S[3,1]", "S[2,2]", "S[3,2]", "S[3,3]"]
+                            "S[1,1]", "S[2,1]", "S[3,1]", "S[2,2]", "S[3,2]", "S[3,3]", 
+                            "M[1,1]", "M[2,1]", "M[3,1]",
+                            "M[1,2]", "M[2,2]", "M[3,2]",
+                            "M[1,3]", "M[2,3]", "M[3,3]"]
