@@ -7,10 +7,10 @@ export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman
 abstract type TurbulenceClosure
 end
 
-vars_state(::TurbulenceClosure, T) = @vars()
-vars_gradient(::TurbulenceClosure, T) = @vars()
-vars_diffusive(::TurbulenceClosure, T) = @vars()
-vars_aux(::TurbulenceClosure, T) = @vars()
+vars_state(::TurbulenceClosure, FT) = @vars()
+vars_gradient(::TurbulenceClosure, FT) = @vars()
+vars_diffusive(::TurbulenceClosure, FT) = @vars()
+vars_aux(::TurbulenceClosure, FT) = @vars()
 
 function atmos_init_aux!(::TurbulenceClosure, ::AtmosModel, aux::Vars, geom::LocalGeometry)
 end
@@ -31,9 +31,9 @@ Turbulence with constant dynamic viscosity (`ρν`). Divergence terms are includ
 
 $(DocStringExtensions.FIELDS)
 """
-struct ConstantViscosityWithDivergence{T} <: TurbulenceClosure
+struct ConstantViscosityWithDivergence{FT} <: TurbulenceClosure
   "Dynamic Viscosity [kg/m/s]"
-  ρν::T
+  ρν::FT
 end
 function dynamic_viscosity_tensor(m::ConstantViscosityWithDivergence, S, 
   state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
@@ -66,17 +66,17 @@ end
 
 $(DocStringExtensions.FIELDS)
 """
-struct SmagorinskyLilly{T} <: TurbulenceClosure
+struct SmagorinskyLilly{FT} <: TurbulenceClosure
   "Smagorinsky Coefficient [dimensionless]"
-  C_smag::T
+  C_smag::FT
 end
-vars_aux(::SmagorinskyLilly,T) = @vars(Δ::SMatrix{3,3,T,9})
-vars_gradient(::SmagorinskyLilly,T) = @vars(θ_v::T)
+vars_aux(::SmagorinskyLilly,FT) = @vars(Δ::SMatrix{3,3,FT,9})
+vars_gradient(::SmagorinskyLilly,FT) = @vars(θ_v::FT)
 function atmos_init_aux!(::SmagorinskyLilly, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = sqrt.(abs.(inv(resolutionmetric(geom))))
 end
 
-vars_gradient(::SmagorinskyLilly,T) = @vars(θ_v::T)
+vars_gradient(::SmagorinskyLilly,FT) = @vars(θ_v::FT)
 function gradvariables!(m::SmagorinskyLilly, transform::Vars, state::Vars, aux::Vars, t::Real)
   transform.turbulence.θ_v = aux.moisture.θ_v
 end
@@ -122,7 +122,7 @@ function squared_buoyancy_correction(normS, ∇transform::Grad, aux::Vars)
   sqrt(clamp(1 - Richardson*inv_Pr_turb, 0, 1))
 end
 
-function strain_rate_magnitude(S::SHermitianCompact{3,T,6}) where {T}
+function strain_rate_magnitude(S::SHermitianCompact{3,FT,6}) where {FT}
   sqrt(2*S[1,1]^2 + 4*S[2,1]^2 + 4*S[3,1]^2 + 2*S[2,2]^2 + 4*S[3,2]^2 + 2*S[3,3]^2)
 end
 
@@ -130,18 +130,18 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly, S, state::Vars, diffusive
   # strain rate tensor norm
   # Notation: normS ≡ norm2S = √(2S:S)
   # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
-  T = eltype(state)
+  FT = eltype(state)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
+  f_b² = SVector(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
-  return state.ρ * normS * f_b² * (m.C_smag .* aux.turbulence.Δ).^2
+  return state.ρ .* normS .* f_b² .* (m.C_smag .* aux.turbulence.Δ) .^ 2
 end
 function scaled_momentum_flux_tensor(m::SmagorinskyLilly, ρν, S)
   (-2*ρν) .* S
 end
 
 """
-  Vreman{DT} <: TurbulenceClosure
+  Vreman{FT} <: TurbulenceClosure
   
   §1.3.2 in CLIMA documentation 
 Filter width Δ is the local grid resolution calculated from the mesh metric tensor. A Smagorinsky coefficient
@@ -168,24 +168,24 @@ If Δᵢ = Δ, then β = Δ²αᵀα
 
 $(DocStringExtensions.FIELDS)
 """
-struct Vreman{DT} <: TurbulenceClosure
+struct Vreman{FT} <: TurbulenceClosure
   "Smagorinsky Coefficient [dimensionless]"
-  C_smag::DT
+  C_smag::FT
 end
-vars_aux(::Vreman,T) = @vars(Δ::SMatrix{3,3,T,9})
-vars_gradient(::Vreman,T) = @vars(θ_v::T)
+vars_aux(::Vreman,FT) = @vars(Δ::SMatrix{3,3,FT,9})
+vars_gradient(::Vreman,FT) = @vars(θ_v::FT)
 function atmos_init_aux!(::Vreman, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = sqrt.(abs.(inv(resolutionmetric(geom))))
 end
 function dynamic_viscosity_tensor(m::Vreman, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
-  DT = eltype(state)
+  FT = eltype(state)
   ∇u = ∇transform.u
   αijαij = sum(∇u .^ 2)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
-  βij = f_b² * (aux.turbulence.Δ).^2 * (∇u' * ∇u)
+  f_b² = SVector(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
+  βij = f_b² .* (aux.turbulence.Δ).^2 * (∇u' * ∇u)
   @inbounds Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
-  return state.ρ * (m.C_smag^2 * DT(2.5)) * sqrt(abs(Bβ/(αijαij+eps(DT))))
+  return state.ρ .* (m.C_smag^2 * FT(2.5)) .* sqrt(abs(Bβ/(αijαij+eps(FT))))
 end
 function scaled_momentum_flux_tensor(m::Vreman, ρν, S)
   (-2*ρν) * S
