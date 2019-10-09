@@ -75,7 +75,7 @@ uuid = "fa961155-64e5-5f13-b03f-caf6b980ea82"
 version = "0.2.0"
 
 [[CLIMA]]
-deps = ["Coverage", "Dates", "DelimitedFiles", "Dierckx", "DifferentialEquations", "Distributions", "DocStringExtensions", "DoubleFloats", "ForwardDiff", "GPUifyLoops", "GaussQuadrature", "LazyArrays", "LinearAlgebra", "Literate", "Logging", "MPI", "Pkg", "Printf", "Random", "Requires", "StaticArrays", "Statistics", "WriteVTK"]
+deps = ["Coverage", "Dates", "DelimitedFiles", "Dierckx", "DifferentialEquations", "Distributions", "DocStringExtensions", "DoubleFloats", "ForwardDiff", "GPUifyLoops", "GaussQuadrature", "LazyArrays", "LinearAlgebra", "Literate", "Logging", "MPI", "NLsolve", "Pkg", "Printf", "Random", "Requires", "SpecialFunctions", "StaticArrays", "Statistics", "WriteVTK"]
 path = "../.."
 uuid = "777c4786-024f-11e9-21a3-85d5d4106250"
 version = "0.1.0"
@@ -160,15 +160,15 @@ uuid = "3a865a2d-5b23-5a0f-bc46-62713ec82fae"
 version = "1.3.0"
 
 [[DataAPI]]
-git-tree-sha1 = "8903f0219d3472543fc4b2f5ebaf675a07f817c0"
+git-tree-sha1 = "674b67f344687a88310213ddfa8a2b3c76cc4252"
 uuid = "9a962f9c-6df0-11e9-0e5d-c546b8b5ee8a"
-version = "1.0.1"
+version = "1.1.0"
 
 [[DataStructures]]
 deps = ["InteractiveUtils", "OrderedCollections"]
-git-tree-sha1 = "0809951a1774dc724da22d26e4289bbaab77809a"
+git-tree-sha1 = "f94423c68f2e47db0d6f626a26d4872266e0ec3d"
 uuid = "864edb3b-99cc-5e75-8d2d-829cb0a9cfe8"
-version = "0.17.0"
+version = "0.17.2"
 
 [[Dates]]
 deps = ["Printf"]
@@ -192,9 +192,9 @@ version = "0.4.1"
 
 [[DiffEqBase]]
 deps = ["ArrayInterface", "Compat", "DiffEqDiffTools", "Distributed", "DocStringExtensions", "FunctionWrappers", "IterativeSolvers", "IteratorInterfaceExtensions", "LinearAlgebra", "MuladdMacro", "Parameters", "Printf", "RecipesBase", "RecursiveArrayTools", "RecursiveFactorization", "Requires", "Roots", "SparseArrays", "StaticArrays", "Statistics", "SuiteSparse", "TableTraits", "TreeViews"]
-git-tree-sha1 = "5629889ad8aae3420cdd59c336ee776404b62c19"
+git-tree-sha1 = "72b6ffef7720c669606b282984b3efd9bd7973d9"
 uuid = "2b5f629d-d688-5b77-993f-72d75c75574e"
-version = "6.3.3"
+version = "6.3.4"
 
 [[DiffEqCallbacks]]
 deps = ["DataStructures", "DiffEqBase", "ForwardDiff", "NLsolve", "OrdinaryDiffEq", "RecipesBase", "RecursiveArrayTools", "StaticArrays"]
@@ -274,9 +274,9 @@ version = "0.21.2"
 
 [[DocStringExtensions]]
 deps = ["LibGit2", "Markdown", "Pkg", "Test"]
-git-tree-sha1 = "0513f1a8991e9d83255e0140aace0d0fc4486600"
+git-tree-sha1 = "88bb0edb352b16608036faadcc071adda068582a"
 uuid = "ffbed154-4ef7-542d-bbb7-c09d3a79fcae"
-version = "0.8.0"
+version = "0.8.1"
 
 [[DoubleFloats]]
 deps = ["GenericSVD", "GenericSchur", "LinearAlgebra", "Polynomials", "Printf", "Quadmath", "Random", "Requires"]
@@ -342,9 +342,9 @@ version = "0.2.2"
 
 [[GenericSchur]]
 deps = ["LinearAlgebra", "Printf"]
-git-tree-sha1 = "25992e6d023b72860348553f976599184c85d914"
+git-tree-sha1 = "2f9297b94eaf14170d2694a9f3f313f293e0df23"
 uuid = "c145ed77-6b09-5dd9-b285-bf645a82121e"
-version = "0.2.3"
+version = "0.3.0"
 
 [[HTTP]]
 deps = ["Base64", "Dates", "IniFile", "MbedTLS", "Sockets"]
@@ -463,9 +463,10 @@ uuid = "739be429-bea8-5141-9913-cc70e7f3736d"
 version = "0.7.0"
 
 [[Missings]]
-git-tree-sha1 = "29858ce6c8ae629cf2d733bffa329619a1c843d0"
+deps = ["DataAPI"]
+git-tree-sha1 = "de0a5ce9e5289f27df672ffabef4d1e5861247d5"
 uuid = "e1d29d7a-bbdc-5cf2-9ac0-f12de2c33e28"
-version = "0.4.2"
+version = "0.4.3"
 
 [[Mmap]]
 uuid = "a63ad114-7e13-5084-954f-fe012c677804"
@@ -484,9 +485,9 @@ version = "1.5.0"
 
 [[NLSolversBase]]
 deps = ["Calculus", "DiffEqDiffTools", "DiffResults", "Distributed", "ForwardDiff"]
-git-tree-sha1 = "c430bd3f2dfcffc30688cf4a9cb61535e8d85f65"
+git-tree-sha1 = "f1b8ed89fa332f410cfc7c937682eb4d0b361521"
 uuid = "d41bc354-129a-5804-8e4c-c37616107c6c"
-version = "7.4.1"
+version = "7.5.0"
 
 [[NLsolve]]
 deps = ["DiffEqDiffTools", "Distances", "ForwardDiff", "LineSearches", "LinearAlgebra", "NLSolversBase", "Printf", "Reexport"]
@@ -568,9 +569,9 @@ version = "2.0.3"
 
 [[Quadmath]]
 deps = ["Printf", "Random", "Requires"]
-git-tree-sha1 = "99293530380620c20a1d187e6bdc03a88b858bbf"
+git-tree-sha1 = "7a11344be0bd27a98ce3038573c4df518f051a8f"
 uuid = "be4d8f0f-7fa4-5f49-b795-2f01399ab2dd"
-version = "0.5.1"
+version = "0.5.2"
 
 [[REPL]]
 deps = ["InteractiveUtils", "Markdown", "Sockets"]
@@ -778,6 +779,6 @@ version = "0.1.0"
 
 [[WriteVTK]]
 deps = ["Base64", "CodecZlib", "LightXML", "Random", "TranscodingStreams"]
-git-tree-sha1 = "1a2b0723c5db05c511e2f06093079a2833081674"
+git-tree-sha1 = "3d4d461d698ff4fded899bb7e28b6a6d462b345e"
 uuid = "64499a7a-5c06-52f2-abe2-ccb03c286192"
-version = "1.2.0"
+version = "1.2.1"
