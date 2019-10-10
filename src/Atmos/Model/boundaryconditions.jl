@@ -212,9 +212,9 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # ----------------------------------------------------------
     ENTHALPYFLUX = -stateM.ρ * C_drag * windspeed_FN * (E_FN - stateM.ρe)
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
-    diffP.moisture.ρd_h_tot  = SVector(DT(0),
-                                       DT(0),
-                                       bc.LHF + bc.SHF)
+    diffP.ρd_h_tot  = SVector(DT(0),
+                              DT(0),
+                              bc.LHF + bc.SHF)
   end
 end
 

@@ -237,8 +237,8 @@ let
     @info (ArrayType, FT, dim, VTKPATH)
     @info ((Nex,Ney,Nez), (Δx, Δy, Δz), (xmax,ymax,zmax), dt, timeend)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
-    @test result ≈ FT(0.9999712407365311)
+                 N, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
+    @test result ≈ DT(0.9999737848359238)
   end
 end
 
