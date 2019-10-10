@@ -125,7 +125,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   
   # Model definition
   model = AtmosModel(FlatOrientation(),
-                     HydrostaticReferenceState(LinearTemperatureProfile, FT(0)),
+                     NoReferenceState(),
                      SmagorinskyLilly{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
@@ -231,12 +231,12 @@ let
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
     dt = 0.02
-    timeend = 1000
+    timeend = 14000
     dim = 3
     VTKPATH = "/central/scratch/asridhar/DYC-VREMAN-PF-RF-CPU"
     @info (ArrayType, dt, FT, dim, VTKPATH)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
+                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, VTKPATH)
     @test result ≈ FT(0.9999737848359238)
   end
 end
