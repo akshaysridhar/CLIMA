@@ -234,11 +234,10 @@ let
     timeend = 1000
     dim = 3
     VTKPATH = "/central/scratch/asridhar/DYC-VREMAN-PF-RF-CPU"
-    @info (ArrayType, FT, dim, VTKPATH)
-    @info ((Nex,Ney,Nez), (Δx, Δy, Δz), (xmax,ymax,zmax), dt, timeend)
+    @info (ArrayType, dt, FT, dim, VTKPATH)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 N, timeend, DT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
-    @test result ≈ DT(0.9999737848359238)
+                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
+    @test result ≈ FT(0.9999737848359238)
   end
 end
 
