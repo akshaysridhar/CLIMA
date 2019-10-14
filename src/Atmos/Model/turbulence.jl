@@ -140,7 +140,7 @@ function scaled_momentum_flux_tensor(m::SmagorinskyLilly, ρν, S)
 end
 
 """
-  Vreman{DT} <: TurbulenceClosure
+  Vreman{FT} <: TurbulenceClosure
   
   §1.3.2 in CLIMA documentation 
 Filter width Δ is the local grid resolution calculated from the mesh metric tensor. A Smagorinsky coefficient
@@ -167,9 +167,9 @@ If Δᵢ = Δ, then β = Δ²αᵀα
 
 $(DocStringExtensions.FIELDS)
 """
-struct Vreman{DT} <: TurbulenceClosure
+struct Vreman{FT} <: TurbulenceClosure
   "Smagorinsky Coefficient [dimensionless]"
-  C_smag::DT
+  C_smag::FT
 end
 vars_aux(::Vreman,T) = @vars(Δ::T)
 vars_gradient(::Vreman,T) = @vars(θ_v::T)
@@ -177,14 +177,14 @@ function atmos_init_aux!(::Vreman, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
 end
 function dynamic_viscosity_tensor(m::Vreman, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
-  DT = eltype(state)
+  FT = eltype(state)
   ∇u = ∇transform.u
   αijαij = sum(∇u .^ 2)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
+  f_b² = FT(1) #squared_buoyancy_correction(normS, ∇transform, aux)
   βij = f_b² * (aux.turbulence.Δ)^2 * (∇u' * ∇u)
   @inbounds Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
-  return state.ρ * (m.C_smag^2 * DT(2.5)) * sqrt(abs(Bβ/(αijαij+eps(DT))))
+  return state.ρ * (m.C_smag^2 * FT(2.5)) * sqrt(abs(Bβ/(αijαij+eps(FT))))
 end
 function scaled_momentum_flux_tensor(m::Vreman, ρν, S)
   (-2*ρν) * S
