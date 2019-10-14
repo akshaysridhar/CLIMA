@@ -248,6 +248,11 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::ChannelFlowB
                                auxP::Vars, nM, stateM::Vars, diffM::Vars,
                                auxM::Vars, bctype, t, state1::Vars, diff1::Vars,
                                aux1::Vars)
+  DT = eltype(stateP)
+  if bctype == 1 || bctype == 2
+    stateP.ρu =SVector(DT(0),DT(0),DT(0))
+    stateP.ρe = DT(0)
+  end
   nothing
 end
 
