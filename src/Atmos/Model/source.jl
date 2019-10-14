@@ -1,5 +1,5 @@
 using CLIMA.PlanetParameters: Omega
-export Gravity, RayleighSponge, Subsidence, GeostrophicForcing, Coriolis
+export Gravity, RayleighSponge, Subsidence, GeostrophicForcing, Coriolis, ConstPG
 
 # kept for compatibility
 # can be removed if no functions are using this

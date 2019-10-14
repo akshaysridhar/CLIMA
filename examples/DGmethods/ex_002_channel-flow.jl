@@ -63,7 +63,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
 
   model = AtmosModel(NoOrientation(),
                      NoReferenceState(),
-                     ConstantViscosityWithDivergence{DT}(1.22e-4),
+                     Vreman{DT}(C_smag),
                      EquilMoist(),
                      NoRadiation(),
                      (Gravity(),ConstPG{DT}(-(1.22*180^2*(1e-4)^2))),
@@ -163,7 +163,7 @@ let
     # SGS Filter constants
     C_smag = DT(0.15)
     # User defines the grid size:
-    Ne = (25, 25, 25)
+    Ne = (10, 10, 10)
     # Physical domain extents 
     (xmin, xmax) = (0, 4)
     (ymin, ymax) = (0, 2)
@@ -176,7 +176,7 @@ let
     dt = (2/25/16/330 * 0.5)
     timeend = 3600*10
     dim = 3
-    @info (ArrayType, DT, dim)
+    @info (ArrayType, DT, dim, Ne)
     result = run(mpicomm, ArrayType, dim, topl, 
                  polynomialorder, timeend, DT, dt, C_smag)
   end
