@@ -24,7 +24,11 @@ No gravitional force or potential.
 """
 struct NoOrientation <: Orientation
 end
-#atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry) = nothing
+function atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+  normcoord = norm(aux.coord)
+  aux.orientation.Φ = -zero(eltype(aux))
+  aux.orientation.∇Φ = -SVector{3,eltype(aux)}(0,0,0)
+end
 gravitational_potential(::NoOrientation, aux::Vars) = -zero(eltype(aux))
 ∇gravitational_potential(::NoOrientation, aux::Vars) = SVector{3,eltype(aux)}(0,0,0)
 altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux))

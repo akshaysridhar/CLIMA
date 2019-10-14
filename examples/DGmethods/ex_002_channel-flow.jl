@@ -39,34 +39,35 @@ if !@isdefined integration_testing
 end
 
 """
-  Initial Condition for ChannelFlow_RF01 LES
+  Initial Condition for ChannelFlow LES
 """
 function Initialise_ChannelFlow!(state::Vars, aux::Vars, (x,y,z), t)
-  DT         = eltype(state)
-  state.ρ    = DT(1.22)
-  u          = sin(1000*x*y*z)/100
-  v          = sin(1000*x*y*z)/1000
-  w          = DT(0)
+  FT         = eltype(state)
+  ρ          = FT(1.22)
+  state.ρ    = ρ
+  u          = FT(sin(1000*x*y*z) // 100)
+  v          = FT(sin(1000*x*y*z) // 1000)
+  w          = FT(0)
   state.ρu   = SVector(u,v,w)
   state.ρe   = 1/2 * state.ρ * (u^2 + v^2 + w^2)
-  state.moisture.ρq_tot = DT(0)
+  state.moisture.ρq_tot = FT(0)
 end   
 
 
-function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
+function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag)
 
   grid = DiscontinuousSpectralElementGrid(topl,
-                                          FloatType = DT,
+                                          FloatType = FT,
                                           DeviceArray = ArrayType,
                                           polynomialorder = N,
                                          )
 
   model = AtmosModel(NoOrientation(),
                      NoReferenceState(),
-                     Vreman{DT}(C_smag),
+                     Vreman{FT}(C_smag),
                      EquilMoist(),
                      NoRadiation(),
-                     (Gravity(),ConstPG{DT}(-(1.22*180^2*(1e-4)^2))),
+                     (Gravity(),ConstPG{FT}(-(1.22*180^2*(1e-4)^2))),
                      ChannelFlowBC(),
                      Initialise_ChannelFlow!)
 
@@ -76,9 +77,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
                CentralNumericalFluxDiffusive(),
                CentralGradPenalty())
 
-  param = init_ode_param(dg)
-
-  Q = init_ode_state(dg, param, DT(0))
+  Q = init_ode_state(dg, FT(0))
 
   lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
 
@@ -110,8 +109,8 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
     mkpath(vtkdir)
     outprefix = @sprintf("%s/channel_%dD_mpirank%04d_step%04d",vtkdir, dim,
                            MPI.Comm_rank(mpicomm), step[1])
-    writevtk(outprefix, Q, dg, flattenednames(vars_state(model,DT)), 
-             param[1], flattenednames(vars_aux(model,DT)))
+    writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)), 
+             param[1], flattenednames(vars_aux(model,FT)))
     #=
     pvtuprefix = @sprintf("channel_%dD_step%04d", dim, step[1])
       prefixes = ntuple(i->
@@ -124,11 +123,11 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, DT, dt, C_smag)
     nothing
   end
 
-  solve!(Q, lsrk, param; timeend=timeend, callbacks=(cbinfo, cbvtk))
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
   # Print some end of the simulation information
   engf = norm(Q)
-  Qe = init_ode_state(dg, param, DT(timeend))
+  Qe = init_ode_state(dg, FT(timeend))
 
   engfe = norm(Qe)
   errf = euclidean_distance(Q, Qe)
@@ -157,11 +156,11 @@ let
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
     # Problem type
-    DT = Float32
+    FT = Float32
     # DG polynomial order 
     polynomialorder = 4
     # SGS Filter constants
-    C_smag = DT(0.15)
+    C_smag = FT(0.15)
     # User defines the grid size:
     Ne = (10, 10, 10)
     # Physical domain extents 
@@ -169,15 +168,15 @@ let
     (ymin, ymax) = (0, 2)
     (zmin, zmax) = (0, 2)
     # User defined domain parameters
-    brickrange = (range(DT(xmin), length=Ne[1]+1, DT(xmax)),
-                  range(DT(ymin), length=Ne[2]+1, DT(ymax)),
-                  range(DT(zmin), length=Ne[3]+1, DT(zmax)))
+    brickrange = (range(FT(xmin), length=Ne[1]+1, FT(xmax)),
+                  range(FT(ymin), length=Ne[2]+1, FT(ymax)),
+                  range(FT(zmin), length=Ne[3]+1, FT(zmax)))
     topl = StackedBrickTopology(mpicomm, brickrange,periodicity = (true, true, false), boundary=((0,0),(0,0),(1,2)))
     dt = (2/25/16/330 * 0.5)
     timeend = 3600*10
     dim = 3
-    @info (ArrayType, DT, dim, Ne)
+    @info (ArrayType, FT, dim, Ne)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 polynomialorder, timeend, DT, dt, C_smag)
+                 polynomialorder, timeend, FT, dt, C_smag)
   end
 end
