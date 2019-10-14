@@ -1,4 +1,5 @@
-export Gravity, RayleighSponge, Subsidence, GeostrophicForcing
+using CLIMA.PlanetParameters: Omega
+export Gravity, RayleighSponge, Subsidence, GeostrophicForcing, Coriolis
 
 # kept for compatibility
 # can be removed if no functions are using this
@@ -27,6 +28,14 @@ function atmos_source!(::Subsidence, m::AtmosModel, source::Vars, state::Vars, a
   source.ρu -= state.ρ * m.radiation.D_subsidence
 end
 
+struct Coriolis <: Source
+end
+function atmos_source!(::Coriolis, m::AtmosModel, source::Vars, state::Vars, aux::Vars, t::Real)
+  # note: this assumes a SphericalOrientation
+  source.ρu -= SVector(0, 0, 2*Omega) × state.ρu
+end
+
+
 struct GeostrophicForcing{DT} <: Source
   f_coriolis::DT
   u_geostrophic::DT
@@ -39,7 +48,7 @@ function atmos_source!(s::GeostrophicForcing, m::AtmosModel, source::Vars, state
 end
 
 """
-  RayleighSponge{DT} <: Sponge
+  RayleighSponge{DT} <: Source
 Rayleigh Damping (Linear Relaxation) for top wall momentum components
 Assumes laterally periodic boundary conditions for LES flows. Momentum components
 are relaxed to reference values (zero velocities) at the top boundary.
