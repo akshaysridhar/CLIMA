@@ -104,10 +104,10 @@ end
   DYCOMS_BC <: BoundaryCondition
   Prescribes boundary conditions for Dynamics of Marine Stratocumulus Case
 """
-struct DYCOMS_BC{DT} <: BoundaryCondition
-  C_drag::DT
-  LHF::DT
-  SHF::DT
+struct DYCOMS_BC{FT} <: BoundaryCondition
+  C_drag::FT
+  LHF::FT
+  SHF::FT
 end
 function atmos_boundary_state!(::Rusanov, bc::DYCOMS_BC, m::AtmosModel,
                                stateP::Vars, auxP::Vars, nM, stateM::Vars,
@@ -115,7 +115,7 @@ function atmos_boundary_state!(::Rusanov, bc::DYCOMS_BC, m::AtmosModel,
   # stateM is the 𝐘⁻ state while stateP is the 𝐘⁺ state at an interface. 
   # at the boundaries the ⁻, minus side states are the interior values
   # state1 is 𝐘 at the first interior nodes relative to the bottom wall 
-  DT = eltype(stateP)
+  FT = eltype(stateP)
   # Get values from minus-side state
   ρM = stateM.ρ 
   UM, VM, WM = stateM.ρu
@@ -146,7 +146,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
   # stateM is the 𝐘⁻ state while stateP is the 𝐘⁺ state at an interface. 
   # at the boundaries the ⁻, minus side states are the interior values
   # state1 is 𝐘 at the first interior nodes relative to the bottom wall 
-  DT = eltype(stateP)
+  FT = eltype(stateP)
   # Get values from minus-side state
   ρM = stateM.ρ 
   UM, VM, WM = stateM.ρu
@@ -199,14 +199,14 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # --------------------------------------------------------- # 
     θ_s         = virtual_pottemp(TSM)
     θ_bar       = (virtual_pottemp(TS_FN) + θ_s) / 2
-    x_initial   = [DT(100),DT(10),DT(300)] # Initial guess for L_MO, u_star, θ_star
-    x_ave       = [DT(10), θ_bar]
-    x_s         = [DT(10), θ_s]
-    F_exchange  = [DT(0.0011), DT(0.0011)] # Exchange coefficients at the top of the surface layer 
-    z_0         = [DT(0.01), DT(0.001)] # (Roughness lengths for momentum and heat respectively)
-    dimensionless_number =  [DT(1), DT(71/100)] # (Different for u_star and θ_star)
-    a_bl        = DT(4.7) # Log relation offset (enforces no-slip)
-    Δz          = z_FN
+    x_initial   = [FT(100),FT(10),FT(300)] # Initial guess for L_MO, u_star, θ_star
+    x_ave       = [FT(10), θ_bar]
+    x_s         = [FT(0), θ_s]
+    F_exchange  = [FT(0.0011), FT(0.0011)] # Exchange coefficients at the top of the surface layer 
+    z_0         = [FT(0.01), FT(0.001)] # (Roughness lengths for momentum and heat respectively)
+    dimensionless_number =  [FT(1), FT(71/100)] # (Different for u_star and θ_star)
+    a_bl        = FT(4.7) # Log relation offset (enforces no-slip)
+    Δz          = FT(100)#z_FN
     z           = z_FN
     sfc         = surface_conditions(x_initial,
                                      x_ave,
@@ -237,20 +237,20 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # Assign diffusive momentum and moisture fluxes
     # (i.e. ρ𝛕 terms)  
     stateP.ρu = SVector(0,0,0)
-    diffP.ρτ = SHermitianCompact{3,DT,6}(SVector(DT(0),ρτM[2,1],ρτ13P, DT(0), ρτ23P,DT(0)))
+    diffP.ρτ = SHermitianCompact{3,FT,6}(SVector(FT(0),ρτM[2,1],ρτ13P, FT(0), ρτ23P,FT(0)))
 
     # ----------------------------------------------------------
     # Boundary moisture fluxes
     # ----------------------------------------------------------
-    diffP.moisture.ρd_q_tot  = SVector(DT(0),
-                                       DT(0),
+    diffP.moisture.ρd_q_tot  = SVector(FT(0),
+                                       FT(0),
                                        bc.LHF/(LH_v0))
     # ----------------------------------------------------------
     # Boundary energy fluxes
     # ----------------------------------------------------------
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
-    diffP.ρd_h_tot  = SVector(DT(0),
-                              DT(0),
+    diffP.ρd_h_tot  = SVector(FT(0),
+                              FT(0),
                               bc.LHF + bc.SHF)
   end
 end
