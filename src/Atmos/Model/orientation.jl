@@ -13,6 +13,7 @@ function vars_aux(m::Orientation, T)
 end
 
 gravitational_potential(::Orientation, aux::Vars) = aux.orientation.Φ
+∇gravitational_potential(::Orientation, aux::Vars) = aux.orientation.∇Φ
 altitude(orientation::Orientation, aux::Vars) = gravitational_potential(orientation, aux) / grav
 
 
@@ -25,13 +26,8 @@ struct NoOrientation <: Orientation
 end
 #atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry) = nothing
 gravitational_potential(::NoOrientation, aux::Vars) = -zero(eltype(aux))
-altitude(orientation::Orientation, aux::Vars) = -zero(eltype(aux))
-function atmos_init_aux!(::NoOrientation, ::AtmosModel, aux::Vars, geom::LocalGeometry)
-  normcoord = norm(aux.coord)
-  DT = eltype(aux)
-  aux.orientation.Φ = DT(0)
-  aux.orientation.∇Φ = SVector(DT(0),DT(0),DT(0))
-end
+∇gravitational_potential(::NoOrientation, aux::Vars) = SVector{3,eltype(aux)}(0,0,0)
+altitude(orientation::NoOrientation, aux::Vars) = -zero(eltype(aux))
 
 """
     SphericalOrientation <: Orientation
