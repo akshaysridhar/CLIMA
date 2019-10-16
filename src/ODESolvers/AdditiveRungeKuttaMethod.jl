@@ -38,11 +38,11 @@ The available concrete implementations are:
   - [`ARK2GiraldoKellyConstantinescu`](@ref)
   - [`ARK548L2SA2KennedyCarpenter`](@ref)
 """
-struct AdditiveRungeKutta{T, RT, AT, LT, Nstages, Nstages_sq} <: ODEs.AbstractODESolver
+mutable struct AdditiveRungeKutta{T, RT, AT, LT, Nstages, Nstages_sq} <: ODEs.AbstractODESolver
   "time step"
-  dt::Array{RT,1}
+  dt::RT
   "time"
-  t::Array{RT,1}
+  t::RT
   "rhs function"
   rhs!
   "rhs linear operator"
@@ -79,8 +79,6 @@ struct AdditiveRungeKutta{T, RT, AT, LT, Nstages, Nstages_sq} <: ODEs.AbstractOD
     T = eltype(Q)
     LT = typeof(linearsolver)
     RT = real(T)
-    dt = [RT(dt)]
-    t0 = [RT(t0)]
     
     nstages = length(RKB)
 
@@ -90,7 +88,7 @@ struct AdditiveRungeKutta{T, RT, AT, LT, Nstages, Nstages_sq} <: ODEs.AbstractOD
     Qhat = similar(Q)
     Qtt = similar(Q)
 
-    new{T, RT, AT, LT, nstages, nstages ^ 2}(dt, t0,
+    new{T, RT, AT, LT, nstages, nstages ^ 2}(RT(dt), RT(t0),
                                              rhs!, rhs_linear!, linearsolver,
                                              Qstages, Rstages, Qhat, Qtt,
                                              RKA_explicit, RKA_implicit, RKB, RKC,
@@ -322,16 +320,30 @@ function ARK548L2SA2KennedyCarpenter(F, L,
                            Q; dt=dt, t0=t0)
 end
 
-ODEs.updatedt!(ark::AdditiveRungeKutta, dt) = ark.dt[1] = dt
+ODEs.updatedt!(ark::AdditiveRungeKutta, dt) = (ark.dt = dt)
+ODEs.updatetime!(ark::AdditiveRungeKutta, time) = (ark.t = time)
 
-function ODEs.dostep!(Q, ark::AdditiveRungeKutta, p, timeend, adjustfinalstep)
-
-  time, dt = ark.t[1], ark.dt[1]
+function ODEs.dostep!(Q, ark::AdditiveRungeKutta, p, timeend::Real,
+                      adjustfinalstep::Bool)
+  time, dt = ark.t, ark.dt
   if adjustfinalstep && time + dt > timeend
     dt = timeend - time
-    @assert dt > 0
+  end
+  @assert dt > 0
+
+  ODEs.dostep!(Q, ark, p, time, dt)
+
+  if dt == ark.dt
+    ark.t += dt
+  else
+    ark.t = timeend
   end
 
+end
+
+function ODEs.dostep!(Q, ark::AdditiveRungeKutta, p, time::Real, dt::Real,
+                      slow_δ = nothing, slow_rv_dQ = nothing,
+                      slow_scaling = nothing)
   linearsolver = ark.linearsolver
   RKA_explicit, RKA_implicit = ark.RKA_explicit, ark.RKA_implicit
   RKB, RKC = ark.RKB, ark.RKC
@@ -357,11 +369,12 @@ function ODEs.dostep!(Q, ark::AdditiveRungeKutta, p, timeend, adjustfinalstep)
   # note that it is important that this loop does not modify Q!
   for istage = 2:nstages
     stagetime = time + RKC[istage] * dt
+
     # this kernel also initializes Qtt for the linear solver
     @launch(device(Q), threads = threads, blocks = blocks,
             stage_update!(rv_Q, rv_Qstages, rv_Rstages, rv_Qhat, rv_Qtt,
-                          RKA_explicit, RKA_implicit, dt,
-                          Val(istage), Val(split_nonlinear_linear)))
+                          RKA_explicit, RKA_implicit, dt, Val(istage),
+                          Val(split_nonlinear_linear), slow_δ, slow_rv_dQ))
 
     #solves Q_tt = Qhat + dt * RKA_implicit[istage, istage] * rhs_linear!(Q_tt)
     α = dt * RKA_implicit[istage, istage]
@@ -386,13 +399,9 @@ function ODEs.dostep!(Q, ark::AdditiveRungeKutta, p, timeend, adjustfinalstep)
 
   # compose the final solution
   @launch(device(Q), threads = threads, blocks = blocks,
-          solution_update!(rv_Q, rv_Rstages, RKB, dt, Val(nstages)))
+          solution_update!(rv_Q, rv_Rstages, RKB, dt, Val(nstages), slow_δ,
+                           slow_rv_dQ, slow_scaling))
 
-  if dt == ark.dt[1]
-    ark.t[1] += dt
-  else
-    ark.t[1] = timeend
-  end
 
 end
 
