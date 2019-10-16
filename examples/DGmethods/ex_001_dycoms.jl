@@ -57,14 +57,14 @@ eprint = {https://doi.org/10.1175/MWR2930.1}
 function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
-  #These constants are those used by Stevens et al. (2005)
+  #q_tot is adjusted given CLIMA.PlanetParameters values to 
+  #provide the appropriate q_liq values as in Stevens et. al
   qref::FT      = 7.75e-3
   q_tot_sfc::FT = qref
   q_pt_sfc      = PhasePartition(q_tot_sfc)
   Rm_sfc        = gas_constant_air(q_pt_sfc)
   T_sfc::FT     = 292.5
   P_sfc::FT     = MSLP
-  ρ_sfc::FT     = P_sfc / Rm_sfc / T_sfc
   # Specify moisture profiles 
   q_liq::FT      = 0
   q_ice::FT      = 0
@@ -107,8 +107,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = FT,
                                           DeviceArray = ArrayType,
-                                          polynomialorder = N,
-                                         )
+                                          polynomialorder = N)
   # Problem constants
   # Radiation model
   κ             = FT(85)
@@ -126,7 +125,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   # Model definition
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     SmagorinskyLilly{FT}(C_smag),
+                     Vreman{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
                      (Gravity(), 
@@ -135,6 +134,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
                       GeostrophicForcing{FT}(f_coriolis, u_geostrophic, v_geostrophic)), 
                      DYCOMS_BC{FT}(C_drag, LHF, SHF),
                      Initialise_DYCOMS!)
+  
   # Balancelaw description
   dg = DGModel(model,
                grid,
@@ -143,6 +143,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
                CentralGradPenalty())
   Q = init_ode_state(dg, FT(0))
   lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
+
   # Calculating initial condition norm 
   eng0 = norm(Q)
   @info @sprintf """Starting
@@ -174,7 +175,6 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)), 
              dg.auxstate, flattenednames(vars_aux(model,FT)))
-        
     step[1] += 1
     nothing
   end
@@ -226,14 +226,13 @@ let
                   grid1d(0, 1500, elemsize=FT(20)*N))
     zmax = brickrange[3][end]
     zsponge = FT(0.75 * zmax)
-    
     topl = StackedBrickTopology(mpicomm, brickrange,
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
-    dt = 0.02
+    dt = 0.01
     timeend = 14000
     dim = 3
-    VTKPATH = "/central/scratch/asridhar/DYC-VREMAN-PF-RF-CPU"
+    VTKPATH = "/central/scratch/asridhar/DYC-VREMAN-POSITIVE-FLUX"
     @info (ArrayType, dt, FT, dim, VTKPATH)
     result = run(mpicomm, ArrayType, dim, topl, 
                  N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, VTKPATH)
