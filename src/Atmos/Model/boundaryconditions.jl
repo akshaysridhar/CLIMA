@@ -146,6 +146,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
   # at the boundaries the ⁻, minus side states are the interior values
   # state1 is 𝐘 at the first interior nodes relative to the bottom wall 
   DT = eltype(stateP)
+  xvert = auxM.coord[3]
   # Get values from minus-side state
   ρM = stateM.ρ 
   UM, VM, WM = stateM.ρu
@@ -154,23 +155,20 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
   uM, vM, wM  = UM/ρM, VM/ρM, WM/ρM
   q_totM = QTM/ρM
   UnM = nM[1] * UM + nM[2] * VM + nM[3] * WM
-
   # Assign reflection wall boundaries (top wall)
   stateP.ρu = SVector(UM - 2 * nM[1] * UnM, 
                       VM - 2 * nM[2] * UnM,
                       WM - 2 * nM[3] * UnM)
-
   # Assign scalar values at the boundaries 
   stateP.ρ = ρM
   stateP.moisture.ρq_tot = QTM
   # Assign diffusive fluxes at boundaries
   diffP = diffM
-  xvert = auxM.coord[3]
 
   if bctype == 1 # bctype identifies bottom wall 
-    # ------------------------------------------------------------------------
+    # -------------------------------------------------------------------
     # (<var>_FN) First node values (First interior node from bottom wall)
-    # ------------------------------------------------------------------------
+    # -------------------------------------------------------------------
     z_FN             = aux1.coord[3]
     ρ_FN             = state1.ρ
     U_FN, V_FN, W_FN = state1.ρu
@@ -189,14 +187,10 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     q_totM      = QTM/ρM
     windspeed   = sqrt(uM^2 + vM^2 + wM^2)
     e_intM      = EM/ρM - windspeed^2/2 - grav*zM
-    TSM         = PhaseEquil(e_intM, q_totM, ρM) 
-    q_vapM      = q_totM - PhasePartition(TSM).liq
-    TM          = air_temperature(TSM)
     # ----------------------------------------------------------
     # Extract components of diffusive momentum flux (minus-side)
     # ----------------------------------------------------------
     ρτM = diffM.ρτ
-
     # ----------------------------------------------------------
     # Boundary momentum fluxes
     # ----------------------------------------------------------
@@ -209,7 +203,6 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # (i.e. ρ𝛕 terms)  
     stateP.ρu = SVector(0,0,0)
     diffP.ρτ = SHermitianCompact{3,DT,6}(SVector(DT(0),ρτM[2,1],ρτ13P, DT(0), ρτ23P,DT(0)))
-
     # ----------------------------------------------------------
     # Boundary moisture fluxes
     # ----------------------------------------------------------
@@ -225,4 +218,3 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
                               bc.LHF + bc.SHF)
   end
 end
-
