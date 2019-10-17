@@ -125,7 +125,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   # Model definition
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     Vreman{FT}(C_smag),
+                     SmagorinskyLilly{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
                      (Gravity(), 
@@ -217,8 +217,8 @@ let
     N = 4
     # SGS Filter constants
     C_smag = FT(0.15)
-    LHF    = FT(115)
-    SHF    = FT(15)
+    LHF    = FT(-115)
+    SHF    = FT(-15)
     C_drag = FT(0.0011)
     # User defined domain parameters
     brickrange = (grid1d(0, 2000, elemsize=FT(50)*N),
