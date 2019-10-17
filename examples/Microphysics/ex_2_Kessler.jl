@@ -25,7 +25,7 @@ using CLIMA.MPIStateArrays
 using CLIMA.LowStorageRungeKuttaMethod
 using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
-using CLIMA.Vtk
+using CLIMA.VTK
 
 using LinearAlgebra
 using StaticArrays
@@ -388,6 +388,11 @@ function run(dim, Ne, N, timeend, DFloat)
   MPI.Initialized() || MPI.Init()
 
   mpicomm = MPI.COMM_WORLD
+
+  @static if haspkg("CUDAnative")
+    rank = MPI.Comm_rank(mpicomm)
+    device!(rank % length(devices()))
+  end
 
   brickrange = ntuple(j->range(DFloat(0); length=Ne[j]+1, stop=Z_max), 2)
 

@@ -10,10 +10,12 @@ using CLIMA.ODESolvers
 using CLIMA.GenericCallbacks
 using CLIMA.Atmos
 using CLIMA.VariableTemplates
+using CLIMA.MoistThermodynamics
+using CLIMA.PlanetParameters
 using LinearAlgebra
 using StaticArrays
 using Logging, Printf, Dates
-using CLIMA.Vtk
+using CLIMA.VTK
 
 @static if haspkg("CuArrays")
   using CUDAdrv
@@ -32,41 +34,70 @@ end
 
 include("mms_solution_generated.jl")
 
-function mms2_init_state!(state::Vars, aux::Vars, (x,y,z), t)
-  state.ρ = ρ_g(t, x, y, z, Val(2))
-  state.ρu = SVector(U_g(t, x, y, z, Val(2)),
-                     V_g(t, x, y, z, Val(2)),
-                     W_g(t, x, y, z, Val(2)))
-  state.ρe = E_g(t, x, y, z, Val(2))
+using CLIMA.Atmos
+import CLIMA.Atmos: MoistureModel, temperature, pressure, soundspeed, total_specific_enthalpy
+
+"""
+    MMSDryModel
+
+Assumes the moisture components is in the dry limit.
+"""
+struct MMSDryModel <: MoistureModel
+end
+
+function total_specific_enthalpy(moist::MoistureModel, orientation::Orientation, state::Vars, aux::Vars)
+  zero(eltype(state))
+end
+function pressure(m::MMSDryModel, orientation::Orientation, state::Vars, aux::Vars)
+  T = eltype(state)
+  γ = T(7)/T(5)
+  ρinv = 1 / state.ρ
+  return (γ-1)*(state.ρe - ρinv/2 * sum(abs2, state.ρu))
+end
+
+function soundspeed(m::MMSDryModel, orientation::Orientation, state::Vars, aux::Vars)
+  T = eltype(state)
+  γ = T(7)/T(5)
+  ρinv = 1 / state.ρ
+  p = pressure(m, orientation, state, aux)
+  sqrt(ρinv * γ * p)
+end
+
+function mms2_init_state!(state::Vars, aux::Vars, (x1,x2,x3), t)
+  state.ρ = ρ_g(t, x1, x2, x3, Val(2))
+  state.ρu = SVector(U_g(t, x1, x2, x3, Val(2)),
+                     V_g(t, x1, x2, x3, Val(2)),
+                     W_g(t, x1, x2, x3, Val(2)))
+  state.ρe = E_g(t, x1, x2, x3, Val(2))
 end
 
 function mms2_source!(source::Vars, state::Vars, aux::Vars, t::Real)
-  x,y,z = aux.coord.x, aux.coord.y, aux.coord.z
-  source.ρ  = Sρ_g(t, x, y, z, Val(2))
-  source.ρu = SVector(SU_g(t, x, y, z, Val(2)),
-                      SV_g(t, x, y, z, Val(2)),
-                      SW_g(t, x, y, z, Val(2)))
-  source.ρe = SE_g(t, x, y, z, Val(2))
+  x1,x2,x3 = aux.coord
+  source.ρ  = Sρ_g(t, x1, x2, x3, Val(2))
+  source.ρu = SVector(SU_g(t, x1, x2, x3, Val(2)),
+                      SV_g(t, x1, x2, x3, Val(2)),
+                      SW_g(t, x1, x2, x3, Val(2)))
+  source.ρe = SE_g(t, x1, x2, x3, Val(2))
 end
 
-function mms3_init_state!(state::Vars, aux::Vars, (x,y,z), t)
-  state.ρ = ρ_g(t, x, y, z, Val(3))
-  state.ρu = SVector(U_g(t, x, y, z, Val(3)),
-                     V_g(t, x, y, z, Val(3)),
-                     W_g(t, x, y, z, Val(3)))
-  state.ρe = E_g(t, x, y, z, Val(3))
+function mms3_init_state!(state::Vars, aux::Vars, (x1,x2,x3), t)
+  state.ρ = ρ_g(t, x1, x2, x3, Val(3))
+  state.ρu = SVector(U_g(t, x1, x2, x3, Val(3)),
+                     V_g(t, x1, x2, x3, Val(3)),
+                     W_g(t, x1, x2, x3, Val(3)))
+  state.ρe = E_g(t, x1, x2, x3, Val(3))
 end
 
 function mms3_source!(source::Vars, state::Vars, aux::Vars, t::Real)
-  x,y,z = aux.coord.x, aux.coord.y, aux.coord.z
-  source.ρ  = Sρ_g(t, x, y, z, Val(3))
-  source.ρu = SVector(SU_g(t, x, y, z, Val(3)),
-                      SV_g(t, x, y, z, Val(3)),
-                      SW_g(t, x, y, z, Val(3)))
-  source.ρe = SE_g(t, x, y, z, Val(3))
+  x1,x2,x3 = aux.coord
+  source.ρ  = Sρ_g(t, x1, x2, x3, Val(3))
+  source.ρu = SVector(SU_g(t, x1, x2, x3, Val(3)),
+                      SV_g(t, x1, x2, x3, Val(3)),
+                      SW_g(t, x1, x2, x3, Val(3)))
+  source.ρe = SE_g(t, x1, x2, x3, Val(3))
 end
 
-# initial condition                     
+# initial condition
 
 function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, DFloat, dt)
 
@@ -78,23 +109,33 @@ function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, DFloat, dt)
                                          )
 
   if dim == 2
-    model = AtmosModel(ConstantViscosityWithDivergence(DFloat(μ_exact)),DryModel(),NoRadiation(),
-    mms2_source!, InitStateBC(), mms2_init_state!)
-  else  
-    model = AtmosModel(ConstantViscosityWithDivergence(DFloat(μ_exact)),DryModel(),NoRadiation(),
-    mms3_source!, InitStateBC(), mms3_init_state!)
-  end 
+    model = AtmosModel(NoOrientation(),
+                       NoReferenceState(),
+                       ConstantViscosityWithDivergence(DFloat(μ_exact)),
+                       MMSDryModel(),
+                       NoRadiation(),
+                       mms2_source!,
+                       InitStateBC(),
+                       mms2_init_state!)
+  else
+    model = AtmosModel(NoOrientation(),
+                       NoReferenceState(),
+                       ConstantViscosityWithDivergence(DFloat(μ_exact)),
+                       MMSDryModel(),
+                       NoRadiation(),
+                       mms3_source!,
+                       InitStateBC(),
+                       mms3_init_state!)
+  end
 
   dg = DGModel(model,
                grid,
                Rusanov(),
-               DefaultGradNumericalFlux())
+               CentralNumericalFluxDiffusive(),
+               CentralGradPenalty())
 
-  param = init_ode_param(dg)
+  Q = init_ode_state(dg, DFloat(0))
 
-  Q = init_ode_state(dg, param, DFloat(0))
-  
-  
   lsrk = LSRK54CarpenterKennedy(dg, Q; dt = dt, t0 = 0)
 
   eng0 = norm(Q)
@@ -119,37 +160,13 @@ function run(mpicomm, ArrayType, dim, topl, warpfun, N, timeend, DFloat, dt)
     end
   end
 
-  # npoststates = 5
-  # _P, _u, _v, _w, _ρinv = 1:npoststates
-  # postnames = ("P", "u", "v", "w", "ρinv")
-  # postprocessarray = MPIStateArray(spacedisc; nstate=npoststates)
-
-  # step = [0]
-  # mkpath("vtk")
-  # cbvtk = GenericCallbacks.EveryXSimulationSteps(100) do (init=false)
-  #   DGBalanceLawDiscretizations.dof_iteration!(postprocessarray, spacedisc,
-  #                                              Q) do R, Q, QV, aux
-  #     @inbounds let
-  #       (R[_P], R[_u], R[_v], R[_w], R[_ρinv]) = preflux(Q)
-  #     end
-  #   end
-
-  #   outprefix = @sprintf("vtk/cns_%dD_mpirank%04d_step%04d", dim,
-  #                        MPI.Comm_rank(mpicomm), step[1])
-  #   @debug "doing VTK output" outprefix
-  #   writevtk(outprefix, Q, spacedisc, statenames,
-  #            postprocessarray, postnames)
-  #   step[1] += 1
-  #   nothing
-  # end
-
-  solve!(Q, lsrk, param; timeend=timeend, callbacks=(cbinfo, ))
-  # solve!(Q, lsrk, param; timeend=timeend, callbacks=(cbinfo, cbvtk))
+  solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, ))
+  # solve!(Q, lsrk; timeend=timeend, callbacks=(cbinfo, cbvtk))
 
 
   # Print some end of the simulation information
   engf = norm(Q)
-  Qe = init_ode_state(dg, param, DFloat(timeend))
+  Qe = init_ode_state(dg, DFloat(timeend))
 
   engfe = norm(Qe)
   errf = euclidean_distance(Q, Qe)
@@ -196,8 +213,8 @@ for DFloat in (Float64,) #Float32)
         topl = BrickTopology(mpicomm, brickrange,
                              periodicity = (false, false))
         dt = 1e-2 / Ne[1]
-        warpfun = (x, y, _) -> begin
-          (x + sin(x*y), y + sin(2*x*y), 0)
+        warpfun = (x1, x2, _) -> begin
+          (x1 + sin(x1*x2), x2 + sin(2*x1*x2), 0)
         end
 
       elseif dim == 3
@@ -208,10 +225,10 @@ for DFloat in (Float64,) #Float32)
         topl = BrickTopology(mpicomm, brickrange,
                              periodicity = (false, false, false))
         dt = 5e-3 / Ne[1]
-        warpfun = (x, y, z) -> begin
-          (x + (x-1/2)*cos(2*π*y*z)/4,
-           y + exp(sin(2π*(x*y+z)))/20,
-          z + x/4 + y^2/2 + sin(x*y*z))
+        warpfun = (x1, x2, x3) -> begin
+          (x1 + (x1-1/2)*cos(2*π*x2*x3)/4,
+           x2 + exp(sin(2π*(x1*x2+x3)))/20,
+          x3 + x1/4 + x2^2/2 + sin(x1*x2*x3))
         end
       end
       timeend = 1
