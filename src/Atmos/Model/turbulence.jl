@@ -132,7 +132,7 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly, S, state::Vars, diffusive
   # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
   FT = eltype(state)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = SVector(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
+  f_b² = SVector{3,FT}(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
   return state.ρ .* normS .* f_b² .* (m.C_smag .* aux.turbulence.Δ) .^ 2
 end
@@ -177,15 +177,18 @@ vars_gradient(::Vreman,FT) = @vars(θ_v::FT)
 function atmos_init_aux!(::Vreman, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = sqrt.(abs.(inv(resolutionmetric(geom))))
 end
+function gradvariables!(m::Vreman, transform::Vars, state::Vars, aux::Vars, t::Real)
+  transform.turbulence.θ_v = aux.moisture.θ_v
+end
 function dynamic_viscosity_tensor(m::Vreman, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
   FT = eltype(state)
   ∇u = ∇transform.u
   αijαij = sum(∇u .^ 2)
   @inbounds normS = strain_rate_magnitude(S)
-  f_b² = SVector(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
-  βij = f_b² .* (aux.turbulence.Δ).^2 * (∇u' * ∇u)
+  f_b² = SVector{3,FT}(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
+  βij = f_b² .* aux.turbulence.Δ .^ 2 .* (∇u' * ∇u)
   @inbounds Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
-  return state.ρ .* (m.C_smag^2 * FT(2.5)) .* sqrt(abs(Bβ/(αijαij+eps(FT))))
+  return state.ρ .* (m.C_smag^2 .* FT(2.5)) .* sqrt(abs(Bβ/(αijαij+eps(FT))))
 end
 function scaled_momentum_flux_tensor(m::Vreman, ρν, S)
   (-2*ρν) * S
