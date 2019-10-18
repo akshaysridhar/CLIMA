@@ -213,7 +213,7 @@ let
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
     # Problem type
-    DT = Float64
+    DT = Float32
     # DG polynomial order 
     N = 4
     # SGS Filter constants
@@ -231,8 +231,8 @@ let
     topl = StackedBrickTopology(mpicomm, brickrange,
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
-    dt = 0.02
-    timeend = 100dt
+    dt = 0.01
+    timeend = 14400
     dim = 3
     @info (ArrayType, DT, dim)
     result = run(mpicomm, ArrayType, dim, topl, 

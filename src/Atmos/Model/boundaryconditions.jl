@@ -196,7 +196,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # Extract components of diffusive momentum flux (minus-side)
     # ----------------------------------------------------------
     ρτM = diffM.ρτ
-
+    stateP.ρu = SVector(0,0,0)
     # ----------------------------------------------------------
     # Boundary momentum fluxes
     # ----------------------------------------------------------
@@ -207,22 +207,16 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     ρτ23P  = -ρM * C_drag * windspeed_FN * v_FN 
     # Assign diffusive momentum and moisture fluxes
     # (i.e. ρ𝛕 terms)  
-    stateP.ρu = SVector(0,0,0)
     diffP.ρτ = SHermitianCompact{3,DT,6}(SVector(DT(0),ρτM[2,1],ρτ13P, DT(0), ρτ23P,DT(0)))
-
     # ----------------------------------------------------------
     # Boundary moisture fluxes
     # ----------------------------------------------------------
-    diffP.moisture.ρd_q_tot  = SVector(DT(0),
-                                       DT(0),
-                                       bc.LHF/(LH_v0))
+    diffP.moisture.ρd_q_tot  = bc.LHF/LH_v0 * SVector(nM)
     # ----------------------------------------------------------
     # Boundary energy fluxes
     # ----------------------------------------------------------
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
-    diffP.ρd_h_tot  = SVector(DT(0),
-                              DT(0),
-                              bc.LHF + bc.SHF)
+    diffP.ρd_h_tot  = (bc.LHF + bc.SHF) * SVector(nM)
   end
 end
 
