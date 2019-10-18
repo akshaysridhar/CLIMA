@@ -134,7 +134,7 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly, S, state::Vars, diffusive
   @inbounds normS = strain_rate_magnitude(S)
   f_b² = SVector{3,FT}(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
   # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
-  return state.ρ .* normS .* f_b² .* (m.C_smag .* aux.turbulence.Δ) .^ 2
+  return state.ρ .* normS .* f_b² .* abs2.(m.C_smag .* aux.turbulence.Δ)
 end
 function scaled_momentum_flux_tensor(m::SmagorinskyLilly, ρν, S)
   (-2*ρν) .* S
@@ -145,7 +145,7 @@ end
   
   §1.3.2 in CLIMA documentation 
 Filter width Δ is the local grid resolution calculated from the mesh metric tensor. A Smagorinsky coefficient
-is specified and used to compute the equivalent Vreman coefficient. 
+is specified and used to compute the equivalent Vreman coefficient. (2.5Cₛ² = Cᵥ) 
 
 1) ν_e = √(Bᵦ/(αᵢⱼαᵢⱼ)) where αᵢⱼ = ∂uⱼ∂uᵢ with uᵢ the resolved scale velocity component.
 2) βij = Δ²αₘᵢαₘⱼ
@@ -183,10 +183,10 @@ end
 function dynamic_viscosity_tensor(m::Vreman, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
   FT = eltype(state)
   ∇u = ∇transform.u
-  αijαij = sum(∇u .^ 2)
+  αijαij = sum(abs2.(∇u))
   @inbounds normS = strain_rate_magnitude(S)
   f_b² = SVector{3,FT}(FT(1),FT(1),squared_buoyancy_correction(normS, ∇transform, aux))
-  βij = f_b² .* aux.turbulence.Δ .^ 2 .* (∇u' * ∇u)
+  βij = f_b² .* abs2.(aux.turbulence.Δ) .* (∇u' * ∇u)
   @inbounds Bβ = βij[1,1]*βij[2,2] - βij[1,2]^2 + βij[1,1]*βij[3,3] - βij[1,3]^2 + βij[2,2]*βij[3,3] - βij[2,3]^2 
   return state.ρ .* (m.C_smag^2 .* FT(2.5)) .* sqrt(abs(Bβ/(αijαij+eps(FT))))
 end
