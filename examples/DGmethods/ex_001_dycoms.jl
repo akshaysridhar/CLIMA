@@ -62,7 +62,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   xvert::DT  = z
   
   epsdv::DT     = molmass_ratio
-  q_tot_sfc::DT = 8.1e-3
+  q_tot_sfc::DT = 7.7e-3
   Rm_sfc::DT    = gas_constant_air(PhasePartition(q_tot_sfc))
   ρ_sfc::DT     = 1.22
   P_sfc::DT     = 1.0178e5
