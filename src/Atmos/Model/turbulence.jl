@@ -2,7 +2,7 @@
 using DocStringExtensions
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
-export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss
+export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDissR, AnisoMinDissVT
 
 abstract type TurbulenceClosure end
 
@@ -37,6 +37,34 @@ function compute_principal_invariants(X::StaticArray{Tuple{3,3}})
   third = det(X)
   return PrincipalInvariants{eltype(X)}(first,second,third)
 end
+
+"""
+  GeneralInvariants{FT}
+
+Calculates invariates of functions of the rate-of-strain and rate-of-rotation tensors. Currently
+used in the AMD model extension given in Vreugdenhil and Taylor (2018).
+I₁ = tr(S²)
+I₂ = tr(Ω²)
+I₃ = tr(S³)
+I₄ = tr(SΩ²)
+"""
+struct GeneralInvariants{FT}
+  first::FT
+  second::FT
+  third::FT
+  fourth::FT
+end
+function compute_general_invariants(X::StaticArray{Tuple{3,3}})
+  FT = eltype(X)
+  S = FT(1/2) * (X + X')
+  Ω = FT(1/2) * (X - X')
+  first = tr(S*S)
+  second = tr(Ω*Ω)
+  third = tr(S*S*S)
+  fourth = tr(S*Ω*Ω)
+  return GeneralInvariants{eltype(X)}(first,second,third,fourth)
+end
+
 
 """
     ConstantViscosityWithDivergence <: TurbulenceClosure
@@ -213,7 +241,7 @@ function scaled_momentum_flux_tensor(m::Vreman, ρν, S)
 end
 
 """
-  AnisoMinDiss{FT} <: TurbulenceClosure
+  AnisoMinDissR{FT} <: TurbulenceClosure
   
   §1.3.2 in CLIMA documentation 
 Filter width Δ is the local grid resolution calculated from the mesh metric tensor. A Poincare coefficient
@@ -232,36 +260,23 @@ doi = {10.1063/1.4928700},
 URL = {https://aip.scitation.org/doi/abs/10.1063/1.4928700},
 eprint = {https://aip.scitation.org/doi/pdf/10.1063/1.4928700}
 }
--------------------------------------------------------------------------------------
-# TODO: Future versions will include modifications of Abkar(2016), Verstappen(2018) 
-@article{PhysRevFluids.1.041701,
-title = {Minimum-dissipation scalar transport model for large-eddy simulation of turbulent flows},
-author = {Abkar, Mahdi and Bae, Hyun J. and Moin, Parviz},
-journal = {Phys. Rev. Fluids},
-volume = {1},
-issue = {4},
-pages = {041701},
-numpages = {10},
-year = {2016},
-month = {Aug},
-publisher = {American Physical Society},
-doi = {10.1103/PhysRevFluids.1.041701},
-url = {https://link.aps.org/doi/10.1103/PhysRevFluids.1.041701}
-}
 
+# Fields
+$(DocStringExtensions.FIELDS)
 """
-struct AnisoMinDiss{FT} <: TurbulenceClosure
+struct AnisoMinDissR{FT} <: TurbulenceClosure
+  "Model Poincare Constant [dimensionless]"
   C_poincare::FT
 end
-vars_aux(::AnisoMinDiss,T) = @vars(Δ::T)
-vars_gradient(::AnisoMinDiss,T) = @vars(θ_v::T)
-function atmos_init_aux!(::AnisoMinDiss, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+vars_aux(::AnisoMinDissR,T) = @vars(Δ::T)
+vars_gradient(::AnisoMinDissR,T) = @vars(θ_v::T)
+function atmos_init_aux!(::AnisoMinDissR, ::AtmosModel, aux::Vars, geom::LocalGeometry)
   aux.turbulence.Δ = lengthscale(geom)
 end
-function gradvariables!(m::AnisoMinDiss, transform::Vars, state::Vars, aux::Vars, t::Real)
+function gradvariables!(m::AnisoMinDissR, transform::Vars, state::Vars, aux::Vars, t::Real)
   transform.turbulence.θ_v = aux.moisture.θ_v
 end
-function dynamic_viscosity_tensor(m::AnisoMinDiss, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
+function dynamic_viscosity_tensor(m::AnisoMinDissR, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
   FT = eltype(state)
   ∇u = ∇transform.u
   αijαij = dot(∇u,∇u)
@@ -270,6 +285,47 @@ function dynamic_viscosity_tensor(m::AnisoMinDiss, S, state::Vars, diffusive::Va
   ν_e = max(0,coeff * (dot(βij, S) / (αijαij + eps(FT))))
   return state.ρ * ν_e
 end
-function scaled_momentum_flux_tensor(m::AnisoMinDiss, ρν, S)
+function scaled_momentum_flux_tensor(m::AnisoMinDissR, ρν, S)
+  (-2*ρν) * S
+end
+
+
+"""
+  AnisoMinDissVT{FT} <: TurbulenceClosure
+@article{doi:10.1063/1.5037039,
+author = {Vreugdenhil,Catherine A.  and Taylor,John R. },
+title = {Large-eddy simulations of stratified plane Couette flow using the anisotropic minimum-dissipation model},
+journal = {Physics of Fluids},
+volume = {30},
+number = {8},
+pages = {085104},
+year = {2018},
+doi = {10.1063/1.5037039},
+URL = {https://doi.org/10.1063/1.5037039},
+eprint = {https://doi.org/10.1063/1.5037039}
+
+# Fields
+$(DocStringExtensions.FIELDS)
+"""
+struct AnisoMinDissVT{FT} <: TurbulenceClosure
+  "Model Poincare Constant [dimensionless]"
+  C_poincare::FT
+end
+vars_aux(::AnisoMinDissVT,T) = @vars(Δ::T)
+vars_gradient(::AnisoMinDissVT,T) = @vars(θ_v::T)
+function atmos_init_aux!(::AnisoMinDissVT, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+  aux.turbulence.Δ = lengthscale(geom)
+end
+function gradvariables!(m::AnisoMinDissVT, transform::Vars, state::Vars, aux::Vars, t::Real)
+  transform.turbulence.θ_v = aux.moisture.θ_v
+end
+function dynamic_viscosity_tensor(m::AnisoMinDissVT, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
+  FT = eltype(state)
+  ∇u = ∇transform.u
+  invariants = compute_general_invariants(∇u)
+  ν_e = max(-(invariants.third - invariants.fourth),0)/(eps(FT)+(invariants.first - invariants.second)) * (m.C_poincare * aux.turbulence.Δ)^2
+  return state.ρ * ν_e
+end
+function scaled_momentum_flux_tensor(m::AnisoMinDissVT, ρν, S)
   (-2*ρν) * S
 end
