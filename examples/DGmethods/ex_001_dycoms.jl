@@ -119,8 +119,10 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   F_1           = FT(22)
   # Geostrophic forcing
   f_coriolis    = FT(7.62e-5)
-  u_geostrophic = FT(7)
-  v_geostrophic = FT(-5.5)
+  u_geostrophic = FT(0)
+  v_geostrophic = FT(0)
+  #u_geostrophic = FT(7)
+  #v_geostrophic = FT(-5.5)
   
   # Model definition
   model = AtmosModel(FlatOrientation(),
