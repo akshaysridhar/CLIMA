@@ -125,7 +125,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   # Model definition
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     SmagorinskyLilly{FT}(C_smag),
+                     AnisoMinDiss{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(κ, α_z, z_i, ρ_i, D_subsidence, F_0, F_1),
                      (Gravity(), 
@@ -232,7 +232,7 @@ let
     dt = 0.01
     timeend = 14000
     dim = 3
-    VTKPATH = "/central/scratch/asridhar/DYC-SMAG-NEGATIVE-FLUX"
+    VTKPATH = "/central/scratch/asridhar/DYC-AMD-NEGATIVE-FLUX"
     @info (ArrayType, dt, FT, dim, VTKPATH)
     result = run(mpicomm, ArrayType, dim, topl, 
                  N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, VTKPATH)
