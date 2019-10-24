@@ -44,7 +44,7 @@ const (xmin, xmax)      = (0,12800)
 const (ymin, ymax)      = (0,400)
 const (zmin, zmax)      = (0,6400)
 const Ne                = (100,2,50)
-const h_peak            = 750
+const h_peak            = 2000
 const polynomialorder   = 4
 const dt                = 0.01
 const timeend           = 1000
@@ -67,10 +67,10 @@ year = {1993}
 function warp_schar(xin, yin, zin)
   FT = eltype(xin)
   a = FT(h_peak)
-  xc = FT(1/2) * xmax
+  xc = FT(0)
   yc = FT(1/2) * ymax
   r² = (xin-xc)^2 + (yin-yc)^2 
-  λ = FT(5000)
+  λ = FT(2500)
   zdiff = h_peak * exp(-(xin-xc)/λ) * (cos(π * (xin-xc) / λ))^2
   # Linear relaxation towards domain maximum height
   x, y, z = xin, yin, zin + zdiff * (zmax- zin)/zmax
