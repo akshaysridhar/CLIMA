@@ -213,16 +213,12 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # ----------------------------------------------------------
     # Boundary moisture fluxes
     # ----------------------------------------------------------
-    diffP.moisture.ρd_q_tot  = SVector(DT(0),
-                                       DT(0),
-                                       bc.LHF/(LH_v0))
+    diffP.moisture.ρd_q_tot = (bc.LHF/(LH_v0)) .* nM
     # ----------------------------------------------------------
     # Boundary energy fluxes
     # ----------------------------------------------------------
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
-    diffP.ρd_h_tot  = SVector(DT(0),
-                              DT(0),
-                              bc.LHF + bc.SHF)
+    diffP.ρd_h_tot  = (bc.LHF + bc.SHF) .* nM
   end
 end
 
