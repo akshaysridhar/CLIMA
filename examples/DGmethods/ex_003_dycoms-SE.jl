@@ -244,8 +244,8 @@ let
   N = 4
   # SGS Filter constants
   C_smag = FT(0.15)
-  LHF    = FT(115)
-  SHF    = FT(15)
+  LHF    = FT(-115)
+  SHF    = FT(-15)
   C_drag = FT(0.0011)
   # User defined domain parameters
   brickrange = (grid1d(0, 2000, elemsize=FT(50)*N),
