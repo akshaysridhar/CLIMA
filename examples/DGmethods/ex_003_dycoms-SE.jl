@@ -257,7 +257,7 @@ let
   topl = StackedBrickTopology(mpicomm, brickrange,
                               periodicity = (true, true, false),
                               boundary=((0,0),(0,0),(1,2)))
-  dt = 0.5
+  dt = 0.1
   timeend = FT(5000dt)
   dim = 3
   FastMethod = SSPRK33ShuOsher
