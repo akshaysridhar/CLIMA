@@ -43,10 +43,10 @@ struct StevensRadiation{FT} <: RadiationModel
   "F₁ Radiative flux parameter [W/m^2]"
   F_1::FT
 end
-vars_integrals(m::StevensRadiation, FT) = @vars(∂κLWP::FT)
+vars_integrals(m::StevensRadiation, FT) = @vars(∂LWP::FT)
 function integrate_aux!(m::StevensRadiation, integrand::Vars, state::Vars, aux::Vars)
   FT = eltype(state)
-  integrand.radiation.∂κLWP = state.ρ * m.κ * aux.moisture.q_liq
+  integrand.radiation.∂LWP = state.ρ * aux.moisture.q_liq
 end
 function flux_radiation!(m::StevensRadiation, flux::Grad, state::Vars,
                          aux::Vars, t::Real)
@@ -54,8 +54,8 @@ function flux_radiation!(m::StevensRadiation, flux::Grad, state::Vars,
   z = aux.orientation.Φ/grav
   Δz_i = max(z - m.z_i, -zero(FT))
   # Constants
-  cloud_top_cooling = m.F_0 * exp(-aux.∫dnz.radiation.∂κLWP)
-  cloud_base_warming = m.F_1 * exp(-aux.∫dz.radiation.∂κLWP)
+  cloud_top_cooling = m.F_0 * exp(-m.κ * aux.∫dnz.radiation.∂LWP)
+  cloud_base_warming = m.F_1 * exp(-m.κ * aux.∫dz.radiation.∂LWP)
   free_troposphere_cooling = m.ρ_i * FT(cp_d) * m.D_subsidence * m.α_z * ((cbrt(Δz_i))^4 / 4 + m.z_i * cbrt(Δz_i))
   F_rad = cloud_base_warming + cloud_base_warming + free_troposphere_cooling
   flux.ρe += SVector(FT(0), 

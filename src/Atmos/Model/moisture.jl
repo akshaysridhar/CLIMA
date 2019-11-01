@@ -50,6 +50,11 @@ vars_aux(::DryModel,FT) = @vars(θ_v::FT)
                                          state::Vars, aux::Vars, t::Real)
   e_int = internal_energy(moist, atmos.orientation, state, aux)
   TS = PhaseDry(e_int, state.ρ)
+  if air_temperature(e_int) < 0 
+    @show(air_temperature(e_int))
+    @show(aux.coord)
+    @show(air_pressure(air_temperature(e_int), state.ρ))
+  end
   aux.moisture.θ_v = virtual_pottemp(TS)
   nothing
 end
@@ -71,7 +76,7 @@ vars_aux(::EquilMoist,FT) = @vars(temperature::FT, θ_v::FT, q_liq::FT)
 @inline function atmos_nodal_update_aux!(moist::EquilMoist, atmos::AtmosModel,
                                          state::Vars, aux::Vars, t::Real)
   e_int = internal_energy(moist, atmos.orientation, state, aux)
-  TS = PhaseEquil(e_int, state.moisture.ρq_tot/state.ρ, state.ρ)
+  TS = PhaseEquil(e_int,state.moisture.ρq_tot/state.ρ, state.ρ)
   aux.moisture.temperature = air_temperature(TS)
   aux.moisture.θ_v = virtual_pottemp(TS)
   aux.moisture.q_liq = PhasePartition(TS).liq

@@ -1,6 +1,6 @@
 ### Reference state
 using DocStringExtensions
-export NoReferenceState, HydrostaticState, IsothermalProfile, LinearTemperatureProfile
+export NoReferenceState, HydrostaticState, IsothermalProfile, LinearTemperatureProfile, HeldSuarezProfile
 
 """
     ReferenceState
@@ -122,5 +122,35 @@ function (profile::LinearTemperatureProfile)(orientation::Orientation, aux::Vars
     H_min = R_d * profile.T_min / grav
     p *= exp(-(z-z_top)/H_min)
   end
+  return (T, p)
+end
+
+"""
+    HeldSuarezProfile{FT} <: TemperatureProfile
+
+Equilibrium temperature for Held-Suarez GCM case. 
+T_eq = max(200K, [315K - ΔT_y * sin²Φ - Δθ_z * log(p/p_0) * cos²Φ]*(p/p_0)^κ)
+```
+
+# Fields
+
+$(DocStringExtensions.FIELDS)
+"""
+struct HeldSuarezProfile{FT} <: TemperatureProfile
+end
+
+function (profile::HeldSuarezProfile)(orientation::Orientation, aux::Vars)
+  FT = eltype(aux)
+  r = sum(abs2.(aux.coord))
+  @inbounds λ = atan(aux.coord[2], aux.coord[1])
+  @inbounds ϕ = asin(aux.coord[3] / r)
+  T_min = FT(200)
+  T_max = FT(315)
+  ΔT_y = FT(60)
+  Δθ_z = FT(10)
+  κ = FT(2/7)
+  p_ratio = FT(1)
+  T = max(T_min, (T_max - ΔT_y * sin(ϕ)^2 - Δθ_z * log(p_ratio) * cos(ϕ)^2)*(p_ratio)^FT(2//7))
+  p = MSLP * exp(-gravitational_potential(orientation, aux)/(R_d*T))
   return (T, p)
 end
