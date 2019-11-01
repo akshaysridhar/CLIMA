@@ -14,13 +14,13 @@ using CLIMA.GeneralizedMinimalResidualSolver
 using CLIMA.LinearSolvers
 using CLIMA.MPIStateArrays: euclidean_distance
 using CLIMA.PlanetParameters: R_d, grav, MSLP, planet_radius, cp_d, cv_d, day
-using CLIMA.MoistThermodynamics: air_density, total_energy, soundspeed_air, internal_energy, air_temperature
+using CLIMA.MoistThermodynamics
 using CLIMA.Atmos: AtmosModel, SphericalOrientation, NoReferenceState,
-                   DryModel, NoRadiation, NoFluxBC,
-                   ConstantViscosityWithDivergence,
+                   DryModel, NoRadiation, NoFluxBC, EquilMoist,
+                   ConstantViscosityWithDivergence, SmagorinskyLilly, AnisoMinDiss,
                    vars_state, vars_aux,
                    Gravity, Coriolis,
-                   HydrostaticState, IsothermalProfile,
+                   HydrostaticState, IsothermalProfile, LinearTemperatureProfile, HeldSuarezProfile,
                    AtmosAcousticGravityLinearModel
 using CLIMA.VariableTemplates: flattenednames
 
@@ -51,13 +51,12 @@ function main()
   global_logger(ConsoleLogger(logger_stream, loglevel))
 
   polynomialorder = 5
-  numelem_horz = 6
-  numelem_vert = 8
+  numelem_horz = 10
+  numelem_vert = 10
   timeend = 400day
   outputtime = 2day
   
-  for FT in (Float64,)
-
+  for FT in (Float32,)
     run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
         timeend, outputtime, ArrayType, FT)
   end
@@ -77,9 +76,14 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                                           polynomialorder = polynomialorder,
                                           meshwarp = cubedshellwarp)
 
+  C_smag = FT(0.23)
+  T_min = FT(250)
+  T_surface = FT(298) 
+  Γ = 0.01
   model = AtmosModel(SphericalOrientation(),
-                     HydrostaticState(IsothermalProfile(setup.T_initial), FT(0)),
-                     ConstantViscosityWithDivergence(FT(0)),
+                     HydrostaticState(HeldSuarezProfile{FT}(), FT(0)),
+                     #HydrostaticState(LinearTemperatureProfile{FT}(T_min,T_surface,Γ), FT(0)),
+                     SmagorinskyLilly(FT(C_smag)),
                      DryModel(),
                      NoRadiation(),
                      (Gravity(), Coriolis(), held_suarez_forcing!), 
@@ -100,13 +104,14 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
 
   # determine the time step
   element_size = (setup.domain_height / numelem_vert)
-  acoustic_speed = soundspeed_air(FT(315))
-  lucas_magic_factor = 10 * 14
+  acoustic_speed = soundspeed_air(FT(330))
+  #lucas_magic_factor = 10 * 14
+  lucas_magic_factor = 100
   dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
 
   Q = init_ode_state(dg, FT(0))
 
-  linearsolver = GeneralizedMinimalResidual(30, Q, sqrt(eps(FT)))
+  linearsolver = GeneralizedMinimalResidual(30, Q, polynomialorder^2 * sqrt(eps(FT)))
   ode_solver = ARK548L2SA2KennedyCarpenter(dg, lindg,
                                            linearsolver, Q; dt = dt,
                                            split_nonlinear_linear=false)
@@ -145,7 +150,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                         """ gettime(ode_solver) runtime energy
     end
   end
-  callbacks = (cbinfo, cbfilter)
+  callbacks = (cbinfo, )#cbfilter)
 
   if output_vtk
     # create vtk dir
@@ -197,6 +202,7 @@ function (setup::HeldSuarezSetup)(state, aux, coords, t)
   state.ρ = air_density(setup.T_initial, p)
   state.ρu = SVector{3, FT}(0, 0, 0)
   state.ρe = state.ρ * (internal_energy(setup.T_initial) + aux.orientation.Φ)
+  #state.moisture.ρq_tot = zero(FT)
   nothing
 end
 
@@ -228,12 +234,12 @@ function held_suarez_forcing!(source, state, aux, t::Real)
   scale_height = FT(7000) #from Smolarkiewicz JAS 2001 paper
   σ = exp(-h / scale_height)
   # TODO: use
-  #  p = air_pressure(T, ρ)
-  #  σ = p/p0
+  p = air_pressure(T, ρ)
+  σ = p/MSLP
   exner_p = σ ^ (R_d / cp_d)
   Δσ = (σ - σ_b) / (1 - σ_b)
   height_factor = max(0, Δσ)
-  T_equil = (T_equator - ΔT_y * sin(φ) ^ 2 - Δθ_z * log(σ) * cos(φ) ^ 2 ) * exner_p
+  T_equil = (T_equator - ΔT_y * sin(φ) ^ 2 - Δθ_z * log(σ) * cos(φ) ^ 2 ) * exner(p)
   T_equil = max(T_min, T_equil)
   k_T = k_a + (k_s - k_a) * height_factor * cos(φ) ^ 4
   k_v = k_f * height_factor
