@@ -83,7 +83,8 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   model = AtmosModel(SphericalOrientation(),
                      HydrostaticState(HeldSuarezProfile{FT}(), FT(0)),
                      #HydrostaticState(LinearTemperatureProfile{FT}(T_min,T_surface,Γ), FT(0)),
-                     SmagorinskyLilly(FT(C_smag)),
+                     #SmagorinskyLilly(FT(C_smag)),
+                     AnisoMinDiss{FT}(1),
                      DryModel(),
                      NoRadiation(),
                      (Gravity(), Coriolis(), held_suarez_forcing!), 
@@ -106,7 +107,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   element_size = (setup.domain_height / numelem_vert)
   acoustic_speed = soundspeed_air(FT(330))
   #lucas_magic_factor = 10 * 14
-  lucas_magic_factor = 100
+  lucas_magic_factor = 1
   dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
 
   Q = init_ode_state(dg, FT(0))
@@ -118,7 +119,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
 
   filterorder = 14
   filter = ExponentialFilter(grid, 0, filterorder)
-  cbfilter = EveryXSimulationSteps(1) do
+  cbfilter = EveryXSimulationSteps(3) do
     Filters.apply!(Q, 1:size(Q, 2), grid, filter)
     nothing
   end
@@ -150,7 +151,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                         """ gettime(ode_solver) runtime energy
     end
   end
-  callbacks = (cbinfo, )#cbfilter)
+  callbacks = (cbinfo, cbfilter)
 
   if output_vtk
     # create vtk dir

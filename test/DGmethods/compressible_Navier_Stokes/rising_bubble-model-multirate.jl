@@ -168,7 +168,7 @@ function run(mpicomm, ArrayType,
                      Initialise_Rising_Bubble!)
 
   fast_model = AtmosAcousticLinearModel(model)
-  slow_model = AtmosAcousticNonlinearModel(model)
+  slow_model = RemainderModel(model, (fast_model,))
 
   # -------------- Define dgbalancelaw --------------------------- # 
   dg = DGModel(model,

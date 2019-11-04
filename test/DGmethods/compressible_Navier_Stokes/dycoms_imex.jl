@@ -2,6 +2,7 @@
 using MPI
 using CLIMA
 using CLIMA.AdditiveRungeKuttaMethod
+using CLIMA.StrongStabilityPreservingRungeKuttaMethod
 using CLIMA.Mesh.Topologies
 using CLIMA.Mesh.Grids
 using CLIMA.Mesh.Geometry
@@ -74,7 +75,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
     θ_liq  = FT(289)
     q_tot  = FT(8.1e-3)
   else
-    θ_liq = FT(297.5) + (xvert - zi)^(DT(1/3))
+    θ_liq = FT(297.5) + (xvert - zi)^(FT(1/3))
     q_tot = FT(1.5e-3)
   end
 
@@ -93,7 +94,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   #Potential Temperature
   θv     = virtual_pottemp(T, P, q_pt)
   # energy definitions
-  u, v, w     = FT(7), DT(-5.5), DT(0)
+  u, v, w     = FT(7), FT(-5.5), FT(0)
   U           = ρ * u
   V           = ρ * v
   W           = ρ * w
@@ -106,7 +107,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   state.moisture.ρq_tot = ρ * q_tot
 end   
 # --------------- Driver definition ------------------ # 
-function run(mpicomm, ArrayType, dim, 
+function run(mpicomm, ArrayType, LinearType, dim, 
              topl, polynomialorder, timeend, FT, dt, 
              C_smag, LHF, SHF, C_drag, zmax, zsponge)
   
@@ -118,7 +119,7 @@ function run(mpicomm, ArrayType, dim,
                                          )
   # -------------- Define model ---------------------------------- # 
   model = AtmosModel(FlatOrientation(),
-                     HydrostaticState(IsothermalProfile(FT(T_0)),FT(0)),
+                     DYCOMSRefState(),
                      SmagorinskyLilly{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(85, 1, 840, 1.22, 3.75e-6, 70, 22),
@@ -129,41 +130,25 @@ function run(mpicomm, ArrayType, dim,
                      DYCOMS_BC{FT}(C_drag, LHF, SHF),
                      Initialise_DYCOMS!)
 
-  fast_model = AtmosAcousticLinearModel(model)
-  slow_model = AtmosAcousticNonlinearModel(model)
-  # RemainderModel #TODO
-  # -------------- Define dgbalancelaw --------------------------- # 
+  # ----------- IMEX Setup ----------------# 
   dg = DGModel(model,
                grid,
                Rusanov(),
                CentralNumericalFluxDiffusive(),
                CentralGradPenalty())
 
-  hor_fast_dg = DGModel(fast_model,
-                    grid, Rusanov(), CentralNumericalFluxDiffusive(), CentralGradPenalty();
-                    auxstate=dg.auxstate, direction=HorizontalDirection())
-
-  ver_fast_dg = DGModel(fast_model,
-                    grid, Rusanov(), CentralNumericalFluxDiffusive(), CentralGradPenalty();
-                    auxstate=dg.auxstate, direction=VerticalDirection())
-
-  slow_dg = DGModel(slow_model,
-                    grid, Rusanov(), CentralNumericalFluxDiffusive(), CentralGradPenalty();
-                    auxstate=dg.auxstate)
-
+  linmodel = LinearType(model)
+  lindg    = DGModel(linmodel,
+                     grid,
+                     Rusanov(),
+                     CentralNumericalFluxDiffusive(),
+                     CentralGradPenalty(); auxstate=dg.auxstate)
+  
   Q = init_ode_state(dg, FT(0))
   Qinit = init_ode_state(dg, FT(-1))
-
-  slow_dt = 13dt
-  fast_dt = dt
-  slow_ode_solver = LSRK54CarpenterKennedy(slow_dg, Q; dt = slow_dt)
-
-  linearsolver = GeneralizedMinimalResidual(10, Q, sqrt(eps(FT)))
-  fast_ode_solver = ARK548L2SA2KennedyCarpenter(hor_fast_dg, ver_fast_dg,
-                                                linearsolver, Q; dt = fast_dt,
-                                                split_nonlinear_linear=true)
-
-  ode_solver = MultirateRungeKutta((slow_ode_solver, fast_ode_solver))
+  
+  linearsolver = GeneralizedMinimalResidual(10, Q, sqrt(eps(FT))) # N * sqrt(eps(FT))
+  ode_solver = ARK548L2SA2KennedyCarpenter(dg, lindg, linearsolver, Q; dt = dt, t0 = 0)
 
   eng0 = norm(Q)
   @info @sprintf """Starting
@@ -201,7 +186,7 @@ function run(mpicomm, ArrayType, dim,
     do_output(mpicomm, vtkdir, vtkstep, dg, Qdiff, model)
 
     # setup the output callback
-    cbvtk = EveryXSimulationSteps(floor(outputtime / slow_dt)) do
+    cbvtk = EveryXSimulationSteps(100) do
       vtkstep += 1
       Qdiff = Q .- Qinit
       do_output(mpicomm, vtkdir, vtkstep, dg, Qdiff, model)
@@ -237,7 +222,6 @@ function do_output(mpicomm, vtkdir, vtkstep, dg, Q, model, testname = "rtb")
   if MPI.Comm_rank(mpicomm) == 0
     ## name of the pvtu file
     pvtuprefix = @sprintf("%s/%s_step%04d", vtkdir, testname, vtkstep)
-
     ## name of each of the ranks vtk files
     prefixes = ntuple(MPI.Comm_size(mpicomm)) do i
       @sprintf("%s_mpirank%04d_step%04d", testname, i - 1, vtkstep)
@@ -266,7 +250,6 @@ let
     FloatType = (Float64,)
     for FT in FloatType
       # Problem type
-      FT = Float64
       # DG polynomial order 
       N = 4
       # SGS Filter constants
@@ -283,11 +266,12 @@ let
       topl = StackedBrickTopology(mpicomm, brickrange,
                                   periodicity = (true, true, false),
                                   boundary=((0,0),(0,0),(1,2)))
-      dt = 0.02
-      timeend = 100dt
+      dt = 0.1
+      timeend = 14400
       dim = 3
+      LinearType = AtmosAcousticGravityLinearModel
       @info (ArrayType, FT, dim)
-      result = run(mpicomm, ArrayType, dim, topl, 
+      result = run(mpicomm, ArrayType, LinearType, dim, topl, 
                    N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge)
       #@test result ≈ FT(0.9999737848359238)
     end

@@ -47,7 +47,7 @@ const Ne        = (10,2,10)
 const polynomialorder = 4
 const dim       = 3
 const dt        = 0.1
-const timeend   = 10dt
+const timeend   = 1000
 # ------------- Initial condition function ----------- # 
 """
 @article{doi:10.1175/1520-0469(1993)050<1865:BCEWAS>2.0.CO;2,
@@ -124,6 +124,7 @@ function run(mpicomm, ArrayType, LinearType,
                CentralGradPenalty())
 
   linmodel = LinearType(model)
+
   lindg = DGModel(linmodel,
                grid,
                Rusanov(),
@@ -134,7 +135,6 @@ function run(mpicomm, ArrayType, LinearType,
 
   linearsolver = GeneralizedMinimalResidual(10, Q, sqrt(eps(FT)))
   ark = ARK548L2SA2KennedyCarpenter(dg, lindg, linearsolver, Q; dt = dt, t0 = 0)
-
 
   eng0 = norm(Q)
   @info @sprintf """Starting
@@ -166,7 +166,7 @@ function run(mpicomm, ArrayType, LinearType,
       outprefix = @sprintf("./vtk-rtb/DC_%dD_mpirank%04d_step%04d", dim,
                            MPI.Comm_rank(mpicomm), step[1])
       @debug "doing VTK output" outprefix
-      writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)), param[1], flattenednames(vars_aux(model,FT)))
+      writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)), dg.auxstate, flattenednames(vars_aux(model,FT)))
       step[1] += 1
       nothing
   end

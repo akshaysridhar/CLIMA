@@ -393,7 +393,8 @@ function run(mpicomm, ArrayType, dim, topl,
                                           polynomialorder = N)
   @show("Grid Initialised")
   model = AtmosModel(FlatOrientation(),
-                     HydrostaticState(IsothermalProfile(FT(T_0+15)), FT(0)),
+                     #HydrostaticState(IsothermalProfile(FT(T_0+15)), FT(0)),
+                     DYCOMSRefState(),
                      SmagorinskyLilly{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(85,1,840,1.22,3.75e-6,70,22),
@@ -410,6 +411,7 @@ function run(mpicomm, ArrayType, dim, topl,
   # The nonlinear model has the slow time scales
   slow_model = RemainderModel(model, (fast_model,))
   @show("SlowModel Set")
+  
   dg = DGModel(model, grid, Rusanov(), CentralNumericalFluxDiffusive(), CentralGradPenalty())
   
   fast_dg = DGModel(fast_model,
@@ -424,6 +426,7 @@ function run(mpicomm, ArrayType, dim, topl,
   slow_dt = 0.01 #elementsize / soundspeed_air(FT(T_0)) / polynomialorder ^ 2
   nsteps = ceil(Int, timeend / slow_dt)
   slow_dt = timeend / nsteps
+  
   # arbitrary and not needed for stabilty, just for testing
   fast_dt = slow_dt / 3
   
