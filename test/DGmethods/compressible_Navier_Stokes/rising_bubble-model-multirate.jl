@@ -192,7 +192,6 @@ function run(mpicomm, ArrayType,
   Q = init_ode_state(dg, DF(0))
   Qinit = init_ode_state(dg, DF(-1))
 
-
   slow_dt = 13dt
   fast_dt = dt
   slow_ode_solver = LSRK54CarpenterKennedy(slow_dg, Q; dt = slow_dt)
