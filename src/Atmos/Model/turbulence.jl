@@ -312,8 +312,9 @@ function dynamic_viscosity_tensor(m::SmagorinskyLilly2D, S, state::Vars, diffusi
   ρν_h = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SH
   ρν_v = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SV * f_b²
   ρν = SVector{3,FT}(ρν_h, ρν_h, ρν_v)
-  ρν_mat = diagm(0 => ρν)
-  return SMatrix{3,3,FT,9}(ρν_mat)
+  #ρν_mat = diagm(0 => ρν)
+  #return S{3,3,FT,9}(ρν_mat)
+  return SMatrix{3,3,FT,9}(ρν_h,0,0,ρν_h,0,ρν_v)
 end
 function scaled_momentum_flux_tensor(m::SmagorinskyLilly2D, ρν, S)
   (-2*ρν) * S
