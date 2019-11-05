@@ -2,7 +2,7 @@
 using DocStringExtensions
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
-export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss
+export ConstantViscosityWithDivergence, SmagorinskyLilly, SmagorinskyLilly2D, Vreman, AnisoMinDiss
 
 abstract type TurbulenceClosure end
 
@@ -271,5 +271,50 @@ function dynamic_viscosity_tensor(m::AnisoMinDiss, S, state::Vars, diffusive::Va
   return state.ρ * ν_e
 end
 function scaled_momentum_flux_tensor(m::AnisoMinDiss, ρν, S)
+  (-2*ρν) * S
+end
+
+
+"""
+  Smagorinksy Lilly preferential horizontal treatment
+"""
+struct SmagorinskyLilly2D{FT} <: TurbulenceClosure
+  C_smag::FT
+end
+vars_aux(::SmagorinskyLilly2D,T) = @vars(Δ::T)
+vars_gradient(::SmagorinskyLilly2D,T) = @vars(θ_v::T)
+function atmos_init_aux!(::SmagorinskyLilly2D, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+  aux.turbulence.Δ = lengthscale(geom)
+end
+function gradvariables!(m::SmagorinskyLilly2D, transform::Vars, state::Vars, aux::Vars, t::Real)
+  transform.turbulence.θ_v = aux.moisture.θ_v
+end
+function squared_buoyancy_correction(normS, ∇transform::Grad, aux::Vars)
+  ∂θ∂Φ = dot(∇transform.turbulence.θ_v, aux.orientation.∇Φ)
+  N² = ∂θ∂Φ / aux.moisture.θ_v
+  Richardson = N² / (normS^2 + eps(normS))
+  sqrt(clamp(1 - Richardson*inv_Pr_turb, 0, 1))
+end
+function strain_rate_magnitude(S::SHermitianCompact{3,FT,6}) where {FT}
+  sqrt(2*S[1,1]^2 + 4*S[2,1]^2 + 4*S[3,1]^2 + 2*S[2,2]^2 + 4*S[3,2]^2 + 2*S[3,3]^2)
+end
+function dynamic_viscosity_tensor(m::SmagorinskyLilly2D, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
+  # strain rate tensor norm
+  # Notation: normS ≡ norm2S = √(2S:S)
+  # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
+  FT = eltype(state)
+  # Split component contributions from strain-rate tensor
+  SH = sqrt(2 * S[1,1]^2 + 2 * S[3,3]^2 + 4 * S[1,3]^2)
+  SV = sqrt(4 * S[1,2]^2 + 2 * S[2,2]^2 + 4 * S[2,3]^2)
+  @inbounds normS = strain_rate_magnitude(S)
+  f_b² = squared_buoyancy_correction(normS, ∇transform, aux)
+  # Return Buoyancy-adjusted Smagorinsky Coefficient (ρ scaled)
+  ρν_h = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SH
+  ρν_v = FT(m.C_smag * aux.turbulence.Δ)^2 * state.ρ * SV * f_b²
+  ρν = SVector{3,FT}(ρν_h, ρν_h, ρν_v)
+  ρν_mat = diagm(0 => ρν)
+  return SMatrix{3,3,FT,9}(ρν_mat)
+end
+function scaled_momentum_flux_tensor(m::SmagorinskyLilly2D, ρν, S)
   (-2*ρν) * S
 end

@@ -50,11 +50,13 @@ vars_aux(::DryModel,FT) = @vars(θ_v::FT)
                                          state::Vars, aux::Vars, t::Real)
   e_int = internal_energy(moist, atmos.orientation, state, aux)
   TS = PhaseDry(e_int, state.ρ)
+  #=
   if air_temperature(e_int) < 0 
     @show(air_temperature(e_int))
     @show(aux.coord)
     @show(air_pressure(air_temperature(e_int), state.ρ))
   end
+  =#
   aux.moisture.θ_v = virtual_pottemp(TS)
   nothing
 end

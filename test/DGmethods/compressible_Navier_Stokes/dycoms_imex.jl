@@ -210,7 +210,7 @@ function run(mpicomm, ArrayType, LinearType, dim,
 engf/eng0
 end
 
-function do_output(mpicomm, vtkdir, vtkstep, dg, Q, model, testname = "rtb")
+function do_output(mpicomm, vtkdir, vtkstep, dg, Q, model, testname = "dycoms")
   ## name of the file that this MPI rank will write
   filename = @sprintf("%s/%s_mpirank%04d_step%04d",
                       vtkdir, testname, MPI.Comm_rank(mpicomm), vtkstep)
@@ -247,26 +247,26 @@ let
       device!(MPI.Comm_rank(mpicomm) % length(devices()))
   end
   @testset "$(@__FILE__)" for ArrayType in ArrayTypes
-    FloatType = (Float64,)
+    FloatType = (Float32,)
     for FT in FloatType
       # Problem type
       # DG polynomial order 
       N = 4
       # SGS Filter constants
       C_smag = FT(0.15)
-      LHF    = FT(115)
-      SHF    = FT(15)
+      LHF    = FT(-115)
+      SHF    = FT(-15)
       C_drag = FT(0.0011)
       # User defined domain parameters
-      brickrange = (grid1d(0, 2000, elemsize=FT(50)*N),
-                    grid1d(0, 2000, elemsize=FT(50)*N),
-                    grid1d(0, 1500, elemsize=FT(20)*N))
+      brickrange = (grid1d(0, 3360, elemsize=FT(35)*N),
+                    grid1d(0, 3360, elemsize=FT(35)*N),
+                    grid1d(0, 1500, InteriorStretching{FT}(840);elemsize=FT(35)*N))
       zmax = brickrange[3][end]
       zsponge = FT(0.75 * zmax)
       topl = StackedBrickTopology(mpicomm, brickrange,
                                   periodicity = (true, true, false),
                                   boundary=((0,0),(0,0),(1,2)))
-      dt = 0.1
+      dt = 0.3
       timeend = 14400
       dim = 3
       LinearType = AtmosAcousticGravityLinearModel

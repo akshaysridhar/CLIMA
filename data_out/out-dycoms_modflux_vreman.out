@@ -1,0 +1,1746 @@
+WARNING: Method definition overdub(Cassette.Context{N, M, T, P, B, H} where H<:Union{Cassette.DisableHooks, Nothing} where B<:Union{Nothing, Base.IdDict{Module, Base.Dict{Symbol, Cassette.BindingMeta}}} where P<:Cassette.AbstractPass where T<:Union{Nothing, Cassette.Tag{N, X, E} where E where X where N<:Cassette.AbstractContextName} where M where N<:Cassette.AbstractContextName, Any...) in module Cassette at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:524 overwritten in module GPUifyLoops at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:524.
+  ** incremental compilation may be fatally broken for this module **
+
+WARNING: Method definition recurse(Cassette.Context{N, M, T, P, B, H} where H<:Union{Cassette.DisableHooks, Nothing} where B<:Union{Nothing, Base.IdDict{Module, Base.Dict{Symbol, Cassette.BindingMeta}}} where P<:Cassette.AbstractPass where T<:Union{Nothing, Cassette.Tag{N, X, E} where E where X where N<:Cassette.AbstractContextName} where M where N<:Cassette.AbstractContextName, Any...) in module Cassette at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:537 overwritten in module GPUifyLoops at /home/asridhar/.julia/packages/Cassette/YCOeN/src/overdub.jl:537.
+  ** incremental compilation may be fatally broken for this module **
+
+WARNING: Method definition altitude(CLIMA.Atmos.Orientation, CLIMA.VariableTemplates.Vars{S, A, offset} where offset where A where S) in module Atmos at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:16 overwritten at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:28.
+  ** incremental compilation may be fatally broken for this module **
+
+WARNING: Method definition atmos_init_aux!(CLIMA.Atmos.NoOrientation, CLIMA.Atmos.AtmosModel{O, RS, T, M, R, S, BC, IS} where IS where BC where S where R where M where T where RS where O, CLIMA.VariableTemplates.Vars{S, A, offset} where offset where A where S, CLIMA.Mesh.Geometry.LocalGeometry{T, P} where P where T) in module Atmos at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:26 overwritten at /central/home/asridhar/CLIMA/src/Atmos/Model/orientation.jl:30.
+  ** incremental compilation may be fatally broken for this module **
+
+  Updating registry at `~/.julia/registries/General`
+  Updating git-repo `https://github.com/JuliaRegistries/General.git`
+[?25l[2K[?25hPrecompiling project...
+Precompiling CLIMA
+[1569356042.436897] [hpc-25-14:126664:0]         parser.c:1369 UCX  WARN  unused env variable: UCX_MEM_MMAP_RELOC (set UCX_WARN_UNUSED_ENV_VARS=n to suppress this warning)
+[ Info: (CuArray, Float32, 3, "/central/scratch/asridhar/DYC-VREMAN-PF")
+[ Info: ((15, 15, 11), (35.0f0, 35.0f0, 35.0f0), (2000, 2000, 1500), 0.001, 36000.0f0)
+┌ Info: Starting
+└ norm(Q₀) = 2.5838650880000000e+09
+┌ Info: Update
+│ simtime = 3.9620853424072266e+01
+│ runtime = 00:10:00
+└ norm(Q) = 2.5842406400000000e+09
+┌ Info: Update
+│ simtime = 8.2633216857910156e+01
+│ runtime = 00:20:00
+└ norm(Q) = 2.5837107200000000e+09
+┌ Info: Update
+│ simtime = 1.2558361053466797e+02
+│ runtime = 00:30:00
+└ norm(Q) = 2.5828938240000000e+09
+┌ Info: Update
+│ simtime = 1.6896427917480469e+02
+│ runtime = 00:40:00
+└ norm(Q) = 2.5823892480000000e+09
+┌ Info: Update
+│ simtime = 2.1227275085449219e+02
+│ runtime = 00:50:00
+└ norm(Q) = 2.5820136960000000e+09
+┌ Info: Update
+│ simtime = 2.5564869689941406e+02
+│ runtime = 01:00:00
+└ norm(Q) = 2.5816837120000000e+09
+┌ Info: Update
+│ simtime = 2.9899240112304688e+02
+│ runtime = 01:10:00
+└ norm(Q) = 2.5813358080000000e+09
+┌ Info: Update
+│ simtime = 3.4218606567382813e+02
+│ runtime = 01:20:00
+└ norm(Q) = 2.5811025920000000e+09
+┌ Info: Update
+│ simtime = 3.8542001342773438e+02
+│ runtime = 01:30:00
+└ norm(Q) = 2.5808770560000000e+09
+┌ Info: Update
+│ simtime = 4.2853210449218750e+02
+│ runtime = 01:40:00
+└ norm(Q) = 2.5805918720000000e+09
+┌ Info: Update
+│ simtime = 4.7174288940429688e+02
+│ runtime = 01:50:00
+└ norm(Q) = 2.5801679360000000e+09
+┌ Info: Update
+│ simtime = 5.1479095458984375e+02
+│ runtime = 02:00:00
+└ norm(Q) = 2.5796426240000000e+09
+┌ Info: Update
+│ simtime = 5.5672845458984375e+02
+│ runtime = 02:10:00
+└ norm(Q) = 2.5789276160000000e+09
+┌ Info: Update
+│ simtime = 5.9870501708984375e+02
+│ runtime = 02:20:00
+└ norm(Q) = 2.5781913600000000e+09
+┌ Info: Update
+│ simtime = 6.4061810302734375e+02
+│ runtime = 02:30:00
+└ norm(Q) = 2.5775720960000000e+09
+┌ Info: Update
+│ simtime = 6.8261712646484375e+02
+│ runtime = 02:40:00
+└ norm(Q) = 2.5770155520000000e+09
+┌ Info: Update
+│ simtime = 7.2454095458984375e+02
+│ runtime = 02:50:00
+└ norm(Q) = 2.5767093760000000e+09
+┌ Info: Update
+│ simtime = 7.6656048583984375e+02
+│ runtime = 03:00:00
+└ norm(Q) = 2.5765555200000000e+09
+┌ Info: Update
+│ simtime = 8.0852337646484375e+02
+│ runtime = 03:10:00
+└ norm(Q) = 2.5764820480000000e+09
+┌ Info: Update
+│ simtime = 8.5059954833984375e+02
+│ runtime = 03:20:00
+└ norm(Q) = 2.5765352960000000e+09
+┌ Info: Update
+│ simtime = 8.9268743896484375e+02
+│ runtime = 03:30:00
+└ norm(Q) = 2.5767383040000000e+09
+┌ Info: Update
+│ simtime = 9.3472845458984375e+02
+│ runtime = 03:40:00
+└ norm(Q) = 2.5769213440000000e+09
+┌ Info: Update
+│ simtime = 9.7686224365234375e+02
+│ runtime = 03:50:00
+└ norm(Q) = 2.5770127360000000e+09
+┌ Info: Update
+│ simtime = 1.0189130249023438e+03
+│ runtime = 04:00:00
+└ norm(Q) = 2.5770472960000000e+09
+┌ Info: Update
+│ simtime = 1.0610605468750000e+03
+│ runtime = 04:10:00
+└ norm(Q) = 2.5771248640000000e+09
+┌ Info: Update
+│ simtime = 1.1031318359375000e+03
+│ runtime = 04:20:00
+└ norm(Q) = 2.5772231680000000e+09
+┌ Info: Update
+│ simtime = 1.1452841796875000e+03
+│ runtime = 04:30:00
+└ norm(Q) = 2.5773263360000000e+09
+┌ Info: Update
+│ simtime = 1.1873593750000000e+03
+│ runtime = 04:40:00
+└ norm(Q) = 2.5774284800000000e+09
+┌ Info: Update
+│ simtime = 1.2295068359375000e+03
+│ runtime = 04:50:00
+└ norm(Q) = 2.5775185920000000e+09
+┌ Info: Update
+│ simtime = 1.2716748046875000e+03
+│ runtime = 05:00:00
+└ norm(Q) = 2.5776107520000000e+09
+┌ Info: Update
+│ simtime = 1.3137539062500000e+03
+│ runtime = 05:10:00
+└ norm(Q) = 2.5777239040000000e+09
+┌ Info: Update
+│ simtime = 1.3559208984375000e+03
+│ runtime = 05:20:00
+└ norm(Q) = 2.5778375680000000e+09
+┌ Info: Update
+│ simtime = 1.3979902343750000e+03
+│ runtime = 05:30:00
+└ norm(Q) = 2.5779560960000000e+09
+┌ Info: Update
+│ simtime = 1.4401552734375000e+03
+│ runtime = 05:40:00
+└ norm(Q) = 2.5780733440000000e+09
+┌ Info: Update
+│ simtime = 1.4822460937500000e+03
+│ runtime = 05:50:00
+└ norm(Q) = 2.5781936640000000e+09
+┌ Info: Update
+│ simtime = 1.5244072265625000e+03
+│ runtime = 06:00:00
+└ norm(Q) = 2.5782883840000000e+09
+┌ Info: Update
+│ simtime = 1.5665683593750000e+03
+│ runtime = 06:10:00
+└ norm(Q) = 2.5783723520000000e+09
+┌ Info: Update
+│ simtime = 1.6086289062500000e+03
+│ runtime = 06:20:00
+└ norm(Q) = 2.5784378880000000e+09
+┌ Info: Update
+│ simtime = 1.6507978515625000e+03
+│ runtime = 06:30:00
+└ norm(Q) = 2.5785126400000000e+09
+┌ Info: Update
+│ simtime = 1.6928769531250000e+03
+│ runtime = 06:40:00
+└ norm(Q) = 2.5785804800000000e+09
+┌ Info: Update
+│ simtime = 1.7350458984375000e+03
+│ runtime = 06:50:00
+└ norm(Q) = 2.5786542080000000e+09
+┌ Info: Update
+│ simtime = 1.7771445312500000e+03
+│ runtime = 07:00:00
+└ norm(Q) = 2.5787279360000000e+09
+┌ Info: Update
+│ simtime = 1.8193242187500000e+03
+│ runtime = 07:10:00
+└ norm(Q) = 2.5788226560000000e+09
+┌ Info: Update
+│ simtime = 1.8614316406250000e+03
+│ runtime = 07:20:00
+└ norm(Q) = 2.5789260800000000e+09
+┌ Info: Update
+│ simtime = 1.9036181640625000e+03
+│ runtime = 07:30:00
+└ norm(Q) = 2.5789939200000000e+09
+┌ Info: Update
+│ simtime = 1.9458037109375000e+03
+│ runtime = 07:40:00
+└ norm(Q) = 2.5790696960000000e+09
+┌ Info: Update
+│ simtime = 1.9879111328125000e+03
+│ runtime = 07:50:00
+└ norm(Q) = 2.5791303680000000e+09
+┌ Info: Update
+│ simtime = 2.0300986328125000e+03
+│ runtime = 08:00:00
+└ norm(Q) = 2.5791808000000000e+09
+┌ Info: Update
+│ simtime = 2.0722216796875000e+03
+│ runtime = 08:10:00
+└ norm(Q) = 2.5792312320000000e+09
+┌ Info: Update
+│ simtime = 2.1143994140625000e+03
+│ runtime = 08:20:00
+└ norm(Q) = 2.5792760320000000e+09
+┌ Info: Update
+│ simtime = 2.1565058593750000e+03
+│ runtime = 08:30:00
+└ norm(Q) = 2.5793418240000000e+09
+┌ Info: Update
+│ simtime = 2.1986982421875000e+03
+│ runtime = 08:40:00
+└ norm(Q) = 2.5794065920000000e+09
+┌ Info: Update
+│ simtime = 2.2408916015625000e+03
+│ runtime = 08:50:00
+└ norm(Q) = 2.5794608640000000e+09
+┌ Info: Update
+│ simtime = 2.2830048828125000e+03
+│ runtime = 09:00:00
+└ norm(Q) = 2.5795363840000000e+09
+┌ Info: Update
+│ simtime = 2.3252011718750000e+03
+│ runtime = 09:10:00
+└ norm(Q) = 2.5796229120000000e+09
+┌ Info: Update
+│ simtime = 2.3673173828125000e+03
+│ runtime = 09:20:00
+└ norm(Q) = 2.5797063680000000e+09
+┌ Info: Update
+│ simtime = 2.4095195312500000e+03
+│ runtime = 09:30:00
+└ norm(Q) = 2.5798026240000000e+09
+┌ Info: Update
+│ simtime = 2.4516474609375000e+03
+│ runtime = 09:40:00
+└ norm(Q) = 2.5798917120000000e+09
+┌ Info: Update
+│ simtime = 2.4938613281250000e+03
+│ runtime = 09:50:00
+└ norm(Q) = 2.5799815680000000e+09
+┌ Info: Update
+│ simtime = 2.5359863281250000e+03
+│ runtime = 10:00:00
+└ norm(Q) = 2.5800642560000000e+09
+┌ Info: Update
+│ simtime = 2.5781943359375000e+03
+│ runtime = 10:10:00
+└ norm(Q) = 2.5801397760000000e+09
+┌ Info: Update
+│ simtime = 2.6203935546875000e+03
+│ runtime = 10:20:00
+└ norm(Q) = 2.5802181120000000e+09
+┌ Info: Update
+│ simtime = 2.6625224609375000e+03
+│ runtime = 10:30:00
+└ norm(Q) = 2.5802874880000000e+09
+┌ Info: Update
+│ simtime = 2.7047333984375000e+03
+│ runtime = 10:40:00
+└ norm(Q) = 2.5803758080000000e+09
+┌ Info: Update
+│ simtime = 2.7467890625000000e+03
+│ runtime = 10:50:00
+└ norm(Q) = 2.5804794880000000e+09
+┌ Info: Update
+│ simtime = 2.7890048828125000e+03
+│ runtime = 11:00:00
+└ norm(Q) = 2.5806041600000000e+09
+┌ Info: Update
+│ simtime = 2.8310419921875000e+03
+│ runtime = 11:10:00
+└ norm(Q) = 2.5807311360000000e+09
+┌ Info: Update
+│ simtime = 2.8732558593750000e+03
+│ runtime = 11:20:00
+└ norm(Q) = 2.5808299520000000e+09
+┌ Info: Update
+│ simtime = 2.9153847656250000e+03
+│ runtime = 11:30:00
+└ norm(Q) = 2.5809323520000000e+09
+┌ Info: Update
+│ simtime = 2.9575869140625000e+03
+│ runtime = 11:40:00
+└ norm(Q) = 2.5810360320000000e+09
+┌ Info: Update
+│ simtime = 2.9998066406250000e+03
+│ runtime = 11:50:00
+└ norm(Q) = 2.5811412480000000e+09
+┌ Info: Update
+│ simtime = 3.0419492187500000e+03
+│ runtime = 12:00:00
+└ norm(Q) = 2.5812226560000000e+09
+┌ Info: Update
+│ simtime = 3.0841474609375000e+03
+│ runtime = 12:10:00
+└ norm(Q) = 2.5812840960000000e+09
+┌ Info: Update
+│ simtime = 3.1262929687500000e+03
+│ runtime = 12:20:00
+└ norm(Q) = 2.5813209600000000e+09
+┌ Info: Update
+│ simtime = 3.1683691406250000e+03
+│ runtime = 12:30:00
+└ norm(Q) = 2.5813713920000000e+09
+┌ Info: Update
+│ simtime = 3.2105039062500000e+03
+│ runtime = 12:40:00
+└ norm(Q) = 2.5814282240000000e+09
+┌ Info: Update
+│ simtime = 3.2527197265625000e+03
+│ runtime = 12:50:00
+└ norm(Q) = 2.5814822400000000e+09
+┌ Info: Update
+│ simtime = 3.2949472656250000e+03
+│ runtime = 13:00:00
+└ norm(Q) = 2.5815360000000000e+09
+┌ Info: Update
+│ simtime = 3.3369912109375000e+03
+│ runtime = 13:10:00
+└ norm(Q) = 2.5815915520000000e+09
+┌ Info: Update
+│ simtime = 3.3791308593750000e+03
+│ runtime = 13:20:00
+└ norm(Q) = 2.5816476160000000e+09
+┌ Info: Update
+│ simtime = 3.4210488281250000e+03
+│ runtime = 13:30:00
+└ norm(Q) = 2.5817093120000000e+09
+┌ Info: Update
+│ simtime = 3.4630302734375000e+03
+│ runtime = 13:40:00
+└ norm(Q) = 2.5817502720000000e+09
+┌ Info: Update
+│ simtime = 3.5051865234375000e+03
+│ runtime = 13:50:00
+└ norm(Q) = 2.5817945600000000e+09
+┌ Info: Update
+│ simtime = 3.5467021484375000e+03
+│ runtime = 14:00:00
+└ norm(Q) = 2.5818526720000000e+09
+┌ Info: Update
+│ simtime = 3.5888027343750000e+03
+│ runtime = 14:10:00
+└ norm(Q) = 2.5819338240000000e+09
+┌ Info: Update
+│ simtime = 3.6310478515625000e+03
+│ runtime = 14:20:00
+└ norm(Q) = 2.5820039680000000e+09
+┌ Info: Update
+│ simtime = 3.6732871093750000e+03
+│ runtime = 14:30:00
+└ norm(Q) = 2.5820595200000000e+09
+┌ Info: Update
+│ simtime = 3.7154599609375000e+03
+│ runtime = 14:40:00
+└ norm(Q) = 2.5821079040000000e+09
+┌ Info: Update
+│ simtime = 3.7577060546875000e+03
+│ runtime = 14:50:00
+└ norm(Q) = 2.5821562880000000e+09
+┌ Info: Update
+│ simtime = 3.7992109375000000e+03
+│ runtime = 15:00:00
+└ norm(Q) = 2.5822187520000000e+09
+┌ Info: Update
+│ simtime = 3.8414082031250000e+03
+│ runtime = 15:10:00
+└ norm(Q) = 2.5822786560000000e+09
+┌ Info: Update
+│ simtime = 3.8817675781250000e+03
+│ runtime = 15:20:28
+└ norm(Q) = 2.5823569920000000e+09
+┌ Info: Update
+│ simtime = 3.9240156250000000e+03
+│ runtime = 15:30:28
+└ norm(Q) = 2.5824107520000000e+09
+┌ Info: Update
+│ simtime = 3.9662636718750000e+03
+│ runtime = 15:40:28
+└ norm(Q) = 2.5824350720000000e+09
+┌ Info: Update
+│ simtime = 4.0082226562500000e+03
+│ runtime = 15:50:28
+└ norm(Q) = 2.5824640000000000e+09
+┌ Info: Update
+│ simtime = 4.0504707031250000e+03
+│ runtime = 16:00:28
+└ norm(Q) = 2.5825195520000000e+09
+┌ Info: Update
+│ simtime = 4.0926132812500000e+03
+│ runtime = 16:10:28
+└ norm(Q) = 2.5825920000000000e+09
+┌ Info: Update
+│ simtime = 4.1348710937500000e+03
+│ runtime = 16:20:28
+└ norm(Q) = 2.5826488320000000e+09
+┌ Info: Update
+│ simtime = 4.1770488281250000e+03
+│ runtime = 16:30:28
+└ norm(Q) = 2.5826972160000000e+09
+┌ Info: Update
+│ simtime = 4.2193076171875000e+03
+│ runtime = 16:40:28
+└ norm(Q) = 2.5827330560000000e+09
+┌ Info: Update
+│ simtime = 4.2615664062500000e+03
+│ runtime = 16:50:28
+└ norm(Q) = 2.5827776000000000e+09
+┌ Info: Update
+│ simtime = 4.3037539062500000e+03
+│ runtime = 17:00:28
+└ norm(Q) = 2.5828134400000000e+09
+┌ Info: Update
+│ simtime = 4.3459843750000000e+03
+│ runtime = 17:10:28
+└ norm(Q) = 2.5828536320000000e+09
+┌ Info: Update
+│ simtime = 4.3881201171875000e+03
+│ runtime = 17:20:28
+└ norm(Q) = 2.5828966400000000e+09
+┌ Info: Update
+│ simtime = 4.4303828125000000e+03
+│ runtime = 17:30:28
+└ norm(Q) = 2.5829432320000000e+09
+┌ Info: Update
+│ simtime = 4.4725810546875000e+03
+│ runtime = 17:40:28
+└ norm(Q) = 2.5829844480000000e+09
+┌ Info: Update
+│ simtime = 4.5148447265625000e+03
+│ runtime = 17:50:28
+└ norm(Q) = 2.5830179840000000e+09
+┌ Info: Update
+│ simtime = 4.5570380859375000e+03
+│ runtime = 18:00:28
+└ norm(Q) = 2.5830638080000000e+09
+┌ Info: Update
+│ simtime = 4.5993027343750000e+03
+│ runtime = 18:10:28
+└ norm(Q) = 2.5831073280000000e+09
+┌ Info: Update
+│ simtime = 4.6415791015625000e+03
+│ runtime = 18:20:28
+└ norm(Q) = 2.5831518720000000e+09
+┌ Info: Update
+│ simtime = 4.6837841796875000e+03
+│ runtime = 18:30:28
+└ norm(Q) = 2.5831767040000000e+09
+┌ Info: Update
+│ simtime = 4.7260615234375000e+03
+│ runtime = 18:40:28
+└ norm(Q) = 2.5832110080000000e+09
+┌ Info: Update
+│ simtime = 4.7682685546875000e+03
+│ runtime = 18:50:28
+└ norm(Q) = 2.5832616960000000e+09
+┌ Info: Update
+│ simtime = 4.8105478515625000e+03
+│ runtime = 19:00:28
+└ norm(Q) = 2.5833236480000000e+09
+┌ Info: Update
+│ simtime = 4.8527626953125000e+03
+│ runtime = 19:10:28
+└ norm(Q) = 2.5833740800000000e+09
+┌ Info: Update
+│ simtime = 4.8950478515625000e+03
+│ runtime = 19:20:28
+└ norm(Q) = 2.5834058240000000e+09
+┌ Info: Update
+│ simtime = 4.9372568359375000e+03
+│ runtime = 19:30:28
+└ norm(Q) = 2.5834252800000000e+09
+┌ Info: Update
+│ simtime = 4.9795332031250000e+03
+│ runtime = 19:40:28
+└ norm(Q) = 2.5834360320000000e+09
+┌ Info: Update
+│ simtime = 5.0218154296875000e+03
+│ runtime = 19:50:28
+└ norm(Q) = 2.5834547200000000e+09
+┌ Info: Update
+│ simtime = 5.0640371093750000e+03
+│ runtime = 20:00:28
+└ norm(Q) = 2.5834885120000000e+09
+┌ Info: Update
+│ simtime = 5.1063300781250000e+03
+│ runtime = 20:10:28
+└ norm(Q) = 2.5835089920000000e+09
+┌ Info: Update
+│ simtime = 5.1485419921875000e+03
+│ runtime = 20:20:28
+└ norm(Q) = 2.5835161600000000e+09
+┌ Info: Update
+│ simtime = 5.1908359375000000e+03
+│ runtime = 20:30:28
+└ norm(Q) = 2.5835207680000000e+09
+┌ Info: Update
+│ simtime = 5.2330595703125000e+03
+│ runtime = 20:40:28
+└ norm(Q) = 2.5835520000000000e+09
+┌ Info: Update
+│ simtime = 5.2753583984375000e+03
+│ runtime = 20:50:28
+└ norm(Q) = 2.5835998720000000e+09
+┌ Info: Update
+│ simtime = 5.3175751953125000e+03
+│ runtime = 21:00:28
+└ norm(Q) = 2.5836372480000000e+09
+┌ Info: Update
+│ simtime = 5.3598535156250000e+03
+│ runtime = 21:10:28
+└ norm(Q) = 2.5836766720000000e+09
+┌ Info: Update
+│ simtime = 5.4021533203125000e+03
+│ runtime = 21:20:28
+└ norm(Q) = 2.5837063680000000e+09
+┌ Info: Update
+│ simtime = 5.4443828125000000e+03
+│ runtime = 21:30:28
+└ norm(Q) = 2.5837445120000000e+09
+┌ Info: Update
+│ simtime = 5.4866806640625000e+03
+│ runtime = 21:40:28
+└ norm(Q) = 2.5838046720000000e+09
+┌ Info: Update
+│ simtime = 5.5289072265625000e+03
+│ runtime = 21:50:28
+└ norm(Q) = 2.5838630400000000e+09
+┌ Info: Update
+│ simtime = 5.5711435546875000e+03
+│ runtime = 22:00:28
+└ norm(Q) = 2.5839011840000000e+09
+┌ Info: Update
+│ simtime = 5.6133671875000000e+03
+│ runtime = 22:10:28
+└ norm(Q) = 2.5839331840000000e+09
+┌ Info: Update
+│ simtime = 5.6556660156250000e+03
+│ runtime = 22:20:28
+└ norm(Q) = 2.5839644160000000e+09
+┌ Info: Update
+│ simtime = 5.6979667968750000e+03
+│ runtime = 22:30:28
+└ norm(Q) = 2.5839910400000000e+09
+┌ Info: Update
+│ simtime = 5.7401621093750000e+03
+│ runtime = 22:40:28
+└ norm(Q) = 2.5840256000000000e+09
+┌ Info: Update
+│ simtime = 5.7824609375000000e+03
+│ runtime = 22:50:28
+└ norm(Q) = 2.5840547840000000e+09
+┌ Info: Update
+│ simtime = 5.8246914062500000e+03
+│ runtime = 23:00:28
+└ norm(Q) = 2.5840670720000000e+09
+┌ Info: Update
+│ simtime = 5.8670009765625000e+03
+│ runtime = 23:10:28
+└ norm(Q) = 2.5840770560000000e+09
+┌ Info: Update
+│ simtime = 5.9092333984375000e+03
+│ runtime = 23:20:28
+└ norm(Q) = 2.5840972800000000e+09
+┌ Info: Update
+│ simtime = 5.9515244140625000e+03
+│ runtime = 23:30:28
+└ norm(Q) = 2.5841310720000000e+09
+┌ Info: Update
+│ simtime = 5.9936054687500000e+03
+│ runtime = 23:40:28
+└ norm(Q) = 2.5841717760000000e+09
+┌ Info: Update
+│ simtime = 6.0358701171875000e+03
+│ runtime = 23:50:28
+└ norm(Q) = 2.5842050560000000e+09
+┌ Info: Update
+│ simtime = 6.0781796875000000e+03
+│ runtime = 00:00:28
+└ norm(Q) = 2.5842232320000000e+09
+┌ Info: Update
+│ simtime = 6.1204169921875000e+03
+│ runtime = 00:10:28
+└ norm(Q) = 2.5842572800000000e+09
+┌ Info: Update
+│ simtime = 6.1627294921875000e+03
+│ runtime = 00:20:28
+└ norm(Q) = 2.5843023360000000e+09
+┌ Info: Update
+│ simtime = 6.2049736328125000e+03
+│ runtime = 00:30:28
+└ norm(Q) = 2.5843335680000000e+09
+┌ Info: Update
+│ simtime = 6.2472636718750000e+03
+│ runtime = 00:40:28
+└ norm(Q) = 2.5843758080000000e+09
+┌ Info: Update
+│ simtime = 6.2894892578125000e+03
+│ runtime = 00:50:28
+└ norm(Q) = 2.5844011520000000e+09
+┌ Info: Update
+│ simtime = 6.3318056640625000e+03
+│ runtime = 01:00:28
+└ norm(Q) = 2.5844298240000000e+09
+┌ Info: Update
+│ simtime = 6.3740322265625000e+03
+│ runtime = 01:10:28
+└ norm(Q) = 2.5844672000000000e+09
+┌ Info: Update
+│ simtime = 6.4163525390625000e+03
+│ runtime = 01:20:28
+└ norm(Q) = 2.5845027840000000e+09
+┌ Info: Update
+│ simtime = 6.4586757812500000e+03
+│ runtime = 01:30:28
+└ norm(Q) = 2.5845475840000000e+09
+┌ Info: Update
+│ simtime = 6.5008583984375000e+03
+│ runtime = 01:40:28
+└ norm(Q) = 2.5845852160000000e+09
+┌ Info: Update
+│ simtime = 6.5431855468750000e+03
+│ runtime = 01:50:28
+└ norm(Q) = 2.5846289920000000e+09
+┌ Info: Update
+│ simtime = 6.5853789062500000e+03
+│ runtime = 02:00:28
+└ norm(Q) = 2.5846515200000000e+09
+┌ Info: Update
+│ simtime = 6.6277060546875000e+03
+│ runtime = 02:10:28
+└ norm(Q) = 2.5846676480000000e+09
+┌ Info: Update
+│ simtime = 6.6699677734375000e+03
+│ runtime = 02:20:29
+└ norm(Q) = 2.5846853120000000e+09
+┌ Info: Update
+│ simtime = 6.7122294921875000e+03
+│ runtime = 02:30:29
+└ norm(Q) = 2.5846894080000000e+09
+┌ Info: Update
+│ simtime = 6.7544550781250000e+03
+│ runtime = 02:40:29
+└ norm(Q) = 2.5846827520000000e+09
+┌ Info: Update
+│ simtime = 6.7967089843750000e+03
+│ runtime = 02:50:29
+└ norm(Q) = 2.5846945280000000e+09
+┌ Info: Update
+│ simtime = 6.8390361328125000e+03
+│ runtime = 03:00:29
+└ norm(Q) = 2.5847265280000000e+09
+┌ Info: Update
+│ simtime = 6.8812695312500000e+03
+│ runtime = 03:10:29
+└ norm(Q) = 2.5847808000000000e+09
+┌ Info: Update
+│ simtime = 6.9236044921875000e+03
+│ runtime = 03:20:29
+└ norm(Q) = 2.5848404480000000e+09
+┌ Info: Update
+│ simtime = 6.9658066406250000e+03
+│ runtime = 03:30:29
+└ norm(Q) = 2.5848880640000000e+09
+┌ Info: Update
+│ simtime = 7.0080820312500000e+03
+│ runtime = 03:40:29
+└ norm(Q) = 2.5849233920000000e+09
+┌ Info: Update
+│ simtime = 7.0502734375000000e+03
+│ runtime = 03:50:29
+└ norm(Q) = 2.5849459200000000e+09
+┌ Info: Update
+│ simtime = 7.0926123046875000e+03
+│ runtime = 04:00:29
+└ norm(Q) = 2.5849804800000000e+09
+┌ Info: Update
+│ simtime = 7.1348837890625000e+03
+│ runtime = 04:10:29
+└ norm(Q) = 2.5850076160000000e+09
+┌ Info: Update
+│ simtime = 7.1771513671875000e+03
+│ runtime = 04:20:29
+└ norm(Q) = 2.5850350080000000e+09
+┌ Info: Update
+│ simtime = 7.2194218750000000e+03
+│ runtime = 04:30:29
+└ norm(Q) = 2.5850460160000000e+09
+┌ Info: Update
+│ simtime = 7.2616005859375000e+03
+│ runtime = 04:40:29
+└ norm(Q) = 2.5850127360000000e+09
+┌ Info: Update
+│ simtime = 7.3038671875000000e+03
+│ runtime = 04:50:29
+└ norm(Q) = 2.5849912320000000e+09
+┌ Info: Update
+│ simtime = 7.3460507812500000e+03
+│ runtime = 05:00:29
+└ norm(Q) = 2.5849766400000000e+09
+┌ Info: Update
+│ simtime = 7.3883945312500000e+03
+│ runtime = 05:10:29
+└ norm(Q) = 2.5849784320000000e+09
+┌ Info: Update
+│ simtime = 7.4305458984375000e+03
+│ runtime = 05:20:29
+└ norm(Q) = 2.5849743360000000e+09
+┌ Info: Update
+│ simtime = 7.4728222656250000e+03
+│ runtime = 05:30:29
+└ norm(Q) = 2.5849735680000000e+09
+┌ Info: Update
+│ simtime = 7.5150224609375000e+03
+│ runtime = 05:40:29
+└ norm(Q) = 2.5849702400000000e+09
+┌ Info: Update
+│ simtime = 7.5572783203125000e+03
+│ runtime = 05:50:29
+└ norm(Q) = 2.5849518080000000e+09
+┌ Info: Update
+│ simtime = 7.5995576171875000e+03
+│ runtime = 06:00:29
+└ norm(Q) = 2.5849528320000000e+09
+┌ Info: Update
+│ simtime = 7.6416845703125000e+03
+│ runtime = 06:10:29
+└ norm(Q) = 2.5849569280000000e+09
+┌ Info: Update
+│ simtime = 7.6840039062500000e+03
+│ runtime = 06:20:29
+└ norm(Q) = 2.5849886720000000e+09
+┌ Info: Update
+│ simtime = 7.7261308593750000e+03
+│ runtime = 06:30:29
+└ norm(Q) = 2.5850129920000000e+09
+┌ Info: Update
+│ simtime = 7.7684863281250000e+03
+│ runtime = 06:40:29
+└ norm(Q) = 2.5850406400000000e+09
+┌ Info: Update
+│ simtime = 7.8106894531250000e+03
+│ runtime = 06:50:29
+└ norm(Q) = 2.5850524160000000e+09
+┌ Info: Update
+│ simtime = 7.8530429687500000e+03
+│ runtime = 07:00:29
+└ norm(Q) = 2.5850511360000000e+09
+┌ Info: Update
+│ simtime = 7.8953242187500000e+03
+│ runtime = 07:10:29
+└ norm(Q) = 2.5850452480000000e+09
+┌ Info: Update
+│ simtime = 7.9376035156250000e+03
+│ runtime = 07:20:29
+└ norm(Q) = 2.5850352640000000e+09
+┌ Info: Update
+│ simtime = 7.9799423828125000e+03
+│ runtime = 07:30:29
+└ norm(Q) = 2.5850073600000000e+09
+┌ Info: Update
+│ simtime = 8.0221503906250000e+03
+│ runtime = 07:40:29
+└ norm(Q) = 2.5849868800000000e+09
+┌ Info: Update
+│ simtime = 8.0645087890625000e+03
+│ runtime = 07:50:29
+└ norm(Q) = 2.5849868800000000e+09
+┌ Info: Update
+│ simtime = 8.1067187500000000e+03
+│ runtime = 08:00:29
+└ norm(Q) = 2.5850219520000000e+09
+┌ Info: Update
+│ simtime = 8.1489912109375000e+03
+│ runtime = 08:10:29
+└ norm(Q) = 2.5850667520000000e+09
+┌ Info: Update
+│ simtime = 8.1911904296875000e+03
+│ runtime = 08:20:29
+└ norm(Q) = 2.5851230720000000e+09
+┌ Info: Update
+│ simtime = 8.2334941406250000e+03
+│ runtime = 08:30:29
+└ norm(Q) = 2.5851581440000000e+09
+┌ Info: Update
+│ simtime = 8.2757753906250000e+03
+│ runtime = 08:40:29
+└ norm(Q) = 2.5851916800000000e+09
+┌ Info: Update
+│ simtime = 8.3180615234375000e+03
+│ runtime = 08:50:29
+└ norm(Q) = 2.5851978240000000e+09
+┌ Info: Update
+│ simtime = 8.3603789062500000e+03
+│ runtime = 09:00:29
+└ norm(Q) = 2.5851927040000000e+09
+┌ Info: Update
+│ simtime = 8.4026679687500000e+03
+│ runtime = 09:10:29
+└ norm(Q) = 2.5852016640000000e+09
+┌ Info: Update
+│ simtime = 8.4450283203125000e+03
+│ runtime = 09:20:29
+└ norm(Q) = 2.5852203520000000e+09
+┌ Info: Update
+│ simtime = 8.4872460937500000e+03
+│ runtime = 09:30:29
+└ norm(Q) = 2.5852387840000000e+09
+┌ Info: Update
+│ simtime = 8.5296083984375000e+03
+│ runtime = 09:40:29
+└ norm(Q) = 2.5852439040000000e+09
+┌ Info: Update
+│ simtime = 8.5719003906250000e+03
+│ runtime = 09:50:29
+└ norm(Q) = 2.5852577280000000e+09
+┌ Info: Update
+│ simtime = 8.6142675781250000e+03
+│ runtime = 10:00:29
+└ norm(Q) = 2.5852817920000000e+09
+┌ Info: Update
+│ simtime = 8.6566298828125000e+03
+│ runtime = 10:10:29
+└ norm(Q) = 2.5852971520000000e+09
+┌ Info: Update
+│ simtime = 8.6989277343750000e+03
+│ runtime = 10:20:29
+└ norm(Q) = 2.5853253120000000e+09
+┌ Info: Update
+│ simtime = 8.7412919921875000e+03
+│ runtime = 10:30:29
+└ norm(Q) = 2.5853619200000000e+09
+┌ Info: Update
+│ simtime = 8.7835058593750000e+03
+│ runtime = 10:40:29
+└ norm(Q) = 2.5853816320000000e+09
+┌ Info: Update
+│ simtime = 8.8258701171875000e+03
+│ runtime = 10:50:29
+└ norm(Q) = 2.5854054400000000e+09
+┌ Info: Update
+│ simtime = 8.8680820312500000e+03
+│ runtime = 11:00:29
+└ norm(Q) = 2.5854177280000000e+09
+┌ Info: Update
+│ simtime = 8.9104238281250000e+03
+│ runtime = 11:10:29
+└ norm(Q) = 2.5854241280000000e+09
+┌ Info: Update
+│ simtime = 8.9526455078125000e+03
+│ runtime = 11:20:29
+└ norm(Q) = 2.5854195200000000e+09
+┌ Info: Update
+│ simtime = 8.9950117187500000e+03
+│ runtime = 11:30:29
+└ norm(Q) = 2.5854190080000000e+09
+┌ Info: Update
+│ simtime = 9.0373818359375000e+03
+│ runtime = 11:40:29
+└ norm(Q) = 2.5854092800000000e+09
+┌ Info: Update
+│ simtime = 9.0796894531250000e+03
+│ runtime = 11:50:29
+└ norm(Q) = 2.5854149120000000e+09
+┌ Info: Update
+│ simtime = 9.1219921875000000e+03
+│ runtime = 12:00:29
+└ norm(Q) = 2.5854069760000000e+09
+┌ Info: Update
+│ simtime = 9.1641816406250000e+03
+│ runtime = 12:10:29
+└ norm(Q) = 2.5853918720000000e+09
+┌ Info: Update
+│ simtime = 9.2065605468750000e+03
+│ runtime = 12:20:29
+└ norm(Q) = 2.5853864960000000e+09
+┌ Info: Update
+│ simtime = 9.2488525390625000e+03
+│ runtime = 12:30:29
+└ norm(Q) = 2.5853875200000000e+09
+┌ Info: Update
+│ simtime = 9.2912363281250000e+03
+│ runtime = 12:40:29
+└ norm(Q) = 2.5853808640000000e+09
+┌ Info: Update
+│ simtime = 9.3334541015625000e+03
+│ runtime = 12:50:29
+└ norm(Q) = 2.5853665280000000e+09
+┌ Info: Update
+│ simtime = 9.3758330078125000e+03
+│ runtime = 13:00:29
+└ norm(Q) = 2.5853534720000000e+09
+┌ Info: Update
+│ simtime = 9.4181201171875000e+03
+│ runtime = 13:10:29
+└ norm(Q) = 2.5853678080000000e+09
+┌ Info: Update
+│ simtime = 9.4603613281250000e+03
+│ runtime = 13:20:29
+└ norm(Q) = 2.5853862400000000e+09
+┌ Info: Update
+│ simtime = 9.5027333984375000e+03
+│ runtime = 13:30:29
+└ norm(Q) = 2.5854039040000000e+09
+┌ Info: Update
+│ simtime = 9.5449677734375000e+03
+│ runtime = 13:40:29
+└ norm(Q) = 2.5854187520000000e+09
+┌ Info: Update
+│ simtime = 9.5873486328125000e+03
+│ runtime = 13:50:29
+└ norm(Q) = 2.5854351360000000e+09
+┌ Info: Update
+│ simtime = 9.6296494140625000e+03
+│ runtime = 14:00:29
+└ norm(Q) = 2.5854566400000000e+09
+┌ Info: Update
+│ simtime = 9.6720302734375000e+03
+│ runtime = 14:10:29
+└ norm(Q) = 2.5854653440000000e+09
+┌ Info: Update
+│ simtime = 9.7142636718750000e+03
+│ runtime = 14:20:29
+└ norm(Q) = 2.5854589440000000e+09
+┌ Info: Update
+│ simtime = 9.7566318359375000e+03
+│ runtime = 14:30:29
+└ norm(Q) = 2.5854451200000000e+09
+┌ Info: Update
+│ simtime = 9.7989394531250000e+03
+│ runtime = 14:40:29
+└ norm(Q) = 2.5854202880000000e+09
+┌ Info: Update
+│ simtime = 9.8411015625000000e+03
+│ runtime = 14:50:29
+└ norm(Q) = 2.5854200320000000e+09
+┌ Info: Update
+│ simtime = 9.8834003906250000e+03
+│ runtime = 15:00:29
+└ norm(Q) = 2.5854371840000000e+09
+┌ Info: Update
+│ simtime = 9.9256044921875000e+03
+│ runtime = 15:10:29
+└ norm(Q) = 2.5854686720000000e+09
+┌ Info: Update
+│ simtime = 9.9678984375000000e+03
+│ runtime = 15:20:29
+└ norm(Q) = 2.5854965760000000e+09
+┌ Info: Update
+│ simtime = 1.0010140625000000e+04
+│ runtime = 15:30:29
+└ norm(Q) = 2.5855278080000000e+09
+┌ Info: Update
+│ simtime = 1.0052533203125000e+04
+│ runtime = 15:40:29
+└ norm(Q) = 2.5855424000000000e+09
+┌ Info: Update
+│ simtime = 1.0094843750000000e+04
+│ runtime = 15:50:29
+└ norm(Q) = 2.5855475200000000e+09
+┌ Info: Update
+│ simtime = 1.0137158203125000e+04
+│ runtime = 16:00:29
+└ norm(Q) = 2.5855516160000000e+09
+┌ Info: Update
+│ simtime = 1.0179549804687500e+04
+│ runtime = 16:10:29
+└ norm(Q) = 2.5855349760000000e+09
+┌ Info: Update
+│ simtime = 1.0221776367187500e+04
+│ runtime = 16:20:29
+└ norm(Q) = 2.5855372800000000e+09
+┌ Info: Update
+│ simtime = 1.0264159179687500e+04
+│ runtime = 16:30:29
+└ norm(Q) = 2.5855375360000000e+09
+┌ Info: Update
+│ simtime = 1.0306405273437500e+04
+│ runtime = 16:40:29
+└ norm(Q) = 2.5855354880000000e+09
+┌ Info: Update
+│ simtime = 1.0348796875000000e+04
+│ runtime = 16:50:29
+└ norm(Q) = 2.5855150080000000e+09
+┌ Info: Update
+│ simtime = 1.0391083007812500e+04
+│ runtime = 17:00:29
+└ norm(Q) = 2.5855052800000000e+09
+┌ Info: Update
+│ simtime = 1.0433396484375000e+04
+│ runtime = 17:10:29
+└ norm(Q) = 2.5854978560000000e+09
+┌ Info: Update
+│ simtime = 1.0475556640625000e+04
+│ runtime = 17:20:29
+└ norm(Q) = 2.5854929920000000e+09
+┌ Info: Update
+│ simtime = 1.0517953125000000e+04
+│ runtime = 17:30:29
+└ norm(Q) = 2.5854835200000000e+09
+┌ Info: Update
+│ simtime = 1.0560338867187500e+04
+│ runtime = 17:40:29
+└ norm(Q) = 2.5854656000000000e+09
+┌ Info: Update
+│ simtime = 1.0602658203125000e+04
+│ runtime = 17:50:29
+└ norm(Q) = 2.5854586880000000e+09
+┌ Info: Update
+│ simtime = 1.0645061523437500e+04
+│ runtime = 18:00:29
+└ norm(Q) = 2.5854791680000000e+09
+┌ Info: Update
+│ simtime = 1.0687397460937500e+04
+│ runtime = 18:10:29
+└ norm(Q) = 2.5854883840000000e+09
+┌ Info: Update
+│ simtime = 1.0729799804687500e+04
+│ runtime = 18:20:29
+└ norm(Q) = 2.5854794240000000e+09
+┌ Info: Update
+│ simtime = 1.0772134765625000e+04
+│ runtime = 18:30:29
+└ norm(Q) = 2.5854648320000000e+09
+┌ Info: Update
+│ simtime = 1.0814535156250000e+04
+│ runtime = 18:40:29
+└ norm(Q) = 2.5854615040000000e+09
+┌ Info: Update
+│ simtime = 1.0856540039062500e+04
+│ runtime = 18:50:29
+└ norm(Q) = 2.5854666240000000e+09
+┌ Info: Update
+│ simtime = 1.0898934570312500e+04
+│ runtime = 19:00:29
+└ norm(Q) = 2.5854691840000000e+09
+┌ Info: Update
+│ simtime = 1.0941336914062500e+04
+│ runtime = 19:10:29
+└ norm(Q) = 2.5854776320000000e+09
+┌ Info: Update
+│ simtime = 1.0983650390625000e+04
+│ runtime = 19:20:29
+└ norm(Q) = 2.5854947840000000e+09
+┌ Info: Update
+│ simtime = 1.1026024414062500e+04
+│ runtime = 19:30:29
+└ norm(Q) = 2.5855080960000000e+09
+┌ Info: Update
+│ simtime = 1.1068233398437500e+04
+│ runtime = 19:40:29
+└ norm(Q) = 2.5855147520000000e+09
+┌ Info: Update
+│ simtime = 1.1110640625000000e+04
+│ runtime = 19:50:29
+└ norm(Q) = 2.5855109120000000e+09
+┌ Info: Update
+│ simtime = 1.1152964843750000e+04
+│ runtime = 20:00:29
+└ norm(Q) = 2.5854891520000000e+09
+┌ Info: Update
+│ simtime = 1.1195370117187500e+04
+│ runtime = 20:10:29
+└ norm(Q) = 2.5854566400000000e+09
+┌ Info: Update
+│ simtime = 1.1237686523437500e+04
+│ runtime = 20:20:29
+└ norm(Q) = 2.5854423040000000e+09
+┌ Info: Update
+│ simtime = 1.1280021484375000e+04
+│ runtime = 20:30:29
+└ norm(Q) = 2.5854438400000000e+09
+┌ Info: Update
+│ simtime = 1.1322379882812500e+04
+│ runtime = 20:40:29
+└ norm(Q) = 2.5854471680000000e+09
+┌ Info: Update
+│ simtime = 1.1364686523437500e+04
+│ runtime = 20:50:29
+└ norm(Q) = 2.5854538240000000e+09
+┌ Info: Update
+│ simtime = 1.1407094726562500e+04
+│ runtime = 21:00:29
+└ norm(Q) = 2.5854699520000000e+09
+┌ Info: Update
+│ simtime = 1.1449376953125000e+04
+│ runtime = 21:10:29
+└ norm(Q) = 2.5854753280000000e+09
+┌ Info: Update
+│ simtime = 1.1491786132812500e+04
+│ runtime = 21:20:29
+└ norm(Q) = 2.5854832640000000e+09
+┌ Info: Update
+│ simtime = 1.1533985351562500e+04
+│ runtime = 21:30:29
+└ norm(Q) = 2.5854896640000000e+09
+┌ Info: Update
+│ simtime = 1.1576393554687500e+04
+│ runtime = 21:40:29
+└ norm(Q) = 2.5854886400000000e+09
+┌ Info: Update
+│ simtime = 1.1618664062500000e+04
+│ runtime = 21:50:29
+└ norm(Q) = 2.5854809600000000e+09
+┌ Info: Update
+│ simtime = 1.1661003906250000e+04
+│ runtime = 22:00:29
+└ norm(Q) = 2.5854776320000000e+09
+┌ Info: Update
+│ simtime = 1.1703415039062500e+04
+│ runtime = 22:10:29
+└ norm(Q) = 2.5854837760000000e+09
+┌ Info: Update
+│ simtime = 1.1745683593750000e+04
+│ runtime = 22:20:29
+└ norm(Q) = 2.5854819840000000e+09
+┌ Info: Update
+│ simtime = 1.1788096679687500e+04
+│ runtime = 22:30:29
+└ norm(Q) = 2.5854832640000000e+09
+┌ Info: Update
+│ simtime = 1.1830441406250000e+04
+│ runtime = 22:40:29
+└ norm(Q) = 2.5854871040000000e+09
+┌ Info: Update
+│ simtime = 1.1872851562500000e+04
+│ runtime = 22:50:29
+└ norm(Q) = 2.5854912000000000e+09
+┌ Info: Update
+│ simtime = 1.1915195312500000e+04
+│ runtime = 23:00:29
+└ norm(Q) = 2.5854906880000000e+09
+┌ Info: Update
+│ simtime = 1.1957604492187500e+04
+│ runtime = 23:10:29
+└ norm(Q) = 2.5854922240000000e+09
+┌ Info: Update
+│ simtime = 1.1999944335937500e+04
+│ runtime = 23:20:29
+└ norm(Q) = 2.5854799360000000e+09
+┌ Info: Update
+│ simtime = 1.2042310546875000e+04
+│ runtime = 23:30:29
+└ norm(Q) = 2.5854696960000000e+09
+┌ Info: Update
+│ simtime = 1.2084722656250000e+04
+│ runtime = 23:40:29
+└ norm(Q) = 2.5854668800000000e+09
+┌ Info: Update
+│ simtime = 1.2127070312500000e+04
+│ runtime = 23:50:29
+└ norm(Q) = 2.5854696960000000e+09
+┌ Info: Update
+│ simtime = 1.2169483398437500e+04
+│ runtime = 00:00:29
+└ norm(Q) = 2.5854648320000000e+09
+┌ Info: Update
+│ simtime = 1.2211827148437500e+04
+│ runtime = 00:10:29
+└ norm(Q) = 2.5854615040000000e+09
+┌ Info: Update
+│ simtime = 1.2254239257812500e+04
+│ runtime = 00:20:29
+└ norm(Q) = 2.5854622720000000e+09
+┌ Info: Update
+│ simtime = 1.2296586914062500e+04
+│ runtime = 00:30:30
+└ norm(Q) = 2.5854707200000000e+09
+┌ Info: Update
+│ simtime = 1.2338998046875000e+04
+│ runtime = 00:40:30
+└ norm(Q) = 2.5854830080000000e+09
+┌ Info: Update
+│ simtime = 1.2381250000000000e+04
+│ runtime = 00:50:30
+└ norm(Q) = 2.5855137280000000e+09
+┌ Info: Update
+│ simtime = 1.2423664062500000e+04
+│ runtime = 01:00:30
+└ norm(Q) = 2.5855388160000000e+09
+┌ Info: Update
+│ simtime = 1.2466008789062500e+04
+│ runtime = 01:10:30
+└ norm(Q) = 2.5855631360000000e+09
+┌ Info: Update
+│ simtime = 1.2508409179687500e+04
+│ runtime = 01:20:30
+└ norm(Q) = 2.5855805440000000e+09
+┌ Info: Update
+│ simtime = 1.2550824218750000e+04
+│ runtime = 01:30:30
+└ norm(Q) = 2.5855738880000000e+09
+┌ Info: Update
+│ simtime = 1.2593086914062500e+04
+│ runtime = 01:40:30
+└ norm(Q) = 2.5855613440000000e+09
+┌ Info: Update
+│ simtime = 1.2635500000000000e+04
+│ runtime = 01:50:30
+└ norm(Q) = 2.5855344640000000e+09
+┌ Info: Update
+│ simtime = 1.2677842773437500e+04
+│ runtime = 02:00:30
+└ norm(Q) = 2.5855206400000000e+09
+┌ Info: Update
+│ simtime = 1.2720264648437500e+04
+│ runtime = 02:10:30
+└ norm(Q) = 2.5855119360000000e+09
+┌ Info: Update
+│ simtime = 1.2762605468750000e+04
+│ runtime = 02:20:30
+└ norm(Q) = 2.5855144960000000e+09
+┌ Info: Update
+│ simtime = 1.2805026367187500e+04
+│ runtime = 02:30:30
+└ norm(Q) = 2.5855249920000000e+09
+┌ Info: Update
+│ simtime = 1.2847371093750000e+04
+│ runtime = 02:40:30
+└ norm(Q) = 2.5855078400000000e+09
+┌ Info: Update
+│ simtime = 1.2889783203125000e+04
+│ runtime = 02:50:30
+└ norm(Q) = 2.5854873600000000e+09
+┌ Info: Update
+│ simtime = 1.2932202148437500e+04
+│ runtime = 03:00:30
+└ norm(Q) = 2.5854484480000000e+09
+┌ Info: Update
+│ simtime = 1.2974558593750000e+04
+│ runtime = 03:10:30
+└ norm(Q) = 2.5854144000000000e+09
+┌ Info: Update
+│ simtime = 1.3016983398437500e+04
+│ runtime = 03:20:30
+└ norm(Q) = 2.5854000640000000e+09
+┌ Info: Update
+│ simtime = 1.3059347656250000e+04
+│ runtime = 03:30:30
+└ norm(Q) = 2.5853811200000000e+09
+┌ Info: Update
+│ simtime = 1.3101776367187500e+04
+│ runtime = 03:40:30
+└ norm(Q) = 2.5853501440000000e+09
+┌ Info: Update
+│ simtime = 1.3144139648437500e+04
+│ runtime = 03:50:30
+└ norm(Q) = 2.5853286400000000e+09
+┌ Info: Update
+│ simtime = 1.3186566406250000e+04
+│ runtime = 04:00:30
+└ norm(Q) = 2.5853122560000000e+09
+┌ Info: Update
+│ simtime = 1.3228921875000000e+04
+│ runtime = 04:10:30
+└ norm(Q) = 2.5852925440000000e+09
+┌ Info: Update
+│ simtime = 1.3271346679687500e+04
+│ runtime = 04:20:30
+└ norm(Q) = 2.5852682240000000e+09
+┌ Info: Update
+│ simtime = 1.3313770507812500e+04
+│ runtime = 04:30:30
+└ norm(Q) = 2.5852428800000000e+09
+┌ Info: Update
+│ simtime = 1.3356125000000000e+04
+│ runtime = 04:40:30
+└ norm(Q) = 2.5852316160000000e+09
+┌ Info: Update
+│ simtime = 1.3398548828125000e+04
+│ runtime = 04:50:30
+└ norm(Q) = 2.5852193280000000e+09
+┌ Info: Update
+│ simtime = 1.3440905273437500e+04
+│ runtime = 05:00:30
+└ norm(Q) = 2.5852062720000000e+09
+┌ Info: Update
+│ simtime = 1.3483328125000000e+04
+│ runtime = 05:10:30
+└ norm(Q) = 2.5851873280000000e+09
+┌ Info: Update
+│ simtime = 1.3525679687500000e+04
+│ runtime = 05:20:30
+└ norm(Q) = 2.5851686400000000e+09
+┌ Info: Update
+│ simtime = 1.3568104492187500e+04
+│ runtime = 05:30:30
+└ norm(Q) = 2.5851650560000000e+09
+┌ Info: Update
+│ simtime = 1.3610464843750000e+04
+│ runtime = 05:40:30
+└ norm(Q) = 2.5851532800000000e+09
+┌ Info: Update
+│ simtime = 1.3652893554687500e+04
+│ runtime = 05:50:30
+└ norm(Q) = 2.5851489280000000e+09
+┌ Info: Update
+│ simtime = 1.3695320312500000e+04
+│ runtime = 06:00:30
+└ norm(Q) = 2.5851381760000000e+09
+┌ Info: Update
+│ simtime = 1.3737680664062500e+04
+│ runtime = 06:10:30
+└ norm(Q) = 2.5851361280000000e+09
+┌ Info: Update
+│ simtime = 1.3780098632812500e+04
+│ runtime = 06:20:30
+└ norm(Q) = 2.5851407360000000e+09
+┌ Info: Update
+│ simtime = 1.3822461914062500e+04
+│ runtime = 06:30:30
+└ norm(Q) = 2.5851438080000000e+09
+┌ Info: Update
+│ simtime = 1.3864888671875000e+04
+│ runtime = 06:40:30
+└ norm(Q) = 2.5851353600000000e+09
+┌ Info: Update
+│ simtime = 1.3907253906250000e+04
+│ runtime = 06:50:30
+└ norm(Q) = 2.5851312640000000e+09
+┌ Info: Update
+│ simtime = 1.3949682617187500e+04
+│ runtime = 07:00:30
+└ norm(Q) = 2.5851225600000000e+09
+┌ Info: Update
+│ simtime = 1.3992049804687500e+04
+│ runtime = 07:10:30
+└ norm(Q) = 2.5851079680000000e+09
+┌ Info: Update
+│ simtime = 1.4034479492187500e+04
+│ runtime = 07:20:30
+└ norm(Q) = 2.5850944000000000e+09
+┌ Info: Update
+│ simtime = 1.4076910156250000e+04
+│ runtime = 07:30:30
+└ norm(Q) = 2.5850951680000000e+09
+┌ Info: Update
+│ simtime = 1.4119272460937500e+04
+│ runtime = 07:40:30
+└ norm(Q) = 2.5850890240000000e+09
+┌ Info: Update
+│ simtime = 1.4161705078125000e+04
+│ runtime = 07:50:30
+└ norm(Q) = 2.5850849280000000e+09
+┌ Info: Update
+│ simtime = 1.4204075195312500e+04
+│ runtime = 08:00:30
+└ norm(Q) = 2.5850695680000000e+09
+┌ Info: Update
+│ simtime = 1.4246506835937500e+04
+│ runtime = 08:10:30
+└ norm(Q) = 2.5850754560000000e+09
+┌ Info: Update
+│ simtime = 1.4288878906250000e+04
+│ runtime = 08:20:30
+└ norm(Q) = 2.5851143680000000e+09
+┌ Info: Update
+│ simtime = 1.4331314453125000e+04
+│ runtime = 08:30:30
+└ norm(Q) = 2.5851645440000000e+09
+┌ Info: Update
+│ simtime = 1.4373686523437500e+04
+│ runtime = 08:40:30
+└ norm(Q) = 2.5851770880000000e+09
+┌ Info: Update
+│ simtime = 1.4416124023437500e+04
+│ runtime = 08:50:30
+└ norm(Q) = 2.5851724800000000e+09
+┌ Info: Update
+│ simtime = 1.4458493164062500e+04
+│ runtime = 09:00:30
+└ norm(Q) = 2.5851558400000000e+09
+┌ Info: Update
+│ simtime = 1.4500921875000000e+04
+│ runtime = 09:10:30
+└ norm(Q) = 2.5851376640000000e+09
+┌ Info: Update
+│ simtime = 1.4543352539062500e+04
+│ runtime = 09:20:30
+└ norm(Q) = 2.5851036160000000e+09
+┌ Info: Update
+│ simtime = 1.4585718750000000e+04
+│ runtime = 09:30:30
+└ norm(Q) = 2.5850726400000000e+09
+┌ Info: Update
+│ simtime = 1.4628150390625000e+04
+│ runtime = 09:40:30
+└ norm(Q) = 2.5850664960000000e+09
+┌ Info: Update
+│ simtime = 1.4670518554687500e+04
+│ runtime = 09:50:30
+└ norm(Q) = 2.5850900480000000e+09
+┌ Info: Update
+│ simtime = 1.4712956054687500e+04
+│ runtime = 10:00:30
+└ norm(Q) = 2.5851038720000000e+09
+┌ Info: Update
+│ simtime = 1.4755325195312500e+04
+│ runtime = 10:10:30
+└ norm(Q) = 2.5851041280000000e+09
+┌ Info: Update
+│ simtime = 1.4797770507812500e+04
+│ runtime = 10:20:30
+└ norm(Q) = 2.5850949120000000e+09
+┌ Info: Update
+│ simtime = 1.4840139648437500e+04
+│ runtime = 10:30:30
+└ norm(Q) = 2.5850905600000000e+09
+┌ Info: Update
+│ simtime = 1.4882581054687500e+04
+│ runtime = 10:40:30
+└ norm(Q) = 2.5850951680000000e+09
+┌ Info: Update
+│ simtime = 1.4925023437500000e+04
+│ runtime = 10:50:30
+└ norm(Q) = 2.5850841600000000e+09
+┌ Info: Update
+│ simtime = 1.4967397460937500e+04
+│ runtime = 11:00:30
+└ norm(Q) = 2.5850695680000000e+09
+┌ Info: Update
+│ simtime = 1.5009840820312500e+04
+│ runtime = 11:10:30
+└ norm(Q) = 2.5850483200000000e+09
+┌ Info: Update
+│ simtime = 1.5052215820312500e+04
+│ runtime = 11:20:30
+└ norm(Q) = 2.5850206720000000e+09
+┌ Info: Update
+│ simtime = 1.5094661132812500e+04
+│ runtime = 11:30:30
+└ norm(Q) = 2.5850045440000000e+09
+┌ Info: Update
+│ simtime = 1.5137035156250000e+04
+│ runtime = 11:40:30
+└ norm(Q) = 2.5849858560000000e+09
+┌ Info: Update
+│ simtime = 1.5179478515625000e+04
+│ runtime = 11:50:30
+└ norm(Q) = 2.5849635840000000e+09
+┌ Info: Update
+│ simtime = 1.5221840820312500e+04
+│ runtime = 12:00:30
+└ norm(Q) = 2.5849515520000000e+09
+┌ Info: Update
+│ simtime = 1.5264283203125000e+04
+│ runtime = 12:10:30
+└ norm(Q) = 2.5849564160000000e+09
+┌ Info: Update
+│ simtime = 1.5306727539062500e+04
+│ runtime = 12:20:30
+└ norm(Q) = 2.5849543680000000e+09
+┌ Info: Update
+│ simtime = 1.5349097656250000e+04
+│ runtime = 12:30:30
+└ norm(Q) = 2.5849502720000000e+09
+┌ Info: Update
+│ simtime = 1.5391546875000000e+04
+│ runtime = 12:40:30
+└ norm(Q) = 2.5849474560000000e+09
+┌ Info: Update
+│ simtime = 1.5433920898437500e+04
+│ runtime = 12:50:30
+└ norm(Q) = 2.5849382400000000e+09
+┌ Info: Update
+│ simtime = 1.5476366210937500e+04
+│ runtime = 13:00:30
+└ norm(Q) = 2.5849341440000000e+09
+┌ Info: Update
+│ simtime = 1.5518743164062500e+04
+│ runtime = 13:10:30
+└ norm(Q) = 2.5849410560000000e+09
+┌ Info: Update
+│ simtime = 1.5561193359375000e+04
+│ runtime = 13:20:30
+└ norm(Q) = 2.5849492480000000e+09
+┌ Info: Update
+│ simtime = 1.5603575195312500e+04
+│ runtime = 13:30:30
+└ norm(Q) = 2.5849479680000000e+09
+┌ Info: Update
+│ simtime = 1.5646029296875000e+04
+│ runtime = 13:40:30
+└ norm(Q) = 2.5849469440000000e+09
+┌ Info: Update
+│ simtime = 1.5688408203125000e+04
+│ runtime = 13:50:30
+└ norm(Q) = 2.5849505280000000e+09
+┌ Info: Update
+│ simtime = 1.5730875976562500e+04
+│ runtime = 14:00:30
+└ norm(Q) = 2.5849374720000000e+09
+┌ Info: Update
+│ simtime = 1.5773331054687500e+04
+│ runtime = 14:10:30
+└ norm(Q) = 2.5849300480000000e+09
+┌ Info: Update
+│ simtime = 1.5815716796875000e+04
+│ runtime = 14:20:30
+└ norm(Q) = 2.5849331200000000e+09
+┌ Info: Update
+│ simtime = 1.5858173828125000e+04
+│ runtime = 14:30:30
+└ norm(Q) = 2.5849323520000000e+09
+┌ Info: Update
+│ simtime = 1.5900561523437500e+04
+│ runtime = 14:40:30
+└ norm(Q) = 2.5849152000000000e+09
+┌ Info: Update
+│ simtime = 1.5943017578125000e+04
+│ runtime = 14:50:30
+└ norm(Q) = 2.5849018880000000e+09
+┌ Info: Update
+│ simtime = 1.5985404296875000e+04
+│ runtime = 15:00:30
+└ norm(Q) = 2.5848967680000000e+09
+┌ Info: Update
+│ simtime = 1.6027860351562500e+04
+│ runtime = 15:10:30
+└ norm(Q) = 2.5849062400000000e+09
+┌ Info: Update
+│ simtime = 1.6070245117187500e+04
+│ runtime = 15:20:30
+└ norm(Q) = 2.5849249280000000e+09
+┌ Info: Update
+│ simtime = 1.6112694335937500e+04
+│ runtime = 15:30:30
+└ norm(Q) = 2.5849254400000000e+09
+┌ Info: Update
+│ simtime = 1.6155158203125000e+04
+│ runtime = 15:40:30
+└ norm(Q) = 2.5849287680000000e+09
+┌ Info: Update
+│ simtime = 1.6197551757812500e+04
+│ runtime = 15:50:30
+└ norm(Q) = 2.5849239040000000e+09
+┌ Info: Update
+│ simtime = 1.6240014648437500e+04
+│ runtime = 16:00:30
+└ norm(Q) = 2.5849059840000000e+09
+┌ Info: Update
+│ simtime = 1.6282409179687500e+04
+│ runtime = 16:10:30
+└ norm(Q) = 2.5848814080000000e+09
+┌ Info: Update
+│ simtime = 1.6324869140625000e+04
+│ runtime = 16:20:30
+└ norm(Q) = 2.5848665600000000e+09
+┌ Info: Update
+│ simtime = 1.6367259765625000e+04
+│ runtime = 16:30:30
+└ norm(Q) = 2.5848558080000000e+09
+┌ Info: Update
+│ simtime = 1.6435447265625000e+04
+│ runtime = 16:40:30
+└ norm(Q) = 2.5848440320000000e+09
+┌ Info: Update
+│ simtime = 1.6520214843750000e+04
+│ runtime = 16:50:30
+└ norm(Q) = 2.5848238080000000e+09
+┌ Info: Update
+│ simtime = 1.6605144531250000e+04
+│ runtime = 17:00:31
+└ norm(Q) = 2.5847895040000000e+09
+┌ Info: Update
+│ simtime = 1.6690076171875000e+04
+│ runtime = 17:10:31
+└ norm(Q) = 2.5847608320000000e+09
+┌ Info: Update
+│ simtime = 1.6774863281250000e+04
+│ runtime = 17:20:31
+└ norm(Q) = 2.5847549440000000e+09
+┌ Info: Update
+│ simtime = 1.6859791015625000e+04
+│ runtime = 17:30:31
+└ norm(Q) = 2.5847531520000000e+09
+┌ Info: Update
+│ simtime = 1.6944576171875000e+04
+│ runtime = 17:40:31
+└ norm(Q) = 2.5847426560000000e+09
+┌ Info: Update
+│ simtime = 1.7029500000000000e+04
+│ runtime = 17:50:31
+└ norm(Q) = 2.5847393280000000e+09
+┌ Info: Update
+│ simtime = 1.7114281250000000e+04
+│ runtime = 18:00:31
+└ norm(Q) = 2.5847403520000000e+09
+┌ Info: Update
+│ simtime = 1.7199210937500000e+04
+│ runtime = 18:10:31
+└ norm(Q) = 2.5847562240000000e+09
+┌ Info: Update
+│ simtime = 1.7283992187500000e+04
+│ runtime = 18:20:31
+└ norm(Q) = 2.5847841280000000e+09
+┌ Info: Update
+│ simtime = 1.7368912109375000e+04
+│ runtime = 18:30:31
+└ norm(Q) = 2.5847969280000000e+09
+┌ Info: Update
+│ simtime = 1.7453753906250000e+04
+│ runtime = 18:40:31
+└ norm(Q) = 2.5847966720000000e+09
+┌ Info: Update
+│ simtime = 1.7538724609375000e+04
+│ runtime = 18:50:31
+└ norm(Q) = 2.5847994880000000e+09
+┌ Info: Update
+│ simtime = 1.7623662109375000e+04
+│ runtime = 19:00:31
+└ norm(Q) = 2.5848058880000000e+09
+┌ Info: Update
+│ simtime = 1.7708460937500000e+04
+│ runtime = 19:10:31
+└ norm(Q) = 2.5848081920000000e+09
+┌ Info: Update
+│ simtime = 1.7793402343750000e+04
+│ runtime = 19:20:31
+└ norm(Q) = 2.5847997440000000e+09
+┌ Info: Update
+│ simtime = 1.7878232421875000e+04
+│ runtime = 19:30:31
+└ norm(Q) = 2.5847764480000000e+09
+┌ Info: Update
+│ simtime = 1.7963201171875000e+04
+│ runtime = 19:40:31
+└ norm(Q) = 2.5847403520000000e+09
+┌ Info: Update
+│ simtime = 1.8048046875000000e+04
+│ runtime = 19:50:31
+└ norm(Q) = 2.5847219200000000e+09
+┌ Info: Update
+│ simtime = 1.8133015625000000e+04
+│ runtime = 20:00:31
+└ norm(Q) = 2.5846901760000000e+09
+┌ Info: Update
+│ simtime = 1.8217861328125000e+04
+│ runtime = 20:10:31
+└ norm(Q) = 2.5846622720000000e+09
+┌ Info: Update
+│ simtime = 1.8302826171875000e+04
+│ runtime = 20:20:31
+└ norm(Q) = 2.5846215680000000e+09
+┌ Info: Update
+│ simtime = 1.8387785156250000e+04
+│ runtime = 20:30:31
+└ norm(Q) = 2.5846016000000000e+09
+┌ Info: Update
+│ simtime = 1.8472613281250000e+04
+│ runtime = 20:40:31
+└ norm(Q) = 2.5845783040000000e+09
+┌ Info: Update
+│ simtime = 1.8557558593750000e+04
+│ runtime = 20:50:31
+└ norm(Q) = 2.5845544960000000e+09
+┌ Info: Update
+│ simtime = 1.8642398437500000e+04
+│ runtime = 21:00:31
+└ norm(Q) = 2.5845376000000000e+09
+┌ Info: Update
+│ simtime = 1.8727363281250000e+04
+│ runtime = 21:10:31
+└ norm(Q) = 2.5845268480000000e+09
+┌ Info: Update
+│ simtime = 1.8812197265625000e+04
+│ runtime = 21:20:31
+└ norm(Q) = 2.5845063680000000e+09
+┌ Info: Update
+│ simtime = 1.8897162109375000e+04
+│ runtime = 21:30:31
+└ norm(Q) = 2.5844843520000000e+09
+┌ Info: Update
+│ simtime = 1.8982007812500000e+04
+│ runtime = 21:40:31
+└ norm(Q) = 2.5844513280000000e+09
+┌ Info: Update
+│ simtime = 1.9066976562500000e+04
+│ runtime = 21:50:31
+└ norm(Q) = 2.5844247040000000e+09
+┌ Info: Update
+│ simtime = 1.9151947265625000e+04
+│ runtime = 22:00:31
+└ norm(Q) = 2.5843934720000000e+09
+┌ Info: Update
+│ simtime = 1.9236779296875000e+04
+│ runtime = 22:10:31
+└ norm(Q) = 2.5843438080000000e+09
+┌ Info: Update
+│ simtime = 1.9321746093750000e+04
+│ runtime = 22:20:31
+└ norm(Q) = 2.5842826240000000e+09
+┌ Info: Update
+│ simtime = 1.9406583984375000e+04
+│ runtime = 22:30:31
+└ norm(Q) = 2.5842449920000000e+09
+┌ Info: Update
+│ simtime = 1.9491541015625000e+04
+│ runtime = 22:40:31
+└ norm(Q) = 2.5842275840000000e+09
+┌ Info: Update
+│ simtime = 1.9576357421875000e+04
+│ runtime = 22:50:31
+└ norm(Q) = 2.5842247680000000e+09
+┌ Info: Update
+│ simtime = 1.9661312500000000e+04
+│ runtime = 23:00:31
+└ norm(Q) = 2.5842334720000000e+09
+┌ Info: Update
+│ simtime = 1.9746146484375000e+04
+│ runtime = 23:10:31
+└ norm(Q) = 2.5842608640000000e+09
+┌ Info: Update
+│ simtime = 1.9831113281250000e+04
+│ runtime = 23:20:31
+└ norm(Q) = 2.5842549760000000e+09
+┌ Info: Update
+│ simtime = 1.9915947265625000e+04
+│ runtime = 23:30:31
+└ norm(Q) = 2.5842334720000000e+09
+┌ Info: Update
+│ simtime = 2.0000888671875000e+04
+│ runtime = 23:40:31
+└ norm(Q) = 2.5842073600000000e+09
+┌ Info: Update
+│ simtime = 2.0085851562500000e+04
+│ runtime = 23:50:31
+└ norm(Q) = 2.5841976320000000e+09
+slurmstepd: error: *** JOB 7237232 ON hpc-25-14 CANCELLED AT 2019-09-27T13:13:18 DUE TO TIME LIMIT ***

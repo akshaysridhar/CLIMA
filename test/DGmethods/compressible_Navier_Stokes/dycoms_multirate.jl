@@ -61,21 +61,21 @@ function main()
         SHF    = FT(-15)
         C_drag = FT(0.0011)
         # User defined domain parameters
-        brickrange = (grid1d(0, 2000, elemsize=FT(50)*polynomialorder),
-                      grid1d(0, 2000, elemsize=FT(50)*polynomialorder),
-                      grid1d(0, 1500, elemsize=FT(20)*polynomialorder))
+        Δx, Δy, Δz = 50, 50, 10
+        brickrange = (grid1d(0, 2000, elemsize=FT(Δx)*polynomialorder),
+                      grid1d(0, 2000, elemsize=FT(Δy)*polynomialorder),
+                      grid1d(0, 1500, elemsize=FT(Δz)*polynomialorder))
         zmax = brickrange[3][end]
         zsponge = FT(0.75 * zmax)
         topl = StackedBrickTopology(mpicomm, brickrange,
                                     periodicity = (true, true, false),
                                     boundary=((0,0),(0,0),(1,2)))
-        dt = FT(0.1)
         timeend = FT(14400)
         dim = 3
         LinearType = AtmosAcousticGravityLinearModel
         @info (ArrayType, FT, dim)
         result = run(mpicomm, ArrayType, LinearType, dim, topl, 
-                     polynomialorder, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, FastMethod)
+                     polynomialorder, timeend, FT, C_smag, LHF, SHF, C_drag, zmax, zsponge, FastMethod)
       end
     end
   end
@@ -140,7 +140,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
 end
 
 function run(mpicomm, ArrayType, LinearType, dim, topl, 
-             polynomialorder, timeend, FT, dt, C_smag, LHF, SHF, C_drag, zmax, zsponge, FastMethod)
+             polynomialorder, timeend, FT, C_smag, LHF, SHF, C_drag, zmax, zsponge, FastMethod)
   
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = FT,
@@ -149,6 +149,7 @@ function run(mpicomm, ArrayType, LinearType, dim, topl,
   
   model = AtmosModel(FlatOrientation(),
                      DYCOMSRefState(),
+                     #SmagorinskyLilly{FT}(C_smag),
                      SmagorinskyLilly{FT}(C_smag),
                      EquilMoist(),
                      StevensRadiation{FT}(85, 1, 840, 1.22, 3.75e-6, 70, 22),
@@ -158,9 +159,9 @@ function run(mpicomm, ArrayType, LinearType, dim, topl,
                       GeostrophicForcing{FT}(7.62e-5, 7, -5.5)), 
                      DYCOMS_BC{FT}(C_drag, LHF, SHF),
                      Initialise_DYCOMS!)
-  
+
   # The linear model has the fast time scales
-  fast_model = AtmosAcousticLinearModel(model)
+  fast_model = AtmosAcousticGravityLinearModel(model)
   # The nonlinear model has the slow time scales
   slow_model = RemainderModel(model, fast_model)
 
@@ -173,8 +174,9 @@ function run(mpicomm, ArrayType, LinearType, dim, topl,
                     auxstate=dg.auxstate)
 
   # determine the slow time step
-  fast_dt = 0.02
-  slow_dt = fast_dt * 6
+  
+  fast_dt = 40 / 330 / 16
+  slow_dt = fast_dt * 5
 
   # arbitrary and not needed for stabilty, just for testing
   Q = init_ode_state(dg, FT(0))

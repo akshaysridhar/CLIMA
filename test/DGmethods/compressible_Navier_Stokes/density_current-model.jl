@@ -46,7 +46,7 @@ const (zmin, zmax)      = (0,6400)
 const Ne                = (100,2,50)
 const polynomialorder   = 4
 const dt                = 0.01
-const timeend           = 10dt
+const timeend           = 1000
 
 # ------------- Initial condition function ----------- # 
 """
@@ -116,7 +116,8 @@ function run(mpicomm, ArrayType,
   # -------------- Define model ---------------------------------- # 
   model = AtmosModel(FlatOrientation(),
                      NoReferenceState(),
-                     AnisoMinDiss{FT}(1), 
+                     #AnisoMinDiss{FT}(1), 
+                     SmagorinskyLilly2D{FT}(C_smag),
                      EquilMoist(), 
                      NoRadiation(),
                      Gravity(), NoFluxBC(), Initialise_Density_Current!)

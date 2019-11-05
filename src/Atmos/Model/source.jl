@@ -68,5 +68,5 @@ function atmos_source!(s::RayleighSponge, m::AtmosModel, source::Vars, state::Va
     coeff_top = s.c_sponge * (sinpi(FT(1/2)*(z - s.zsponge)/(s.zmax-s.zsponge)))^FT(4)
     coeff = min(coeff_top, 1.0)
   end
-  source.ρu -= state.ρu * coeff
+  source.ρu -= state.ρu .* coeff .* SVector{3,FT}(0,0,1)
 end

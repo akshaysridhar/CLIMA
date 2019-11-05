@@ -147,7 +147,8 @@ function (profile::HeldSuarezProfile)(orientation::Orientation, aux::Vars)
   Δθ_z = FT(10)
   κ = FT(2/7)
   p_ratio = FT(1)
-  T = max(T_min, (T_max - ΔT_y * sin(ϕ)^2 - Δθ_z * log(p_ratio) * cos(ϕ)^2)*(p_ratio)^FT(2//7))
+  #T = max(T_min, (T_max - ΔT_y * sin(ϕ)^2 - Δθ_z * log(p_ratio) * cos(ϕ)^2)*(p_ratio)^FT(2/7))
+  T = max(T_min, (T_max - ΔT_y * sin(ϕ)^2)*(p_ratio)^FT(2/7))
   p = MSLP * exp(-gravitational_potential(orientation, aux)/(R_d*T))
   return (T, p)
 end
@@ -178,9 +179,11 @@ function atmos_init_aux!(m::DYCOMSRefState, atmos::AtmosModel, aux::Vars, geom::
   ziplus::FT     = 875
   dz_cloud       = zi - zb
   q_liq_peak::FT = 0.00045 #cloud mixing ratio at z_i    
+  
   if xvert > zb && xvert <= zi        
     q_liq = (xvert - zb)*q_liq_peak/dz_cloud
   end
+  
   if xvert <= zi
     θ_liq = FT(289)
     q_tot = qref

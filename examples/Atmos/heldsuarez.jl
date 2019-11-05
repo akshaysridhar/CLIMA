@@ -76,15 +76,14 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
                                           polynomialorder = polynomialorder,
                                           meshwarp = cubedshellwarp)
 
-  C_smag = FT(0.23)
+  C_smag = FT(0.75)
   T_min = FT(250)
   T_surface = FT(298) 
   Γ = 0.01
   model = AtmosModel(SphericalOrientation(),
-                     HydrostaticState(HeldSuarezProfile{FT}(), FT(0)),
-                     #HydrostaticState(LinearTemperatureProfile{FT}(T_min,T_surface,Γ), FT(0)),
-                     #SmagorinskyLilly(FT(C_smag)),
-                     AnisoMinDiss{FT}(1),
+                     #HydrostaticState(HeldSuarezProfile{FT}(), FT(0)),
+                     HydrostaticState(LinearTemperatureProfile{FT}(T_min,T_surface,Γ), FT(0)),
+                     ConstantViscosityWithDivergence{FT}(0),
                      DryModel(),
                      NoRadiation(),
                      (Gravity(), Coriolis(), held_suarez_forcing!), 
@@ -106,8 +105,8 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   # determine the time step
   element_size = (setup.domain_height / numelem_vert)
   acoustic_speed = soundspeed_air(FT(330))
-  #lucas_magic_factor = 10 * 14
-  lucas_magic_factor = 1
+  lucas_magic_factor = 10 #* 14
+  #lucas_magic_factor = 1
   dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
 
   Q = init_ode_state(dg, FT(0))
@@ -138,7 +137,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
 
   # Set up the information callback
   starttime = Ref(now())
-  cbinfo = EveryXWallTimeSeconds(60, mpicomm) do (s=false)
+  cbinfo = EveryXWallTimeSeconds(10, mpicomm) do (s=false)
     if s
       starttime[] = now()
     else

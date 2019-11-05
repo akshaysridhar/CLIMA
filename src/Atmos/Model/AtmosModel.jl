@@ -169,7 +169,6 @@ function diffusive!(m::AtmosModel, diffusive::Vars, ∇transform::Grad, state::V
   ρν = dynamic_viscosity_tensor(m.turbulence, S, state, diffusive, ∇transform, aux, t)
   # momentum flux tensor
   diffusive.ρτ = scaled_momentum_flux_tensor(m.turbulence, ρν, S)
-
   ∇h_tot = ∇transform.h_tot
   # turbulent Prandtl number
   diag_ρν = ρν isa Real ? ρν : diag(ρν) # either a scalar or matrix
@@ -177,7 +176,6 @@ function diffusive!(m::AtmosModel, diffusive::Vars, ∇transform::Grad, state::V
   ρD_t = diag_ρν * inv_Pr_turb
   # diffusive flux of total energy
   diffusive.ρd_h_tot = -ρD_t .* ∇transform.h_tot
-
   # diffusivity of moisture components
   diffusive!(m.moisture, diffusive, ∇transform, state, aux, t, ρD_t)
   # diffusion terms required for SGS turbulence computations
