@@ -2,7 +2,7 @@
 using DocStringExtensions
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
-export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss, DivergenceDamping
+export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss, SmagorinskySphere
 
 abstract type TurbulenceClosure end
 
@@ -315,3 +315,58 @@ function scaled_momentum_flux_tensor(m::AnisoMinDiss, ρν, S)
   (-2*ρν) * S
 end
 
+"""
+    SmagorinskySphere <: TurbulenceClosure
+
+  § 1.3.2 in CliMA documentation 
+
+  article{doi:10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2,
+  author = {Smagorinksy, J.},
+  title = {General circulation experiments with the primitive equations},
+  journal = {Monthly Weather Review},
+  volume = {91},
+  number = {3},
+  pages = {99-164},
+  year = {1963},
+  doi = {10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2},
+  URL = {https://doi.org/10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2},
+  eprint = {https://doi.org/10.1175/1520-0493(1963)091<0099:GCEWTP>2.3.CO;2}
+  }
+
+# Fields
+
+$(DocStringExtensions.FIELDS)
+"""
+struct SmagorinskySphere{FT} <: TurbulenceClosure
+  "Smagorinsky Coefficient [dimensionless]"
+  C_smag::FT
+end
+vars_aux(::SmagorinskySphere,T) = @vars(Δ::T)
+vars_gradient(::SmagorinskySphere,T) = @vars(θ_v::T)
+function atmos_init_aux!(::SmagorinskySphere, ::AtmosModel, aux::Vars, geom::LocalGeometry)
+  aux.turbulence.Δ = lengthscale(geom)
+end
+"""
+  buoyancy_correction(normSij, θᵥ, dθᵥdz)
+  return buoyancy_factor, scaling coefficient for Standard Smagorinsky Model
+  in stratified flows
+"""
+function strain_rate_magnitude(S::SHermitianCompact{3,FT,6}) where {FT}
+  sqrt(2*S[1,1]^2 + 4*S[2,1]^2 + 4*S[3,1]^2 + 2*S[2,2]^2 + 4*S[3,2]^2 + 2*S[3,3]^2)
+end
+
+function dynamic_viscosity_tensor(m::SmagorinskySphere, S, state::Vars, diffusive::Vars, ∇transform::Grad, aux::Vars, t::Real)
+  # strain rate tensor norm
+  # Notation: normS ≡ norm2S = √(2S:S)
+  # ρν = (Cₛ * Δ * f_b)² * √(2S:S)
+  FT = eltype(state)
+  # Tensor invariant
+  @inbounds normS = strain_rate_magnitude(S)
+  (r, λ, ϕ, R) = spherical_transform(aux)
+  ∇u_sph = R'* ∇transform.u * R
+  @inbounds D_sph = sqrt((∇u_sph[1,1] - ∇u_sph[2,2]) ^2 + (∇u_sph[1,2] + ∇u_sph[2,1])^2)
+  ρν = state.ρ * m.C_smag * (aux.turbulence.Δ)^2 * D_sph
+end
+function scaled_momentum_flux_tensor(m::SmagorinskySphere, ρν, S)
+  (-2*ρν) * S
+end

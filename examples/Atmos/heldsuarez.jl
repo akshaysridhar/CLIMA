@@ -14,7 +14,7 @@ using CLIMA.PlanetParameters: R_d, grav, MSLP, planet_radius, cp_d, cv_d, day
 using CLIMA.MoistThermodynamics: air_density, total_energy, soundspeed_air, internal_energy, air_temperature
 using CLIMA.Atmos: AtmosModel, SphericalOrientation, NoReferenceState,
                    DryModel, NoRadiation, NoFluxBC,
-                   ConstantViscosityWithDivergence,
+                   ConstantViscosityWithDivergence, SmagorinskySphere,
                    vars_state, vars_aux,
                    Gravity, Coriolis,
                    HydrostaticState, IsothermalProfile
@@ -75,7 +75,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
 
   model = AtmosModel(SphericalOrientation(),
                      HydrostaticState(IsothermalProfile(setup.T_initial), FT(0)),
-                     ConstantViscosityWithDivergence(FT(0)),
+                     SmagorinskySphere{FT}(0.23),
                      DryModel(),
                      NoRadiation(),
                      (Gravity(), Coriolis(), held_suarez_forcing!), 
@@ -89,7 +89,7 @@ function run(mpicomm, polynomialorder, numelem_horz, numelem_vert,
   element_size = (setup.domain_height / numelem_vert)
   acoustic_speed = soundspeed_air(FT(315))
   lucas_magic_factor = 14
-  dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2
+  dt = lucas_magic_factor * element_size / acoustic_speed / polynomialorder ^ 2 / 10000
 
   Q = init_ode_state(dg, FT(0))
   lsrk = LSRK144NiegemannDiehlBusch(dg, Q; dt = dt, t0 = 0)
