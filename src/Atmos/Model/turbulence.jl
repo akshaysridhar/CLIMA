@@ -2,7 +2,7 @@
 using DocStringExtensions
 using CLIMA.PlanetParameters
 using CLIMA.SubgridScaleParameters
-export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss
+export ConstantViscosityWithDivergence, SmagorinskyLilly, Vreman, AnisoMinDiss, DivergenceDamping
 
 abstract type TurbulenceClosure end
 
@@ -18,6 +18,47 @@ end
 function diffusive!(::TurbulenceClosure, diffusive, ∇transform, state, aux, t, ν)
 end
 function gradvariables!(::TurbulenceClosure, transform::Vars, state::Vars, aux::Vars, t::Real)
+end
+
+
+"""
+  compute_spherical_vel(state, aux)
+Given the `state` and `aux` variables in Cartesian coordinates, extracts the 
+primitive velocity variables and computes their spherical (λ,ϕ,z) projections
+"""
+function spherical_transform(aux)
+  FT = eltype(aux)
+
+  c = 1.0 # Assumes angles are in radians
+  λ_max=2π*c
+  λ_min=0*c
+  ϕ_max=+0.5*π*c
+  ϕ_min=-0.5*π*c
+
+  # Conversion functions
+  @inbounds begin
+    x = aux.coord[1]
+    y = aux.coord[2]
+    z = aux.coord[3]
+  end
+  
+  # Radius
+  r = hypot(x,y,z)
+  # Longitude
+  λ=atan(y,x)*c
+  # Latitude
+  ϕ=asin(z/r)*c
+  # Map Matrix 
+  R  = SMatrix{3,3,FT,9}(sin(λ)*cos(ϕ), sin(λ)*sin(ϕ), cos(λ),
+                         cos(λ)*cos(ϕ), cos(λ)*sin(ϕ), sin(λ),
+                         -sin(ϕ),       cos(ϕ),        0)
+  return (r, λ, ϕ, R)
+end
+function compute_spherical_vel(state,aux)
+  FT = eltype(state)
+  (r, λ, ϕ) = spherical_transform(aux)
+  u = state.ρu / state.ρ
+  u_sph = R' * u
 end
 
 """
@@ -273,3 +314,4 @@ end
 function scaled_momentum_flux_tensor(m::AnisoMinDiss, ρν, S)
   (-2*ρν) * S
 end
+
