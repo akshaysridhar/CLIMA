@@ -27,7 +27,7 @@ using CLIMA.IOstrings
   using CUDAnative
   using CuArrays
   CuArrays.allowscalar(false)
-  const ArrayTypes = (CuArray,)
+  const ArrayTypes = (CuArray,) 
 else
   const ArrayTypes = (Array,)
 end
@@ -42,11 +42,11 @@ const seed = MersenneTwister(0)
 """
   Initial Condition for DYCOMS_RF01 LES
 @article{doi:10.1175/MWR2930.1,
-author = {Stevens, Bjorn and Moeng, Chin-Hoh and Ackerman,
-          Andrew S. and Bretherton, Christopher S. and Chlond,
-          Andreas and de Roode, Stephan and Edwards, James and Golaz,
-          Jean-Christophe and Jiang, Hongli and Khairoutdinov,
-          Marat and Kirkpatrick, Michael P. and Lewellen, David C. and Lock, Adrian and
+author = {Stevens, Bjorn and Moeng, Chin-Hoh and Ackerman, 
+          Andrew S. and Bretherton, Christopher S. and Chlond, 
+          Andreas and de Roode, Stephan and Edwards, James and Golaz, 
+          Jean-Christophe and Jiang, Hongli and Khairoutdinov, 
+          Marat and Kirkpatrick, Michael P. and Lewellen, David C. and Lock, Adrian and 
           Maeller, Frank and Stevens, David E. and Whelan, Eoin and Zhu, Ping},
 title = {Evaluation of Large-Eddy Simulations via Observations of Nocturnal Marine Stratocumulus},
 journal = {Monthly Weather Review},
@@ -60,26 +60,24 @@ eprint = {https://doi.org/10.1175/MWR2930.1}
 }
 """
 function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
-<<<<<<< HEAD
-  DT         = eltype(state)
-  xvert::DT  = z
-
-  epsdv::DT     = molmass_ratio
-  q_tot_sfc::DT = 8.1e-3
-  Rm_sfc::DT    = gas_constant_air(PhasePartition(q_tot_sfc))
-  ρ_sfc::DT     = 1.22
-  P_sfc::DT     = 1.0178e5
-  T_BL::DT      = 285.0
-  T_sfc::DT     = P_sfc/(ρ_sfc * Rm_sfc);
-
-  q_liq::DT      = 0
-  q_ice::DT      = 0
-  zb::DT         = 600
-  zi::DT         = 840
+  FT            = eltype(state)
+  xvert::FT     = z
+  #These constants are those used by Stevens et al. (2005)
+  qref::FT      = 7.75e-3
+  q_tot_sfc::FT = qref
+  q_pt_sfc      = PhasePartition(q_tot_sfc)
+  Rm_sfc        = gas_constant_air(q_pt_sfc)
+  T_sfc::FT     = 292.5
+  P_sfc::FT     = MSLP
+  ρ_sfc::FT     = P_sfc / Rm_sfc / T_sfc
+  # Specify moisture profiles 
+  q_liq::FT      = 0
+  q_ice::FT      = 0
+  zb::FT         = 600    # initial cloud bottom
+  zi::FT         = 840    # initial cloud top
   dz_cloud       = zi - zb
-  q_liq_peak::DT = 4.5e-4
-
-  if xvert > zb && xvert <= zi
+  q_liq_peak::FT = 0.00045 #cloud mixing ratio at z_i    
+  if xvert > zb && xvert <= zi        
     q_liq = (xvert - zb)*q_liq_peak/dz_cloud
   end
   if xvert <= zi
@@ -129,9 +127,10 @@ end
 # TODO: temporary; move to new CLIMA module
 # TODO: add an option to reduce communication: compute averages
 # locally only
-function gather_diagnostics(dg, Q, grid_resolution, current_time_string, diagnostics_fileout,κ,LWP_fileout)
+function gather_diagnostics(dg, Q, grid_resolution, current_time_string, diagnostics_fileout)
   mpirank = MPI.Comm_rank(MPI.COMM_WORLD)
   nranks = MPI.Comm_size(MPI.COMM_WORLD)
+
   grid = dg.grid
   topology = grid.topology
   N = polynomialorder(grid)
@@ -140,13 +139,11 @@ function gather_diagnostics(dg, Q, grid_resolution, current_time_string, diagnos
   nrealelem = length(topology.realelems)
   nvertelem = topology.stacksize
   nhorzelem = div(nrealelem, nvertelem)
-  aux1=dg.auxstate
+
   nstate = 6
   nthermo = 7
   host_array = Array ∈ typeof(Q).parameters
   localQ = host_array ? Q.realdata : Array(Q.realdata)
-  host_array1 = Array ∈ typeof(dg.auxstate).parameters
-  localaux = host_array1 ? aux1.realdata : Array(aux1.realdata)
   thermoQ = zeros(Nq * Nq * Nqk, nthermo, nrealelem)
   vgeo = grid.vgeo
   localvgeo = host_array ? vgeo : Array(vgeo)
@@ -304,7 +301,6 @@ function gather_diagnostics(dg, Q, grid_resolution, current_time_string, diagnos
   #Horizontal averages we might need
   #Horizontal averages we might need
   Horzavgs = zeros(Nqk, nvertelem,10)
-  LWP_local = 0
   for eh in 1:nhorzelem
     for ev in 1:nvertelem
       e = ev + (eh - 1) * nvertelem
@@ -313,20 +309,16 @@ function gather_diagnostics(dg, Q, grid_resolution, current_time_string, diagnos
         for j in 1:Nq
           for i in 1:Nq
             ijk = i + Nq * ((j-1) + Nq * (k-1)) 
-            Horzavgs[k,ev,1] += localQ[ijk,1,e] #density average
-            Horzavgs[k,ev,2] += localQ[ijk,2,e] #U average 
-            Horzavgs[k,ev,3] += localQ[ijk,3,e] #V average
-            Horzavgs[k,ev,4] += localQ[ijk,4,e] #W average
-            Horzavgs[k,ev,5] += thermoQ[ijk,5,e] # theta l  average
-            Horzavgs[k,ev,6] += thermoQ[ijk,1,e] #qliq average
-            Horzavgs[k,ev,7] += thermoQ[ijk,3,e] #qvap average 
-            Horzavgs[k,ev,8] += thermoQ[ijk,6,e] #dry theta average
-            Horzavgs[k,ev,9] += localQ[ijk,6,e] #qt average
-            Horzavgs[k,ev,10] += thermoQ[ijk,7,e] #virtual theta average
-            #The next three lines are for the liquid water path
-            if ev == floor(nvertelem/2) && k==floor(Nqk/2)
-                LWP_local += (localaux[ijk,1,e] + localaux[ijk,2,e])/κ / (Nq * Nq * nhorzelem)
-            end
+            Horzavgs[k,ev,1] += localQ[ijk,1,e]
+            Horzavgs[k,ev,2] += localQ[ijk,2,e]
+            Horzavgs[k,ev,3] += localQ[ijk,3,e]
+            Horzavgs[k,ev,4] += localQ[ijk,4,e]
+            Horzavgs[k,ev,5] += thermoQ[ijk,5,e]
+            Horzavgs[k,ev,6] += thermoQ[ijk,1,e]
+            Horzavgs[k,ev,7] += thermoQ[ijk,3,e]
+            Horzavgs[k,ev,8] += thermoQ[ijk,6,e]
+            Horzavgs[k,ev,9] += localQ[ijk,6,e]
+            Horzavgs[k,ev,10] += thermoQ[ijk,7,e]
           end
         end
       end
@@ -346,13 +338,12 @@ for s in 1:10
   end
 end
 if mpirank == 0
- LWP=MPI.Reduce(LWP_local, +, 0, MPI.COMM_WORLD) / (nranks) 
+ theta0 = thermoQ[1,6,1]
 end
   S=zeros(Nqk,nvertelem,18)
   for eh in 1:nhorzelem
     for ev in 1:nvertelem
       e = ev + (eh - 1) * nvertelem
->>>>>>> 1eafc4ffa4ebf04163a4d7b0fab413f523bc6b60
 
 
 
@@ -376,20 +367,18 @@ end
             S[k,ev,10] += (localQ[ijk,2,e]/localQ[ijk,1,e]-Horzavgstot[k,ev,2]/Horzavgs[k,ev,1])^2  #fluctQ[ijk,2,e] * fluctQ[ijk,2,e]
             S[k,ev,11] += (localQ[ijk,3,e]/localQ[ijk,1,e]-Horzavgstot[k,ev,3]/Horzavgs[k,ev,1])^2  #fluctQ[ijk,3,e] * fluctQ[ijk,3,e]
             Zvals[k,ev] = localvgeo[ijk,grid.x3id,e]
-            S[k,ev,12] = (Horzavgstot[k,ev,8])
-            S[k,ev,13] = (Horzavgstot[k,ev,9]/Horzavgs[k,ev,1])
-            S[k,ev,14] += S[k,ev,15]*(localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1])
-            S[k,ev,15] = (Horzavgstot[k,ev,5])
-            S[k,ev,16] += (localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1]) * (thermoQ[ijk,7,e] - Horzavgstot[k,ev,10])
-            S[k,ev,17] += 0.5 * (S[k,ev,5] + S[k,ev,10] + S[k,ev,11])
-            S[k,ev,18] += (localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1]) * (thermoQ[ijk,5,e] - Horzavgstot[k,ev,5])
+            S[k,ev,12] += (thermoQ[ijk,6,e] - Horzavgstot[k,ev,8])
+            S[k,ev,13] += (localQ[ijk,6,e]/localQ[ijk,1,e]-Horzavgstot[k,ev,9]/Horzavgs[k,ev,1])
+            S[k,ev,14] = S[k,ev,15]*(localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1])
+            S[k,ev,15] = (thermoQ[ijk,5,e] - Horzavgstot[k,ev,5])
+            S[k,ev,16] = (localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1]) * (thermoQ[ijk,7,e] - Horzavgstot[k,ev,10])
+            S[k,ev,17] = 0.5 * (S[k,ev,5] + S[k,ev,10] + S[k,ev,11])
+            S[k,ev,18] = (localQ[ijk,4,e]/localQ[ijk,1,e] - Horzavgstot[k,ev,4] / Horzavgstot[k,ev,1]) * (thermoQ[ijk,5,e] - Horzavgstot[k,ev,5])
           end
         end
       end
     end
   end
-
-#See Outputs below for what S[k,ev,:] are respectively.
 
   S_avg = zeros(Nqk,nvertelem,18)
   for s in 1:18
@@ -430,27 +419,27 @@ end
   for ev in 1:nvertelem
     for k in 1:Nqk
       i=k + Nqk * (ev - 1)
-      OutputWtheta[i] = S_avg[k,ev,1] # <w'theta'>
-      OutputWQVAP[i] = S_avg[k,ev,2] # <w'qvap'>
-      OutputWU[i] = S_avg[k,ev,3] # <w'u'>
-      OutputWV[i] = S_avg[k,ev,4] # <w'v'>
-      OutputWW[i] = S_avg[k,ev,5] # <w'w'>
-      OutputWRHO[i] = S_avg[k,ev,6] #<w'rho'>
-      OutputQLIQ[i] = S_avg[k,ev,7] # qliq 
-      OutputWQLIQ[i] = S_avg[k,ev,8] # <w'qliq'>
-      OutputWWW[i] = S_avg[k,ev,9]  #<w'w'w'>
-      OutputUU[i] = S_avg[k,ev,10] #<u'u'>
-      OutputVV[i] = S_avg[k,ev,11] #<v'v'>
-      OutputZ[i] = Zvals[k,ev] # Height
-      OutputU[i] =  Horzavgstot[k,ev,2] / Horzavgstot[k,ev,1] # <u> 
-      OutputV[i] =  Horzavgstot[k,ev,3] / Horzavgstot[k,ev,1] # <v>
-      Outputtheta[i] = S_avg[k,ev,12] # <theta> 
-      Outputqt[i] = S_avg[k,ev,13]  # <qt>
-      OutputWqt[i] = S_avg[k,ev,14] #<w'qt'> 
-      Outputthetaliq[i] = S_avg[k,ev,15] # <thetaliq>
-      OutputWthetav[i] = S_avg[k,ev,16] # <w'thetav'>
-      OutputTKE[i] = S_avg[k,ev,17] # <TKE>
-      OutputWthetal[i] = S_avg[k,ev,18] # <w'thetal'>
+      OutputWtheta[i] = S_avg[k,ev,1]
+      OutputWQVAP[i] = S_avg[k,ev,2]
+      OutputWU[i] = S_avg[k,ev,3]
+      OutputWV[i] = S_avg[k,ev,4]
+      OutputWW[i] = S_avg[k,ev,5]
+      OutputWRHO[i] = S_avg[k,ev,6]
+      OutputQLIQ[i] = S_avg[k,ev,7]
+      OutputWQLIQ[i] = S_avg[k,ev,8]
+      OutputWWW[i] = S_avg[k,ev,9]
+      OutputUU[i] = S_avg[k,ev,10]
+      OutputVV[i] = S_avg[k,ev,11]
+      OutputZ[i] = Zvals[k,ev]
+      OutputU[i] =  Horzavgstot[k,ev,2] / Horzavgstot[k,ev,1]
+      OutputV[i] =  Horzavgstot[k,ev,3] / Horzavgstot[k,ev,1]
+      Outputtheta[i] = S_avg[k,ev,12]
+      Outputqt[i] = S_avg[k,ev,13]
+      OutputWqt[i] = S_avg[k,ev,14]
+      Outputthetaliq[i] = S_avg[k,ev,15]
+      OutputWthetav[i] = S_avg[k,ev,16]
+      OutputTKE[i] = S_avg[k,ev,17]
+      OutputWthetal[i] = S_avg[k,ev,18]
     end
   end
 if mpirank == 0
@@ -460,16 +449,12 @@ if mpirank == 0
      write(io, current_time_str)
      writedlm(io, [OutputWtheta OutputWQVAP OutputWU OutputWV OutputWW OutputWRHO OutputQLIQ OutputWQLIQ OutputWWW OutputUU OutputVV OutputU OutputV Outputtheta Outputqt OutputWqt Outputthetaliq OutputWthetav OutputTKE OutputWthetal OutputZ])
   close(io)
-  io = open(LWP_fileout, "a")
-     current_time_str = string(current_time_string, "\n")
-     write(io, current_time_str)
-     writedlm(io, LWP)
-  close(io)
+
 end
 end
 
 
-function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, grid_resolution, domain_size, zmax, zsponge, problem_name, diagnostics_fileout, OUTPATH,LWP_fileout)
+function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, grid_resolution, domain_size, zmax, zsponge, problem_name, diagnostics_fileout, OUTPATH)
   # Grid setup (topl contains brickrange information)
   grid = DiscontinuousSpectralElementGrid(topl,
                                           FloatType = FT,
@@ -541,6 +526,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
     @debug "doing VTK output" outprefix
     writevtk(outprefix, Q, dg, flattenednames(vars_state(model,FT)), 
              dg.auxstate, flattenednames(vars_aux(model,FT)))
+        
     step[1] += 1
     nothing
   end
@@ -549,7 +535,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   #Get statistics during run:
   cbdiagnostics = GenericCallbacks.EveryXSimulationSteps(50) do (init=false)
     current_time_str = string(ODESolvers.gettime(lsrk))
-      gather_diagnostics(dg, Q, grid_resolution, current_time_str, diagnostics_fileout,κ,LWP_fileout)
+      gather_diagnostics(dg, Q, grid_resolution, current_time_str, diagnostics_fileout)
   end
 
     
@@ -557,7 +543,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
 
   #Get statistics at the end of the run:
   current_time_str = string(ODESolvers.gettime(lsrk))
-  gather_diagnostics(dg, Q, grid_resolution, current_time_str, diagnostics_fileout,κ,LWP_fileout)
+  gather_diagnostics(dg, Q, grid_resolution, current_time_str, diagnostics_fileout)
 
     
   # Print some end of the simulation information
@@ -626,7 +612,7 @@ let
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
 
-    problem_name = "/home/yassine/dycoms_IOstrings"
+    problem_name = "dycoms_IOstrings"
     dt = 0.01
     timeend =  dt
 
@@ -640,17 +626,15 @@ let
 
       diagnostics_fileout = string(OUTPATH, "/statistic_diagnostics.dat")
       io = open(diagnostics_fileout, "w")
-      writedlm(io, ["\n theta flux" "Wqvap" "WU" "WV" "WW" "Mass flux" "qliq" "qliq flux" "WWW" "UU" "VV" "U" "V" "qt"  "qt flux" "thetaL" "thetaVflux" "TKE" "thetaL flux" "Z\n"])
+      write(io, "\n theta flux Wqvap WU WV WW Mass flux qliq qliq flux WWW UU VV U V qt  qt flux thetaL thetaV flux TKE thetaL flux Z\n")
       close(io)
-      LWP_fileout = string(OUTPATH, "/LWP_calc.dat")
-      io = open(LWP_fileout, "w")
-      write(io, "\n LWP \n")
-      close(io)
+
     end
       
     @info (ArrayType, dt, FT, dim)
     result = run(mpicomm, ArrayType, dim, topl, 
-                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, grid_resolution, domain_size, zmax, zsponge, problem_name, diagnostics_fileout, OUTPATH, LWP_fileout)
+                 N, timeend, FT, dt, C_smag, LHF, SHF, C_drag, grid_resolution, domain_size, zmax, zsponge, problem_name, diagnostics_fileout, OUTPATH)
+
   end
 end
 
