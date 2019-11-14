@@ -1,5 +1,5 @@
 using CLIMA.PlanetParameters
-export PeriodicBC, NoFluxBC, InitStateBC, DYCOMS_BC, RayleighBenardBC
+export PeriodicBC, NoFluxBC, InitStateBC, DYCOMS_BC, RayleighBenardBC, RayleighBenardFluxBC
 
 #TODO: figure out a better interface for this.
 # at the moment we can just pass a function, but we should do something better
@@ -274,6 +274,45 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::RayleighBena
     end
     stateP.ρe = (E_intP + ρP * auxP.coord[3] * grav)
     diffP.ρd_h_tot = SVector(diffP.ρd_h_tot[1], diffP.ρd_h_tot[2], FT(0))
+    nothing
+  end
+end
+
+"""
+  RayleighBenardFluxBC <: BoundaryCondition
+
+# Fields
+$(DocStringExtensions.FIELDS)
+"""
+struct RayleighBenardFluxBC{FT} <: BoundaryCondition
+  "Prescribed bottom wall heat flux [W/m^2]"
+  F_wall::FT
+end
+# Rayleigh-Benard problem with two fixed walls (prescribed temperatures)
+function atmos_boundary_state!(::Rusanov, bc::RayleighBenardFluxBC, m::AtmosModel,
+                               stateP::Vars, auxP::Vars, nM, stateM::Vars,
+                               auxM::Vars, bctype, t,_...)
+  # Dry Rayleigh Benard Convection
+  @inbounds begin
+    FT = eltype(stateP)
+    ρP = stateM.ρ
+    stateP.ρ = ρP
+    stateP.ρu = SVector{3,FT}(0,0,0)
+    nothing
+  end
+end
+function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::RayleighBenardFluxBC,
+                               m::AtmosModel, stateP::Vars, diffP::Vars,
+                               auxP::Vars, nM, stateM::Vars, diffM::Vars,
+                               auxM::Vars, bctype, t, _...)
+  # Dry Rayleigh Benard Convection
+  @inbounds begin
+    FT = eltype(stateM)
+    ρP = stateM.ρ
+    stateP.ρ = ρP
+    stateP.ρu = SVector{3,FT}(0,0,0)
+    #diffP.ρd_h_tot = SVector(diffP.ρd_h_tot[1], diffP.ρd_h_tot[2], FT(bc.F_wall))
+    diffP.ρd_h_tot = SVector(FT(0),FT(0), FT(bc.F_wall))
     nothing
   end
 end
