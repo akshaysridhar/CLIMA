@@ -203,8 +203,8 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # Case specific for flat bottom topography, normal vector is n⃗ = k⃗ = [0, 0, 1]ᵀ
     # A more general implementation requires (n⃗ ⋅ ∇A) to be defined where A is replaced by the appropriate flux terms
     C_drag = bc.C_drag
-    ρτ13P  = ρM * C_drag * windspeed_FN * u_FN 
-    ρτ23P  = ρM * C_drag * windspeed_FN * v_FN 
+    ρτ13P  = -ρM * C_drag * windspeed_FN * u_FN 
+    ρτ23P  = -ρM * C_drag * windspeed_FN * v_FN 
     # Assign diffusive momentum and moisture fluxes
     # (i.e. ρ𝛕 terms)  
     stateP.ρu = SVector(0,0,0)
@@ -215,14 +215,14 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
     # ----------------------------------------------------------
     diffP.moisture.ρd_q_tot  = SVector(FT(0),
                                        FT(0),
-                                       bc.LHF/(LH_v0))
+                                       (bc.LHF/(LH_v0)))
     # ----------------------------------------------------------
     # Boundary energy fluxes
     # ----------------------------------------------------------
     # Assign diffusive enthalpy flux (i.e. ρ(J+D) terms) 
     diffP.ρd_h_tot  = SVector(FT(0),
                               FT(0),
-                              bc.LHF + bc.SHF)
+                              (bc.LHF + bc.SHF))
   end
 end
 
