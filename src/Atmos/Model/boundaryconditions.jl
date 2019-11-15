@@ -131,7 +131,7 @@ function atmos_boundary_state!(::Rusanov, bc::DYCOMS_BC, m::AtmosModel,
 
   # Assign scalar values at the boundaries 
   stateP.ρ = ρM
-  stateP.moisture.ρq_tot = QTM
+  #stateP.moisture.ρq_tot = QTM
   
   if bctype == 1 # bctype identifies bottom wall 
     stateP.ρu = SVector(0,0,0)
@@ -162,7 +162,7 @@ function atmos_boundary_state!(::CentralNumericalFluxDiffusive, bc::DYCOMS_BC,
 
   # Assign scalar values at the boundaries 
   stateP.ρ = ρM
-  stateP.moisture.ρq_tot = QTM
+  #stateP.moisture.ρq_tot = QTM
   # Assign diffusive fluxes at boundaries
   diffP = diffM
   xvert = auxM.coord[3]

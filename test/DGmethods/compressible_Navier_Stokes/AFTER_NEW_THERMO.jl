@@ -66,7 +66,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
   #These constants are those used by Stevens et al. (2005)
-  qref::FT      = FT(8.5e-3)
+  qref::FT      = FT(9.0e-3)
   q_tot_sfc::FT = qref
   q_pt_sfc      = PhasePartition(q_tot_sfc)
   Rm_sfc::FT    = 461.5 #gas_constant_air(q_pt_sfc)
@@ -526,7 +526,7 @@ function run(mpicomm, ArrayType, dim, topl, N, timeend, FT, dt, C_smag, LHF, SHF
   end
 
   # Setup VTK output callbacks
-  output_interval = 7500
+  output_interval = 30000
   step = [0]
     cbvtk = GenericCallbacks.EveryXSimulationSteps(output_interval) do (init=false)
     mkpath(OUTPATH)
@@ -595,8 +595,8 @@ let
     C_drag = FT(0.0011)
     # User defined domain parameters
     Δx, Δy, Δz = 50, 50, 20
-    xmin, xmax = 0, 2000
-    ymin, ymax = 0, 2000
+    xmin, xmax = 0, 1000
+    ymin, ymax = 0, 1000
     zmin, zmax = 0, 1500
 
     grid_resolution = [Δx, Δy, Δz]
