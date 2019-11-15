@@ -66,7 +66,7 @@ function Initialise_DYCOMS!(state::Vars, aux::Vars, (x,y,z), t)
   FT            = eltype(state)
   xvert::FT     = z
   #These constants are those used by Stevens et al. (2005)
-  qref::FT      = FT(8.1e-3)
+  qref::FT      = FT(8.5e-3)
   q_tot_sfc::FT = qref
   q_pt_sfc      = PhasePartition(q_tot_sfc)
   Rm_sfc::FT    = 461.5 #gas_constant_air(q_pt_sfc)
@@ -613,7 +613,7 @@ let
                                 periodicity = (true, true, false),
                                 boundary=((0,0),(0,0),(1,2)))
 
-    problem_name = "dycoms_IOstrings"
+    problem_name = "dycoms"
     dt = 0.01
     timeend = 14400
 
