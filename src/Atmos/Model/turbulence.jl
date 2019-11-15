@@ -209,7 +209,8 @@ function dynamic_viscosity_tensor(m::StretchedVortex, S, state::Vars, diffusive:
   FT = eltype(state)
   # Find most extensional eigenvector of strainrate tensor
   eᵛ = SVector(eigen(S).vectors[:,3])
-  eye = SMatrix{3,3,FT}(1,0,0,0,1,0,0,0,1)
+  eye = Diagonal(SVector{3,FT}(1,1,1))
+  @show(eye)
   ā = dot(eᵛ * eᵛ', S) + eps(FT)
   ν = FT(0.01)
   λ_v = sqrt(2*ν/(3*abs(ā)))
